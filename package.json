@@ -1,0 +1,51 @@
+{
+  "name": "playerium",
+  "version": "1.0.0",
+  "description": "Playerium - Modern Spotify-style local music player for PC and Android",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.playerium.music",
+    "productName": "Playerium",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Playerium"
+    }
+  },
+  "keywords": [
+    "playerium",
+    "music",
+    "player",
+    "spotify",
+    "local-audio",
+    "electron"
+  ],
+  "author": "Playerium Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1"
+  }
+}
