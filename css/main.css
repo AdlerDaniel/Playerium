@@ -1,0 +1,374 @@
+/* Spotify Design System & Base Layout */
+:root {
+  --sp-black: #000000;
+  --sp-dark-900: #121212;
+  --sp-dark-800: #181818;
+  --sp-dark-700: #242424;
+  --sp-dark-600: #282828;
+  --sp-dark-500: #333333;
+  --sp-dark-400: #3e3e3e;
+  --sp-text-subdued: #a7a7a7;
+  --sp-text-secondary: #b3b3b3;
+  --sp-text-primary: #ffffff;
+  --sp-green: #1ed760;
+  --sp-green-hover: #1fdf64;
+  --sp-green-active: #169c46;
+  --sp-blue: #1d75d9;
+  --sp-purple: #450af5;
+  --sp-red: #e91429;
+  --sp-danger: #f15e6c;
+  --sp-card-radius: 8px;
+  --sp-btn-radius: 500px;
+  --sp-sidebar-width: 280px;
+  --sp-right-width: 320px;
+  --sp-player-height: 90px;
+  --sp-topbar-height: 64px;
+  --sp-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --sp-theme-color: #1ed760;
+  --sp-banner-gradient: linear-gradient(180deg, rgba(83, 83, 83, 0.8) 0%, rgba(18, 18, 18, 1) 100%);
+  --sp-zoom: 1;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--sp-font);
+  background-color: var(--sp-black);
+  color: var(--sp-text-primary);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  user-select: none;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Custom Spotify Scrollbars */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.45);
+}
+
+/* App Container */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--sp-black);
+  padding: 8px;
+  gap: 8px;
+  transform: scale(var(--sp-zoom));
+  transform-origin: top left;
+}
+
+/* Main App Body (Sidebar + Content + Right panel) */
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+  position: relative;
+}
+
+/* Left Sidebar */
+.sidebar {
+  width: var(--sp-sidebar-width);
+  min-width: 220px;
+  max-width: 420px;
+  background-color: var(--sp-dark-900);
+  border-radius: var(--sp-card-radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.15s ease;
+}
+
+/* Central View Area */
+.main-view-container {
+  flex: 1;
+  background-color: var(--sp-dark-900);
+  border-radius: var(--sp-card-radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+}
+
+/* Scrollable View Inside Container */
+.main-view {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  scroll-behavior: smooth;
+}
+
+/* Right Panel (Now Playing / Queue / Lyrics) */
+.right-panel {
+  width: var(--sp-right-width);
+  background-color: var(--sp-dark-900);
+  border-radius: var(--sp-card-radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.2s ease, opacity 0.2s ease, margin 0.2s ease;
+}
+.right-panel.hidden {
+  width: 0;
+  opacity: 0;
+  margin-left: -8px;
+  pointer-events: none;
+}
+
+/* Bottom Player Bar */
+.bottom-player {
+  height: var(--sp-player-height);
+  background-color: var(--sp-black);
+  border-radius: var(--sp-card-radius);
+  display: grid;
+  grid-template-columns: 30% 40% 30%;
+  align-items: center;
+  padding: 0 16px;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+/* Shared UI Components */
+button {
+  background: transparent;
+  border: none;
+  color: var(--sp-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 14px;
+  transition: all 0.15s ease;
+  outline: none;
+}
+button:hover {
+  color: var(--sp-text-primary);
+}
+
+/* Primary Round Green Button (Spotify Play Button) */
+.btn-primary-play {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--sp-green);
+  color: var(--sp-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.btn-primary-play:hover {
+  transform: scale(1.06);
+  background-color: var(--sp-green-hover);
+  color: var(--sp-black);
+}
+.btn-primary-play:active {
+  transform: scale(0.98);
+  background-color: var(--sp-green-active);
+}
+.btn-primary-play svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+/* Pill Filter Buttons */
+.pill-btn {
+  background-color: var(--sp-dark-700);
+  color: var(--sp-text-primary);
+  border-radius: var(--sp-btn-radius);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.pill-btn:hover {
+  background-color: var(--sp-dark-600);
+}
+.pill-btn.active {
+  background-color: var(--sp-text-primary);
+  color: var(--sp-black);
+}
+
+/* Tooltips */
+[data-tooltip] {
+  position: relative;
+}
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background-color: var(--sp-dark-600);
+  color: var(--sp-text-primary);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 1000;
+}
+[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Modals */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.modal-card {
+  background-color: var(--sp-dark-700);
+  border-radius: 10px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  animation: modalScale 0.2s ease-out;
+}
+@keyframes modalScale {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.modal-header {
+  padding: 24px 24px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+}
+.modal-body {
+  padding: 12px 24px 24px;
+}
+.modal-footer {
+  padding: 16px 24px;
+  background-color: var(--sp-dark-600);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  bottom: 105px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background-color: var(--sp-blue);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  animation: toastFade 0.3s ease;
+  pointer-events: auto;
+}
+.toast.success {
+  background-color: var(--sp-green);
+  color: var(--sp-black);
+}
+.toast.danger {
+  background-color: var(--sp-red);
+}
+@keyframes toastFade {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  background-color: var(--sp-dark-600);
+  border-radius: 4px;
+  padding: 4px;
+  min-width: 200px;
+  box-shadow: 0 16px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1);
+  z-index: 10000;
+  display: none;
+}
+.context-menu.active {
+  display: block;
+}
+.context-menu-item {
+  padding: 10px 12px;
+  border-radius: 2px;
+  font-size: 13px;
+  color: var(--sp-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+.context-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.context-menu-item svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  opacity: 0.8;
+}
+.context-divider {
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+}
