@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playerium - Музыкальный плеер</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/topbar.css">
+  <link rel="stylesheet" href="css/sidebar.css">
+  <link rel="stylesheet" href="css/tracklist.css">
+  <link rel="stylesheet" href="css/player.css">
+  <link rel="stylesheet" href="css/rightbar.css">
+  <link rel="stylesheet" href="css/settings.css">
+  <link rel="stylesheet" href="css/lyrics.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top & Content Body -->
+    <div class="app-body">
+      <!-- Left Sidebar (Моя медиатека) -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <button class="library-btn" id="btnLibraryHeader" title="Моя медиатека">
+            <svg viewBox="0 0 24 24"><path d="M3 22a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1zM15.5 2.1a1 1 0 0 0-1.07.2l-8 7a1 1 0 0 0 0 1.4l8 7a1 1 0 0 0 1.07.2 1 1 0 0 0 .5-.8V3a1 1 0 0 0-.5-.9zM21 2a1 1 0 0 0-1 1v18a1 1 0 0 0 2 0V3a1 1 0 0 0-1-1z"/></svg>
+            <span>Моя медиатека</span>
+          </button>
+          <div class="sidebar-actions">
+            <button class="icon-circle-btn" id="btnCreatePlaylist" data-tooltip="Создать плейлист">
+              <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </button>
+            <button class="icon-circle-btn" id="btnAddMusicFolder" data-tooltip="Добавить папку с музыкой">
+              <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Sidebar Filter Pills -->
+        <div class="sidebar-filters">
+          <button class="pill-btn active" data-filter="all">Все</button>
+          <button class="pill-btn" data-filter="playlists">Плейлисты</button>
+          <button class="pill-btn" data-filter="artists">Исполнители</button>
+          <button class="pill-btn" data-filter="albums">Альбомы</button>
+        </div>
+
+        <!-- Sidebar List Items -->
+        <div class="sidebar-list" id="sidebarList">
+          <!-- Populated by UIController -->
+        </div>
+      </aside>
+
+      <!-- Main Center Content Area -->
+      <main class="main-view-container">
+        <!-- Sticky Topbar -->
+        <header class="topbar" id="mainTopbar">
+          <div class="topbar-left">
+            <div class="history-nav">
+              <button class="nav-circle-btn" id="btnNavBack" data-tooltip="Назад" disabled>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+              </button>
+              <button class="nav-circle-btn" id="btnNavForward" data-tooltip="Вперед" disabled>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+              </button>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="search-container">
+              <span class="search-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 1 0 1.414-1.414l-4.344-4.344a9.157 9.157 0 0 0 2.077-5.816c0-5.14-4.226-9.279-9.407-9.279zm-7.407 9.279c0-4.006 3.302-7.279 7.407-7.279s7.407 3.273 7.407 7.279-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.279z"/></svg>
+              </span>
+              <input type="text" class="search-input" id="mainSearchInput" placeholder="Что хочешь включить?" autocomplete="off" spellcheck="false">
+              <button class="search-clear-btn" id="searchClearBtn" title="Очистить поиск">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="topbar-right">
+            <div class="status-chip" title="Плеер работает полностью автономно и локально">
+              <span class="dot"></span>
+              <span>Локальный режим</span>
+            </div>
+            <button class="topbar-btn" id="btnOpenSettings" data-tooltip="Настройки">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Scrollable Main View Content -->
+        <div class="main-view" id="mainScrollContainer">
+          <div id="mainViewContent">
+            <!-- Dynamic Content (Home, Playlists, Artists, Settings, Lyrics) -->
+          </div>
+        </div>
+      </main>
+
+      <!-- Right Panel (Now Playing / Queue) -->
+      <aside class="right-panel hidden" id="rightPanel">
+        <div class="right-panel-header">
+          <span class="right-panel-title">Сведения</span>
+          <button class="icon-circle-btn" id="btnCloseRightPanel" title="Закрыть панель">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="right-panel-tabs">
+          <button class="panel-tab-btn active" id="tabBtnNowPlaying">Сейчас играет</button>
+          <button class="panel-tab-btn" id="tabBtnQueue">Очередь</button>
+        </div>
+        <div class="right-panel-content" id="rightPanelContent">
+          <!-- Populated by UIController -->
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Player Bar (Spotify Dock) -->
+    <footer class="bottom-player">
+      <!-- Left: Track info -->
+      <div class="player-left">
+        <div class="now-playing-thumb" id="nowPlayingCover">
+          <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </div>
+        <div class="now-playing-info">
+          <div class="now-playing-title" id="nowPlayingTitle">Выберите трек для воспроизведения</div>
+          <div class="now-playing-artist" id="nowPlayingArtist">Локальная медиатека</div>
+        </div>
+        <button class="now-playing-like" id="btnPlayerLike" title="Добавить в любимые">
+          <svg viewBox="0 0 16 16"><path d="M8 1.314C12.438-3.248 23.534 4.735 8 15-7.534 4.736 3.562-3.248 8 1.314z"/></svg>
+        </button>
+      </div>
+
+      <!-- Center: Controls & Scrubber -->
+      <div class="player-center">
+        <div class="playback-controls">
+          <button class="control-btn" id="btnShuffle" data-tooltip="Перемешивание">
+            <svg viewBox="0 0 16 16"><path d="M13.151.922a.75.75 0 1 0-1.06 1.06L13.109 3H11.16a3.75 3.75 0 0 0-2.873 1.34l-6.173 7.356A2.25 2.25 0 0 1 .39 12.5H0V14h.391a3.75 3.75 0 0 0 2.873-1.34l6.173-7.356a2.25 2.25 0 0 1 1.724-.804h1.947l-1.017 1.018a.75.75 0 0 0 1.06 1.06L15.98 3.75 13.15.922zM.391 3.5H0V2h.391c1.109 0 2.16.49 2.873 1.34L4.89 5.277l-.979 1.167-1.796-2.14A2.25 2.25 0 0 0 .39 3.5zM11.16 13h1.948l-1.017-1.018a.75.75 0 0 1 1.06-1.06L15.98 13.75l-2.83 2.828a.75.75 0 1 1-1.06-1.06l1.018-1.018H11.16a3.75 3.75 0 0 1-2.873-1.34l-1.625-1.938.979-1.167 1.626 1.94A2.25 2.25 0 0 0 11.16 13z"/></svg>
+          </button>
+          <button class="control-btn" id="btnPrev" data-tooltip="Предыдущий">
+            <svg viewBox="0 0 16 16"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg>
+          </button>
+          <button class="btn-play-pause" id="btnPlayPause" data-tooltip="Воспроизведение">
+            <svg id="playerPlayIcon" viewBox="0 0 16 16"><path d="M3 1.713a.7.7 0 0 1 1.05-.607l10.89 6.288a.7.7 0 0 1 0 1.212L4.05 14.894A.7.7 0 0 1 3 14.287V1.713z"/></svg>
+            <svg id="playerPauseIcon" viewBox="0 0 16 16" style="display: none;"><path d="M2.7 1a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7H2.7zm8 0a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-2.6z"/></svg>
+          </button>
+          <button class="control-btn" id="btnNext" data-tooltip="Следующий">
+            <svg viewBox="0 0 16 16"><path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.575a.7.7 0 0 0 1.05.607L12 9.149V14.3a.7.7 0 0 0 .7.7h1.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-1.6z"/></svg>
+          </button>
+          <button class="control-btn" id="btnRepeat" data-tooltip="Повтор">
+            <svg viewBox="0 0 16 16"><path d="M0 4.75A3.75 3.75 0 0 1 3.75 1h8.5A3.75 3.75 0 0 1 16 4.75v5a3.75 3.75 0 0 1-3.75 3.75H9.81l1.018 1.018a.75.75 0 1 1-1.06 1.06L6.939 12.75l2.829-2.828a.75.75 0 1 1 1.06 1.06L9.811 12h2.439a2.25 2.25 0 0 0 2.25-2.25v-5a2.25 2.25 0 0 0-2.25-2.25h-8.5A2.25 2.25 0 0 0 1.5 4.75v5A2.25 2.25 0 0 0 3.75 12H5v1.5H3.75A3.75 3.75 0 0 1 0 9.75v-5z"/></svg>
+          </button>
+        </div>
+
+        <!-- Progress scrubber -->
+        <div class="playback-bar">
+          <span class="playback-time current" id="currentTimeLabel">0:00</span>
+          <div class="progress-slider-container" id="progressSliderContainer">
+            <div class="progress-slider-bg">
+              <div class="progress-slider-fill" id="progressSliderFill">
+                <div class="progress-slider-handle"></div>
+              </div>
+            </div>
+            <div class="time-hover-tooltip" id="timeHoverTooltip">0:00</div>
+          </div>
+          <span class="playback-time total" id="totalTimeLabel">0:00</span>
+        </div>
+      </div>
+
+      <!-- Right: Lyrics, Queue, Volume -->
+      <div class="player-right">
+        <button class="control-btn" id="btnToggleLyrics" data-tooltip="Текст песни (Lyrics)">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797zM10.5 8.693l-3.247-3.247L1.879 10.82a.75.75 0 0 0-.22.53v2.899c0 .414.336.75.75.75h2.899a.75.75 0 0 0 .53-.22L10.5 8.693z"/></svg>
+        </button>
+        <button class="control-btn" id="btnToggleQueue" data-tooltip="Очередь">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 2.5 2.5v2a.75.75 0 0 1-1.5 0v-2a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v2a.75.75 0 0 1-1.5 0v-2z"/></svg>
+        </button>
+        <div class="volume-bar-container">
+          <button class="control-btn" id="btnVolumeIcon" data-tooltip="Громкость">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4H.75A.75.75 0 0 1 0 10.4V5.6a.75.75 0 0 1 .75-.75h1.316l6.925-4a.75.75 0 0 1 .75 0zm-2 2.53L2.991 6.13H1.5v3.74h1.491l4.75 2.75V3.38zm4.28 1.83a.75.75 0 0 1 1.06 0 4 4 0 0 1 0 5.66.75.75 0 1 1-1.06-1.06 2.5 2.5 0 0 0 0-3.54.75.75 0 0 1 0-1.06zm2.122-2.122a.75.75 0 0 1 1.06 0 7 7 0 0 1 0 9.9.75.75 0 1 1-1.06-1.06 5.5 5.5 0 0 0 0-7.78.75.75 0 0 1 0-1.06z"/></svg>
+          </button>
+          <div class="volume-slider-container" id="volumeSliderContainer">
+            <div class="volume-slider-bg">
+              <div class="volume-slider-fill" id="volumeSliderFill">
+                <div class="volume-slider-handle"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Hidden Fallback Folder Picker -->
+  <input type="file" id="hiddenFolderPicker" webkitdirectory directory multiple style="display: none;">
+
+  <!-- Context Menu -->
+  <div class="context-menu" id="appContextMenu"></div>
+
+  <!-- Modal: Create Playlist -->
+  <div class="modal-overlay" id="modalCreatePlaylist">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Создать плейлист</h2>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 16px;">
+          <label style="display:block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--sp-text-secondary);">Название</label>
+          <input type="text" id="inputPlaylistName" class="search-input" style="height: 40px; padding: 0 12px;" placeholder="Мой плейлист" />
+        </div>
+        <div>
+          <label style="display:block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--sp-text-secondary);">Описание (необязательно)</label>
+          <textarea id="inputPlaylistDesc" class="search-input" style="height: 80px; padding: 8px 12px; border-radius: 6px; resize: none;" placeholder="Добавьте описание для плейлиста"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="settings-btn-secondary" onclick="document.getElementById('modalCreatePlaylist').classList.remove('active')">Отмена</button>
+        <button class="settings-btn-primary" id="btnConfirmCreatePlaylist">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Update Available -->
+  <div class="modal-overlay" id="modalUpdateAvailable">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="var(--sp-green)"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+          <h2>Доступно обновление Playerium</h2>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div style="background-color: var(--sp-dark-800); padding: 12px 16px; border-radius: 6px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+            <span style="color: var(--sp-text-subdued);">Новая версия:</span>
+            <strong style="color: var(--sp-green);" id="updateModalLatestVer">v1.0.1</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;">
+            <span style="color: var(--sp-text-subdued);">Текущая версия:</span>
+            <span id="updateModalCurrentVer">v1.0.0</span>
+          </div>
+        </div>
+        <div style="margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--sp-text-subdued); text-transform: uppercase;">Что нового:</div>
+        <div id="updateModalNotes" style="background-color: var(--sp-dark-900); padding: 12px; border-radius: 6px; font-size: 13px; max-height: 160px; overflow-y: auto; color: var(--sp-text-secondary); white-space: pre-wrap; line-height: 1.5;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="settings-btn-secondary" id="btnUpdateLater">Напомнить позже</button>
+        <a id="btnDownloadUpdate" href="#" target="_blank" class="settings-btn-primary" style="text-decoration: none;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          Скачать обновление
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Application Script (ES6 Modules) -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
