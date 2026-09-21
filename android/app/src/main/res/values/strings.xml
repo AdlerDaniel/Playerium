@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Playerium</string>
+    <string name="title_activity_main">Playerium</string>
+    <string name="package_name">com.playerium.music</string>
+</resources>
