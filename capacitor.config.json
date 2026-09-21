@@ -1,0 +1,17 @@
+{
+  "appId": "com.playerium.music",
+  "appName": "Playerium",
+  "webDir": ".",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "backgroundColor": "#121212"
+    }
+  }
+}
