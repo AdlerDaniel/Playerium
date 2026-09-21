@@ -1,19 +1,26 @@
 package com.playerium.music;
 
 import android.Manifest;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Base64;
+import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -34,6 +41,29 @@ public class MainActivity extends AppCompatActivity {
     private final static int FILECHOOSER_RESULTCODE = 1001;
     private final static int FOLDER_PICKER_RESULTCODE = 1002;
     private final static int PERMISSION_REQUEST_CODE = 2001;
+
+    private final BroadcastReceiver onDownloadCompleteReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+            if (id != -1) {
+                try {
+                    DownloadManager downloadManager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                    if (downloadManager != null) {
+                        Uri downloadUri = downloadManager.getUriForDownloadedFile(id);
+                        if (downloadUri != null) {
+                            Intent installIntent = new Intent(Intent.ACTION_VIEW);
+                            installIntent.setDataAndType(downloadUri, "application/vnd.android.package-archive");
+                            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(installIntent);
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    };
 
     public static MainActivity getInstance() {
         return instance;
@@ -57,10 +87,49 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
 
-        // Add JavaScript Interface for Android Media Session & Folder Picker
+        // Add JavaScript Interface for Android Media Session, Folder Picker, and Updater
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url != null && !url.startsWith("file:///android_asset/")) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        return true;
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                return false;
+            }
+        });
+
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        // Register receiver for downloaded APK auto-installation prompt
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(onDownloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
+            } else {
+                registerReceiver(onDownloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
@@ -186,6 +255,56 @@ public class MainActivity extends AppCompatActivity {
                 return null;
             }
         }
+
+        @JavascriptInterface
+        public void downloadUpdate(final String url, final String fileName) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        String name = (fileName != null && !fileName.isEmpty()) ? fileName : "Playerium-update.apk";
+                        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                        request.setTitle("Playerium " + name);
+                        request.setDescription("Загрузка обновления Playerium...");
+                        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
+                        request.setMimeType("application/vnd.android.package-archive");
+
+                        DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                        if (manager != null) {
+                            manager.enqueue(request);
+                            Toast.makeText(MainActivity.this, "Загрузка началась! Проверьте шторку уведомлений.", Toast.LENGTH_LONG).show();
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        try {
+                            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                            browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(browserIntent);
+                            Toast.makeText(MainActivity.this, "Открытие загрузки в браузере...", Toast.LENGTH_SHORT).show();
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                        }
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openExternalUrl(final String url) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(browserIntent);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+        }
     }
 
     private void scanFolderAndSend(Uri treeUri, boolean isInitial) {
@@ -289,6 +408,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        try {
+            unregisterReceiver(onDownloadCompleteReceiver);
+        } catch (Exception ignored) {}
         instance = null;
         super.onDestroy();
     }

@@ -4,7 +4,7 @@
  */
 
 export class AutoUpdater {
-  static CURRENT_VERSION = "1.0.1";
+  static CURRENT_VERSION = "1.0.2";
   static DEFAULT_REPO = "AdlerDaniel/Playerium"; // User can configure in Settings
 
   constructor() {
@@ -76,7 +76,7 @@ export class AutoUpdater {
       let downloadUrl = release.html_url;
       let assetName = "Перейти к релизу";
 
-      const isAndroid = /Android/i.test(navigator.userAgent);
+      const isAndroid = /Android/i.test(navigator.userAgent) || Boolean(window.AndroidBridge);
 
       if (Array.isArray(release.assets) && release.assets.length > 0) {
         if (isAndroid) {

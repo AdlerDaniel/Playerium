@@ -102,7 +102,7 @@ jobs:
           gradle wrapper --gradle-version 8.4
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Playerium-1.0.1.apk
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Playerium-1.0.2.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -118,7 +118,8 @@ jobs:
 
     steps:
       - name: Create release directory
-        run: mkdir -p release-assets
+        run: |
+          mkdir -p release-assets
 
       - name: Download Windows EXE Artifacts
         uses: actions/download-artifact@v4
@@ -138,26 +139,29 @@ jobs:
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.1
-          name: "Playerium v1.0.1"
+          tag_name: v1.0.2
+          name: "Playerium v1.0.2"
           draft: false
           prerelease: false
           body: |
-            ## 🎵 Playerium v1.0.1 — Official Release
+            ## 🎵 Playerium v1.0.2 — Official Release
 
-            Обновление Playerium с новой официальной иконкой, нативной шторкой воспроизведения Android и синхронизацией папок в плейлисты!
+            Обновление Playerium с исправлением загрузки обновлений на Android, визуальным индикатором прогресса и авто-предложением установки APK!
 
             ### 📦 Файлы для установки:
-            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.1.exe`
-            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.1.exe`
-            - 📱 **Android Приложение**: `Playerium-1.0.1.apk`
+            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.2.exe`
+            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.2.exe`
+            - 📱 **Android Приложение**: `Playerium-1.0.2.apk`
 
-            ### ✨ Новые возможности v1.0.1:
-            - 🎨 **Новая иконка приложения**: белый сквиркл с черной нотой для телефона и ПК
-            - 📲 **Шторка уведомлений Android (Media Notification)**: системный виджет в шторке и на экране блокировки с обложкой, названием трека, исполнителем и кнопками управления
-            - 📁 **Выбор папки и авто-синхронизация плейлистов**: автоматическое создание отдельного плейлиста из папки (с возможностью переименования) и авто-подтягивание всех новых треков
-            - 📱 **1:1 Spotify Mobile UI**: нижняя навигация, мини-плеер, полноэкранный плеер со шторкой
-            - 🔄 **Автообновление**: проверка новых релизов с GitHub при входе
+            ### ✨ Что нового в v1.0.2:
+            - 📥 **Исправлена кнопка «Скачать обновление» на Android**:
+              - Нативное скачивание через Android DownloadManager со статусом в шторке уведомлений
+              - Анимированный визуальный индикатор прогресса (спиннер, статусная плашка, toast-уведомление)
+              - Автоматическое предложение установить скачанный APK сразу после завершения загрузки
+            - 🖥️ **Поддержка открытия внешних ссылок**: системный браузер открывает ссылки на скачивание как в Windows/Electron, так и в Android WebView
+            - 🎨 **Официальная иконка приложения**: белый сквиркл с нотой
+            - 📲 **Шторка воспроизведения Android (Media Notification)**: системный виджет управления музыкой
+            - 📁 **Авто-синхронизация плейлистов из папок**
           files: |
             release-assets/*.exe
             release-assets/*.apk

@@ -370,13 +370,29 @@
         </div>
         <div style="margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--sp-text-subdued); text-transform: uppercase;">Что нового:</div>
         <div id="updateModalNotes" style="background-color: var(--sp-dark-900); padding: 12px; border-radius: 6px; font-size: 13px; max-height: 160px; overflow-y: auto; color: var(--sp-text-secondary); white-space: pre-wrap; line-height: 1.5;"></div>
+
+        <!-- Download Status Indicator with animated progress bar -->
+        <div id="updateDownloadStatus" style="display: none; margin-top: 14px; background: rgba(31, 223, 100, 0.1); border: 1px solid rgba(31, 223, 100, 0.3); border-radius: 8px; padding: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--sp-green); border-top-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite;"></span>
+              <span id="updateStatusText" style="font-size: 13px; font-weight: 600; color: #fff;">Загрузка обновления началась...</span>
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--sp-text-secondary); margin-bottom: 8px;" id="updateStatusDetail">
+            Файл загружается. Проверьте шторку уведомлений Android или браузер.
+          </div>
+          <div style="height: 6px; width: 100%; background: var(--sp-dark-700); border-radius: 3px; overflow: hidden; position: relative;">
+            <div id="updateProgressBarFill" style="position: absolute; top: 0; left: 0; height: 100%; width: 40%; background: var(--sp-green); border-radius: 3px; animation: updatePulse 1.5s ease-in-out infinite;"></div>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="settings-btn-secondary" id="btnUpdateLater">Напомнить позже</button>
-        <a id="btnDownloadUpdate" href="#" target="_blank" class="settings-btn-primary" style="text-decoration: none;">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-          Скачать обновление
-        </a>
+        <button class="settings-btn-secondary" id="btnUpdateLater">Закрыть</button>
+        <button id="btnDownloadUpdate" class="settings-btn-primary" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; border: none;">
+          <svg id="btnDownloadUpdateIcon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          <span id="btnDownloadUpdateText">Скачать обновление</span>
+        </button>
       </div>
     </div>
   </div>

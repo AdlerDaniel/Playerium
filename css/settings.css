@@ -301,3 +301,14 @@ input:checked + .slider-toggle:before {
   font-weight: 700;
   box-shadow: 0 2px 0 rgba(0,0,0,0.5);
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes updatePulse {
+  0% { left: -40%; }
+  50% { left: 40%; }
+  100% { left: 100%; }
+}

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -118,6 +118,22 @@ function createWindow() {
       console.error("Failed to read file:", filePath, e);
       return null;
     }
+  });
+
+  // Open external links in default OS browser
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url && (url.startsWith("http:") || url.startsWith("https:"))) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  ipcMain.handle("shell:openExternal", async (_event, url) => {
+    if (url) {
+      await shell.openExternal(url);
+      return true;
+    }
+    return false;
   });
 }
 

@@ -26,6 +26,102 @@ class App {
       // Hook UI folder picker to universal selector
       this.ui.triggerFolderPicker = () => this.selectMusicFolder();
 
+      // Hook update modal with visual download feedback
+      this.lastUpdateInfo = null;
+      this.ui.showUpdateModal = (info) => {
+        this.lastUpdateInfo = info;
+        const modal = document.getElementById("modalUpdateAvailable");
+        if (!modal) return;
+        document.getElementById("updateModalLatestVer").textContent = "v" + info.latestVersion;
+        document.getElementById("updateModalCurrentVer").textContent = "v" + info.currentVersion;
+        document.getElementById("updateModalNotes").textContent = info.releaseNotes || "Новая версия Playerium доступна для загрузки.";
+
+        const statusBox = document.getElementById("updateDownloadStatus");
+        if (statusBox) statusBox.style.display = "none";
+        const dlBtn = document.getElementById("btnDownloadUpdate");
+        const dlText = document.getElementById("btnDownloadUpdateText");
+        const dlIcon = document.getElementById("btnDownloadUpdateIcon");
+        if (dlBtn) {
+          dlBtn.disabled = false;
+          dlBtn.style.opacity = "1";
+          dlBtn.onclick = () => this.ui.handleDownloadUpdate(info);
+        }
+        if (dlText) dlText.textContent = "Скачать обновление";
+        if (dlIcon) {
+          dlIcon.innerHTML = `<path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>`;
+        }
+
+        modal.classList.add("active");
+      };
+
+      this.ui.handleDownloadUpdate = (info) => {
+        const updateInfo = info || this.lastUpdateInfo || { latestVersion: "1.0.2" };
+        const dlBtn = document.getElementById("btnDownloadUpdate");
+        const statusBox = document.getElementById("updateDownloadStatus");
+        const statusText = document.getElementById("updateStatusText");
+        const statusDetail = document.getElementById("updateStatusDetail");
+        const dlText = document.getElementById("btnDownloadUpdateText");
+        const dlIcon = document.getElementById("btnDownloadUpdateIcon");
+
+        const url = updateInfo.downloadUrl || updateInfo.htmlUrl || "https://github.com/AdlerDaniel/Playerium/releases/latest";
+        const isAndroid = /Android/i.test(navigator.userAgent) || Boolean(window.AndroidBridge);
+        const fileName = isAndroid ? `Playerium-${updateInfo.latestVersion || "1.0.2"}.apk` : `Playerium-Setup-${updateInfo.latestVersion || "1.0.2"}.exe`;
+
+        // Immediate visual response
+        if (dlText) dlText.textContent = "Загрузка...";
+        if (dlBtn) {
+          dlBtn.disabled = true;
+          dlBtn.style.opacity = "0.85";
+        }
+        if (dlIcon) {
+          dlIcon.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border: 2px solid #000; border-top-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite;"></span>`;
+        }
+        if (statusBox) {
+          statusBox.style.display = "block";
+        }
+        if (statusText) {
+          statusText.textContent = isAndroid ? "Загрузка APK началась..." : "Загрузка обновления началась...";
+        }
+        if (statusDetail) {
+          statusDetail.textContent = isAndroid
+            ? `Файл ${fileName} загружается. Проверьте системную шторку уведомлений Android.`
+            : `Файл ${fileName} загружается через браузер.`;
+        }
+
+        this.ui.showToast(`📥 Загрузка ${fileName} начата! Проверьте уведомления`, "success");
+
+        // Native Android Bridge or Electron or Browser
+        if (window.AndroidBridge && typeof window.AndroidBridge.downloadUpdate === "function") {
+          window.AndroidBridge.downloadUpdate(url, fileName);
+        } else if (window.AndroidBridge && typeof window.AndroidBridge.openExternalUrl === "function") {
+          window.AndroidBridge.openExternalUrl(url);
+        } else if (window.electronAPI && typeof window.electronAPI.openExternal === "function") {
+          window.electronAPI.openExternal(url);
+        } else {
+          const a = document.createElement("a");
+          a.href = url;
+          a.target = "_blank";
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+
+        setTimeout(() => {
+          if (dlText) dlText.textContent = "Скачать повторно";
+          if (dlBtn) {
+            dlBtn.disabled = false;
+            dlBtn.style.opacity = "1";
+          }
+          if (dlIcon) {
+            dlIcon.innerHTML = `<path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>`;
+          }
+          if (statusText) {
+            statusText.textContent = "Файл отправлен на загрузку!";
+          }
+        }, 4000);
+      };
+
       // Hook hidden fallback inputs
       const hiddenFolder = document.getElementById("hiddenFolderPicker");
       if (hiddenFolder) {
