@@ -428,4 +428,107 @@ export class Library {
 
     if (this.onLibraryChanged) this.onLibraryChanged();
   }
+
+  // --- Folder Synced Playlists ---
+
+  findPlaylistByFolderSource(source) {
+    if (!source) return null;
+    return this.getPlaylists().find((p) => p.folderSource === source);
+  }
+
+  async syncFolderToPlaylist(folderName, folderSource, files, isAndroid = false) {
+    let playlist = this.findPlaylistByFolderSource(folderSource);
+    let isNewPlaylist = false;
+
+    if (!playlist) {
+      isNewPlaylist = true;
+      const id = "pl_fld_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
+      playlist = {
+        id,
+        name: folderName || "Музыкальная папка",
+        description: `Авто-плейлист папки: ${folderName}`,
+        trackIds: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        coverUrl: null,
+        isFolderPlaylist: true,
+        folderSource: folderSource,
+        isAndroid: isAndroid
+      };
+      this.playlists.set(id, playlist);
+      await this.putInStore("playlists", playlist);
+    }
+
+    let addedCount = 0;
+    const existingTracks = this.getTracks();
+
+    for (const f of files) {
+      let track = existingTracks.find((t) => {
+        if (t.filePath && f.fullPath && t.filePath === f.fullPath) return true;
+        if (t.nativeUri && f.uri && t.nativeUri === f.uri) return true;
+        if (t.fileName === f.name && t.fileSize === f.size) return true;
+        return false;
+      });
+
+      if (!track) {
+        let rawName = f.name.replace(/\.[^/.]+$/, "");
+        let artist = "Неизвестный исполнитель";
+        let title = rawName;
+        if (rawName.includes(" - ")) {
+          const parts = rawName.split(" - ");
+          artist = parts[0].trim();
+          title = parts.slice(1).join(" - ").trim();
+        }
+
+        const trackId = "trk_fld_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8);
+        track = {
+          id: trackId,
+          title: title,
+          artist: artist,
+          album: folderName || "Локальный альбом",
+          year: "",
+          trackNo: "",
+          duration: 0,
+          pictureUrl: null,
+          lyrics: null,
+          fileName: f.name,
+          filePath: f.fullPath || null,
+          nativeUri: f.uri || null,
+          fileSize: f.size || 0,
+          folderName: folderName,
+          dateAdded: Date.now(),
+          liked: false
+        };
+
+        this.tracks.set(trackId, track);
+        await this.putInStore("tracks", track);
+        existingTracks.push(track);
+      }
+
+      if (!playlist.trackIds.includes(track.id)) {
+        playlist.trackIds.push(track.id);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0 || isNewPlaylist) {
+      playlist.updatedAt = Date.now();
+      await this.putInStore("playlists", playlist);
+      if (this.onLibraryChanged) this.onLibraryChanged();
+    }
+
+    return { playlist, addedCount, isNewPlaylist };
+  }
+
+  initFolderWatchers() {
+    for (const p of this.getPlaylists()) {
+      if (p.isFolderPlaylist && p.folderSource) {
+        if (window.electronAPI && window.electronAPI.watchFolder && !p.isAndroid) {
+          window.electronAPI.watchFolder(p.folderSource);
+        } else if (window.AndroidBridge && window.AndroidBridge.rescanFolder && p.isAndroid) {
+          window.AndroidBridge.rescanFolder(p.folderSource);
+        }
+      }
+    }
+  }
 }

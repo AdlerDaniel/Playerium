@@ -23,6 +23,16 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Python for Icon Generation
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Generate App Icons
+        run: |
+          python -m pip install pillow
+          python scripts/generate_icons.py
+
       - name: Install Dependencies
         run: npm install
 
@@ -66,6 +76,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Python for Icon Generation
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Generate App Icons
+        run: |
+          python3 -m pip install pillow
+          python3 scripts/generate_icons.py
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -74,7 +94,7 @@ jobs:
       - name: Sync Web Assets to Android
         run: |
           mkdir -p android/app/src/main/assets
-          cp -r index.html css js android/app/src/main/assets/
+          cp -r index.html css js assets android/app/src/main/assets/
 
       - name: Build Android Debug APK
         run: |
@@ -82,7 +102,7 @@ jobs:
           gradle wrapper --gradle-version 8.4
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Playerium-1.0.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Playerium-1.0.1.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -118,26 +138,26 @@ jobs:
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: "Playerium v1.0.0"
+          tag_name: v1.0.1
+          name: "Playerium v1.0.1"
           draft: false
           prerelease: false
           body: |
-            ## 🎵 Playerium v1.0.0 — Official Release
+            ## 🎵 Playerium v1.0.1 — Official Release
 
-            Локальный аудиоплеер в интерфейсе Spotify для Windows и Android.
+            Обновление Playerium с новой официальной иконкой, нативной шторкой воспроизведения Android и синхронизацией папок в плейлисты!
 
             ### 📦 Файлы для установки:
-            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.0.exe`
-            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.0.exe`
-            - 📱 **Android Приложение**: `Playerium-1.0.0.apk`
+            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.1.exe`
+            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.1.exe`
+            - 📱 **Android Приложение**: `Playerium-1.0.1.apk`
 
-            ### ✨ Возможности:
-            - Полный интерфейс Spotify (Sidebar, Topbar, Queue, Rightbar, Tracklist)
-            - 10-полосный эквалайзер с пресетами (Bass Boost, Rock, Pop, Vocal Boost и др.)
-            - Синхронизированные субтитры / текст песен (LRC & ID3 USLT)
-            - Поиск, медиатека, плейлисты, любимые треки
-            - Автообновление через GitHub Releases при каждом запуске
+            ### ✨ Новые возможности v1.0.1:
+            - 🎨 **Новая иконка приложения**: белый сквиркл с черной нотой для телефона и ПК
+            - 📲 **Шторка уведомлений Android (Media Notification)**: системный виджет в шторке и на экране блокировки с обложкой, названием трека, исполнителем и кнопками управления
+            - 📁 **Выбор папки и авто-синхронизация плейлистов**: автоматическое создание отдельного плейлиста из папки (с возможностью переименования) и авто-подтягивание всех новых треков
+            - 📱 **1:1 Spotify Mobile UI**: нижняя навигация, мини-плеер, полноэкранный плеер со шторкой
+            - 🔄 **Автообновление**: проверка новых релизов с GitHub при входе
           files: |
             release-assets/*.exe
             release-assets/*.apk

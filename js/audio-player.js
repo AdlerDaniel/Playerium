@@ -74,12 +74,14 @@ export class AudioPlayer {
       this.isPlaying = true;
       if (this.onPlayStateChange) this.onPlayStateChange(true);
       if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+      this.notifyAndroidPlayback(true);
     });
 
     this.audio.addEventListener("pause", () => {
       this.isPlaying = false;
       if (this.onPlayStateChange) this.onPlayStateChange(false);
       if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+      this.notifyAndroidPlayback(false);
     });
 
     this.audio.addEventListener("timeupdate", () => {
@@ -89,6 +91,7 @@ export class AudioPlayer {
     });
 
     this.audio.addEventListener("ended", () => {
+      this.notifyAndroidPlayback(false);
       this.handleTrackEnded();
     });
 
@@ -97,6 +100,25 @@ export class AudioPlayer {
       // Try next track if current fails
       this.next();
     });
+  }
+
+  notifyAndroidPlayback(isPlaying) {
+    if (window.AndroidBridge && typeof window.AndroidBridge.updatePlaybackState === "function") {
+      try {
+        const t = this.currentTrack;
+        if (t) {
+          window.AndroidBridge.updatePlaybackState(
+            t.title || "Неизвестный трек",
+            t.artist || "Неизвестный исполнитель",
+            t.album || "",
+            Boolean(isPlaying),
+            t.pictureUrl || ""
+          );
+        }
+      } catch (err) {
+        console.warn("AndroidBridge updatePlaybackState error:", err);
+      }
+    }
   }
 
   setupMediaSession() {
@@ -162,12 +184,40 @@ export class AudioPlayer {
 
     // Get playable audio URL (either from memory blob or created object URL)
     let audioBlob = this.library.audioBlobs.get(track.id);
-    if (!audioBlob) {
-      // If we don't have the blob in memory, track cannot be played until reloaded
-      console.warn("Audio file data not loaded in session for track:", track.title);
+
+    // If not in memory, try loading from PC file path or Android URI
+    if (!audioBlob && track.filePath && window.electronAPI && window.electronAPI.readFile) {
+      try {
+        const buffer = await window.electronAPI.readFile(track.filePath);
+        if (buffer) {
+          audioBlob = new Blob([buffer]);
+          this.library.audioBlobs.set(track.id, audioBlob);
+        }
+      } catch (e) {
+        console.warn("Failed to load file from disk:", e);
+      }
+    }
+    if (!audioBlob && track.nativeUri && window.AndroidBridge && window.AndroidBridge.readFileAsBase64) {
+      try {
+        const b64 = window.AndroidBridge.readFileAsBase64(track.nativeUri);
+        if (b64) {
+          const byteCharacters = atob(b64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          audioBlob = new Blob([byteArray], { type: "audio/mpeg" });
+          this.library.audioBlobs.set(track.id, audioBlob);
+        }
+      } catch (e) {
+        console.warn("Failed to load file from Android URI:", e);
+      }
     }
 
-    if (audioBlob) {
+    if (!audioBlob) {
+      console.warn("Audio file data not loaded in session for track:", track.title);
+    } else {
       const srcUrl = URL.createObjectURL(audioBlob);
       this.audio.src = srcUrl;
     }
@@ -179,6 +229,7 @@ export class AudioPlayer {
     }
 
     this.updateMediaSessionMetadata(track);
+    this.notifyAndroidPlayback(true);
 
     if (this.onTrackChange) this.onTrackChange(track);
     if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);

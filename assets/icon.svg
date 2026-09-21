@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <clipPath id="squircle">
+      <rect width="1024" height="1024" rx="225" ry="225" />
+    </clipPath>
+  </defs>
+  <!-- White Squircle Background -->
+  <rect width="1024" height="1024" rx="225" ry="225" fill="#FFFFFF" />
+  
+  <!-- Black Musical Note -->
+  <g fill="#000000">
+    <!-- Notehead -->
+    <circle cx="388" cy="710" r="132" />
+    <!-- Stem -->
+    <rect x="494" y="175" width="52" height="535" />
+    <!-- Flag / Beam with rounded tip -->
+    <path d="M 494,175 
+             L 802,305 
+             C 830,317 835,355 810,380 
+             C 800,390 785,398 768,393 
+             L 546,335 
+             L 546,175 
+             Z" />
+  </g>
+</svg>
