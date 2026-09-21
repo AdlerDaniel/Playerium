@@ -27,7 +27,22 @@ jobs:
         run: npm install
 
       - name: Build Windows Installer & Portable EXE
-        run: npm run build:win
+        shell: pwsh
+        run: |
+          $maxRetries = 2
+          for ($i = 1; $i -le $maxRetries; $i++) {
+            Write-Host "Build attempt $i of $maxRetries..."
+            npm run build:win
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Windows build succeeded!"
+              break
+            }
+            if ($i -eq $maxRetries) {
+              Write-Error "Windows build failed after $maxRetries attempts."
+              exit 1
+            }
+            Start-Sleep -Seconds 5
+          }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

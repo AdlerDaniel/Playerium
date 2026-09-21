@@ -15,6 +15,13 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "main.js",
+      "index.html",
+      "css/**/*",
+      "js/**/*",
+      "package.json"
+    ],
     "win": {
       "target": [
         {
