@@ -37,14 +37,6 @@ jobs:
           name: Playerium-Windows-EXE
           path: dist/*.exe
 
-      - name: Release to GitHub Releases
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-android-apk:
     name: Build Android APK
     runs-on: ubuntu-latest
@@ -61,6 +53,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
 
       - name: Sync Web Assets to Android
         run: |
@@ -70,8 +64,10 @@ jobs:
       - name: Build Android Debug APK
         run: |
           cd android
-          chmod +x gradlew || true
-          ./gradlew assembleDebug --no-daemon || gradle assembleDebug --no-daemon
+          gradle wrapper --gradle-version 8.4
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Playerium-1.0.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -79,10 +75,56 @@ jobs:
           name: Playerium-Android-APK
           path: android/app/build/outputs/apk/debug/*.apk
 
-      - name: Release APK to GitHub Releases
-        if: startsWith(github.ref, 'refs/tags/v')
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows-exe, build-android-apk]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Create release directory
+        run: mkdir -p release-assets
+
+      - name: Download Windows EXE Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: Playerium-Windows-EXE
+          path: release-assets
+
+      - name: Download Android APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Playerium-Android-APK
+          path: release-assets
+
+      - name: Display Release Files
+        run: ls -la release-assets
+
+      - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/debug/*.apk
+          tag_name: v1.0.0
+          name: "Playerium v1.0.0"
+          draft: false
+          prerelease: false
+          body: |
+            ## 🎵 Playerium v1.0.0 — Official Release
+
+            Локальный аудиоплеер в интерфейсе Spotify для Windows и Android.
+
+            ### 📦 Файлы для установки:
+            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.0.exe`
+            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.0.exe`
+            - 📱 **Android Приложение**: `Playerium-1.0.0.apk`
+
+            ### ✨ Возможности:
+            - Полный интерфейс Spotify (Sidebar, Topbar, Queue, Rightbar, Tracklist)
+            - 10-полосный эквалайзер с пресетами (Bass Boost, Rock, Pop, Vocal Boost и др.)
+            - Синхронизированные субтитры / текст песен (LRC & ID3 USLT)
+            - Поиск, медиатека, плейлисты, любимые треки
+            - Автообновление через GitHub Releases при каждом запуске
+          files: |
+            release-assets/*.exe
+            release-assets/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

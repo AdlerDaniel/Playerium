@@ -45,9 +45,8 @@ export class AutoUpdater {
       return { hasUpdate: false, reason: "disabled" };
     }
 
-    // If repo is still the default placeholder and not manual, wait until user enters their GitHub repo
-    if (!isManual && this.repo === AutoUpdater.DEFAULT_REPO) {
-      return { hasUpdate: false, reason: "default_placeholder" };
+    if (!this.repo || this.repo.includes("username/")) {
+      return { hasUpdate: false, reason: "unconfigured_repo" };
     }
 
     const apiUrl = `https://api.github.com/repos/${this.repo}/releases/latest`;
