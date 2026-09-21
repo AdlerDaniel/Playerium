@@ -1,0 +1,156 @@
+/* Spotify Topbar Styles */
+.topbar {
+  height: var(--sp-topbar-height);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background-color: transparent;
+  transition: background-color 0.25s ease;
+}
+
+.topbar.scrolled {
+  background-color: rgba(18, 18, 18, 0.95);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+/* History back/forward navigation circles */
+.history-nav {
+  display: flex;
+  gap: 8px;
+}
+.nav-circle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: var(--sp-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.nav-circle-btn:not(:disabled):hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  color: var(--sp-text-primary);
+}
+.nav-circle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Search bar inside topbar */
+.search-container {
+  position: relative;
+  width: 360px;
+  max-width: 100%;
+}
+.search-input {
+  width: 100%;
+  height: 48px;
+  background-color: var(--sp-dark-700);
+  border: 1px solid transparent;
+  border-radius: var(--sp-btn-radius);
+  padding: 0 40px 0 48px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--sp-text-primary);
+  outline: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search-input::placeholder {
+  color: var(--sp-text-subdued);
+  font-weight: 400;
+}
+.search-input:hover {
+  background-color: var(--sp-dark-600);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.search-input:focus {
+  background-color: var(--sp-dark-600);
+  border-color: var(--sp-text-primary);
+  box-shadow: 0 0 0 1px var(--sp-text-primary);
+}
+.search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--sp-text-subdued);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+.search-clear-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--sp-text-subdued);
+  display: none;
+  padding: 4px;
+}
+.search-clear-btn.visible {
+  display: flex;
+}
+.search-clear-btn:hover {
+  color: var(--sp-text-primary);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Quick Action Badges / Settings button */
+.topbar-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: var(--sp-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.topbar-btn:hover {
+  background-color: rgba(0, 0, 0, 0.85);
+  color: var(--sp-text-primary);
+  transform: scale(1.05);
+}
+.topbar-btn.active {
+  background-color: var(--sp-text-primary);
+  color: var(--sp-black);
+}
+
+/* Local status chip */
+.status-chip {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 6px 14px;
+  border-radius: var(--sp-btn-radius);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sp-text-secondary);
+}
+.status-chip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--sp-green);
+}
