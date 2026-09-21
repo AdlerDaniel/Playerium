@@ -31,12 +31,29 @@ export class UIController {
   }
 
   init() {
+    this.initMobileState();
     this.bindDOM();
+    this.bindMobileEvents();
     this.bindPlayerEvents();
     this.renderSidebar();
     this.navigateTo({ type: "home", title: "Все треки" });
     this.setupDropZone();
     setTimeout(() => this.updater.checkForUpdates(false), 2000);
+  }
+
+  initMobileState() {
+    this.isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    if (this.isMobile) {
+      document.body.classList.add("is-mobile");
+    }
+    window.addEventListener("resize", () => {
+      const mobileNow = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
+      if (mobileNow !== this.isMobile) {
+        this.isMobile = mobileNow;
+        document.body.classList.toggle("is-mobile", this.isMobile);
+        this.refreshCurrentView();
+      }
+    });
   }
 
   // --- DOM Binding ---
@@ -214,6 +231,160 @@ export class UIController {
     }
   }
 
+  // --- Mobile Spotify Navigation & Mini-Player Events ---
+
+  bindMobileEvents() {
+    // 1. Mobile Navigation Bar Tabs
+    const navHome = document.getElementById("mobileNavHome");
+    const navSearch = document.getElementById("mobileNavSearch");
+    const navLibrary = document.getElementById("mobileNavLibrary");
+
+    if (navHome) {
+      navHome.addEventListener("click", () => {
+        this.updateMobileNavActive("home");
+        this.navigateTo({ type: "home", title: "Главная" });
+      });
+    }
+    if (navSearch) {
+      navSearch.addEventListener("click", () => {
+        this.updateMobileNavActive("search");
+        this.navigateTo({ type: "search", title: "Поиск" });
+        setTimeout(() => document.getElementById("mainSearchInput")?.focus(), 100);
+      });
+    }
+    if (navLibrary) {
+      navLibrary.addEventListener("click", () => {
+        this.updateMobileNavActive("library");
+        this.navigateTo({ type: "library", title: "Моя медиатека" });
+      });
+    }
+
+    // 2. Mobile Mini-Player (Tap to expand fullscreen)
+    const miniPlayer = document.getElementById("mobileMiniPlayer");
+    const fsPlayer = document.getElementById("mobileFullscreenPlayer");
+    if (miniPlayer) {
+      miniPlayer.addEventListener("click", (e) => {
+        if (e.target.closest("#mobileMiniLike") || e.target.closest("#mobileMiniPlayPause")) return;
+        if (this.player.currentTrack && fsPlayer) {
+          fsPlayer.classList.add("active");
+        }
+      });
+    }
+
+    // Mini-player buttons
+    document.getElementById("mobileMiniPlayPause")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.player.togglePlay();
+    });
+
+    document.getElementById("mobileMiniLike")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (this.player.currentTrack) {
+        const liked = await this.library.toggleLike(this.player.currentTrack.id);
+        this.updateLikeButtons(this.player.currentTrack.id, liked);
+        this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
+      }
+    });
+
+    // 3. Mobile Fullscreen Player Controls
+    document.getElementById("btnMobileFsClose")?.addEventListener("click", () => {
+      fsPlayer?.classList.remove("active");
+    });
+
+    document.getElementById("btnMobileFsPlayPause")?.addEventListener("click", () => {
+      this.player.togglePlay();
+    });
+
+    document.getElementById("btnMobileFsNext")?.addEventListener("click", () => {
+      this.player.next();
+    });
+
+    document.getElementById("btnMobileFsPrev")?.addEventListener("click", () => {
+      this.player.prev();
+    });
+
+    document.getElementById("btnMobileFsShuffle")?.addEventListener("click", () => {
+      this.player.toggleShuffle();
+    });
+
+    document.getElementById("btnMobileFsRepeat")?.addEventListener("click", () => {
+      this.player.toggleRepeat();
+    });
+
+    document.getElementById("btnMobileFsLike")?.addEventListener("click", async () => {
+      if (this.player.currentTrack) {
+        const liked = await this.library.toggleLike(this.player.currentTrack.id);
+        this.updateLikeButtons(this.player.currentTrack.id, liked);
+        this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
+      }
+    });
+
+    // Fullscreen Scrubber slider
+    const fsSlider = document.getElementById("mobileFsSlider");
+    if (fsSlider) {
+      fsSlider.addEventListener("input", (e) => {
+        const dur = this.player.getDuration();
+        if (dur > 0) {
+          const seekTime = (parseFloat(e.target.value) / 100) * dur;
+          document.getElementById("mobileFsTimeCurrent").textContent = this.formatTime(seekTime);
+        }
+      });
+      fsSlider.addEventListener("change", (e) => {
+        const dur = this.player.getDuration();
+        if (dur > 0) {
+          const seekTime = (parseFloat(e.target.value) / 100) * dur;
+          this.player.seekToTime(seekTime);
+        }
+      });
+    }
+
+    // Lyrics Card tap on fullscreen player
+    document.getElementById("mobileFsLyricsCard")?.addEventListener("click", () => {
+      fsPlayer?.classList.remove("active");
+      this.navigateTo({ type: "lyrics", title: "Текст песни" });
+    });
+
+    // Fullscreen Equalizer & Queue
+    document.getElementById("btnMobileFsEq")?.addEventListener("click", () => {
+      fsPlayer?.classList.remove("active");
+      this.navigateTo({ type: "settings", title: "Настройки" });
+    });
+
+    document.getElementById("btnMobileFsQueue")?.addEventListener("click", () => {
+      fsPlayer?.classList.remove("active");
+      this.toggleRightPanel("queue");
+    });
+
+    // Fullscreen Options Button
+    document.getElementById("btnMobileFsOptions")?.addEventListener("click", () => {
+      if (this.player.currentTrack) {
+        this.showMobileTrackOptionsSheet(this.player.currentTrack, this.player.queueIndex, this.player.queue, null);
+      }
+    });
+
+    // 4. Android/Mobile Audio Files Picker
+    const audioFilesInput = document.getElementById("hiddenAudioFilesPicker");
+    if (audioFilesInput) {
+      audioFilesInput.addEventListener("change", async (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          const count = await this.library.processFiles(Array.from(e.target.files), "Мои треки", (done, total) => {
+            this.showToast(`Загрузка: ${done} из ${total}...`);
+          });
+          this.showToast(`Добавлено аудиофайлов: ${count}`, "success");
+          this.renderSidebar();
+          this.refreshCurrentView();
+        }
+      });
+    }
+  }
+
+  updateMobileNavActive(tab) {
+    document.querySelectorAll(".mobile-nav-item").forEach((btn) => btn.classList.remove("active"));
+    if (tab === "home") document.getElementById("mobileNavHome")?.classList.add("active");
+    if (tab === "search") document.getElementById("mobileNavSearch")?.classList.add("active");
+    if (tab === "library") document.getElementById("mobileNavLibrary")?.classList.add("active");
+  }
+
   // --- Drag and Drop Folders/Files ---
 
   setupDropZone() {
@@ -287,12 +458,25 @@ export class UIController {
     this.player.onPlayStateChange = (isPlaying) => {
       const playIcon = document.getElementById("playerPlayIcon");
       const pauseIcon = document.getElementById("playerPauseIcon");
-      if (isPlaying) {
-        playIcon.style.display = "none";
-        pauseIcon.style.display = "block";
-      } else {
-        playIcon.style.display = "block";
-        pauseIcon.style.display = "none";
+      if (playIcon && pauseIcon) {
+        playIcon.style.display = isPlaying ? "none" : "block";
+        pauseIcon.style.display = isPlaying ? "block" : "none";
+      }
+
+      // Mobile mini player play/pause
+      const miniPlayIcon = document.getElementById("mobileMiniPlayIcon");
+      const miniPauseIcon = document.getElementById("mobileMiniPauseIcon");
+      if (miniPlayIcon && miniPauseIcon) {
+        miniPlayIcon.style.display = isPlaying ? "none" : "block";
+        miniPauseIcon.style.display = isPlaying ? "block" : "none";
+      }
+
+      // Mobile fullscreen player play/pause
+      const fsPlayIcon = document.getElementById("mobileFsPlayIcon");
+      const fsPauseIcon = document.getElementById("mobileFsPauseIcon");
+      if (fsPlayIcon && fsPauseIcon) {
+        fsPlayIcon.style.display = isPlaying ? "none" : "block";
+        fsPauseIcon.style.display = isPlaying ? "block" : "none";
       }
 
       // Update table play states
@@ -317,12 +501,49 @@ export class UIController {
         thumb.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
       }
 
+      // Update Mobile Mini-Player
+      const miniPlayer = document.getElementById("mobileMiniPlayer");
+      if (miniPlayer) {
+        miniPlayer.classList.remove("hidden");
+        document.getElementById("mobileMiniTitle").textContent = track.title || "Неизвестный трек";
+        document.getElementById("mobileMiniArtist").textContent = track.artist || "Неизвестный исполнитель";
+        const miniCover = document.getElementById("mobileMiniCover");
+        if (track.pictureUrl) {
+          miniCover.innerHTML = `<img src="${track.pictureUrl}" alt="Cover" />`;
+        } else {
+          miniCover.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+        }
+      }
+
+      // Update Mobile Fullscreen Player
+      const fsArtwork = document.getElementById("mobileFsArtwork");
+      if (fsArtwork) {
+        if (track.pictureUrl) {
+          fsArtwork.innerHTML = `<img src="${track.pictureUrl}" alt="Cover" />`;
+        } else {
+          fsArtwork.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+        }
+      }
+      document.getElementById("mobileFsTitle").textContent = track.title || "Неизвестный трек";
+      document.getElementById("mobileFsArtist").textContent = track.artist || "Неизвестный исполнитель";
+      document.getElementById("mobileFsContextTitle").textContent = this.currentView.title || "Все треки";
+
       this.updateLikeButtons(track.id, track.liked);
 
       // Update lyrics engine
       this.lyricsEngine.loadLyrics(track.lyrics);
       if (this.currentView.type === "lyrics") {
         this.renderLyricsView();
+      }
+
+      // Update lyrics snippet on mobile fullscreen player card
+      const snippetEl = document.getElementById("mobileFsLyricsSnippet");
+      if (snippetEl) {
+        if (this.lyricsEngine.hasLyrics()) {
+          snippetEl.textContent = this.lyricsEngine.lines[0]?.text || "Текст доступен для воспроизведения";
+        } else {
+          snippetEl.textContent = "Для этого трека текст не найден";
+        }
       }
 
       // Update Right Panel Now Playing tab
@@ -343,11 +564,31 @@ export class UIController {
       const percent = duration > 0 ? (currentTime / duration) * 100 : 0;
       document.getElementById("progressSliderFill").style.width = percent + "%";
 
+      // Mobile mini-player progress
+      const miniFill = document.getElementById("mobileMiniProgressFill");
+      if (miniFill) miniFill.style.width = percent + "%";
+
+      // Mobile fullscreen scrubber & times
+      const fsSlider = document.getElementById("mobileFsSlider");
+      if (fsSlider && !fsSlider.matches(":active")) {
+        fsSlider.value = percent;
+      }
+      const fsCurrent = document.getElementById("mobileFsTimeCurrent");
+      const fsTotal = document.getElementById("mobileFsTimeTotal");
+      if (fsCurrent) fsCurrent.textContent = this.formatTime(currentTime);
+      if (fsTotal) fsTotal.textContent = this.formatTime(duration);
+
       // Sync Lyrics if active
-      if (this.lyricsEngine.isSynced && this.currentView.type === "lyrics") {
+      if (this.lyricsEngine.isSynced) {
         const activeIdx = this.lyricsEngine.updateTime(currentTime);
         if (activeIdx !== -1) {
-          this.highlightLyricsLine(activeIdx);
+          if (this.currentView.type === "lyrics") {
+            this.highlightLyricsLine(activeIdx);
+          }
+          const snippetEl = document.getElementById("mobileFsLyricsSnippet");
+          if (snippetEl && this.lyricsEngine.lines[activeIdx]) {
+            snippetEl.textContent = this.lyricsEngine.lines[activeIdx].text;
+          }
         }
       }
     };
@@ -375,11 +616,14 @@ export class UIController {
 
     this.player.onShuffleChange = (isShuffle) => {
       document.getElementById("btnShuffle").classList.toggle("active", isShuffle);
+      document.getElementById("btnMobileFsShuffle")?.classList.toggle("active", isShuffle);
     };
 
     this.player.onRepeatChange = (repeatMode) => {
       const btn = document.getElementById("btnRepeat");
+      const fsBtn = document.getElementById("btnMobileFsRepeat");
       btn.classList.toggle("active", repeatMode !== "off");
+      fsBtn?.classList.toggle("active", repeatMode !== "off");
       if (repeatMode === "one") {
         btn.setAttribute("data-tooltip", "Повтор текущего трека");
       } else if (repeatMode === "all") {
@@ -544,13 +788,23 @@ export class UIController {
 
   loadView(view) {
     this.currentView = view;
+    if (view.type === "home") this.updateMobileNavActive("home");
+    else if (view.type === "search") this.updateMobileNavActive("search");
+    else if (view.type === "library") this.updateMobileNavActive("library");
+    else this.updateMobileNavActive("");
+
     const container = document.getElementById("mainViewContent");
     container.innerHTML = "";
 
-    // Clear search input if navigating to non-search view unless already searching
     switch (view.type) {
       case "home":
         this.renderHomeView(container);
+        break;
+      case "search":
+        this.renderSearchView(container);
+        break;
+      case "library":
+        this.renderLibraryView(container);
         break;
       case "liked":
         this.renderLikedView(container);
@@ -588,6 +842,85 @@ export class UIController {
     }
     tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
 
+    // If on mobile and not searching, show authentic Spotify Mobile Home!
+    if (this.isMobile && !this.searchQuery) {
+      const homeWrapper = document.createElement("div");
+      homeWrapper.className = "mobile-home-view";
+
+      const hour = new Date().getHours();
+      let greeting = "Добрый день";
+      if (hour >= 5 && hour < 12) greeting = "Доброе утро";
+      else if (hour >= 18 && hour < 23) greeting = "Добрый вечер";
+      else if (hour >= 23 || hour < 5) greeting = "Доброй ночи";
+
+      const header = document.createElement("div");
+      header.className = "mobile-home-header";
+      header.innerHTML = `
+        <div class="mobile-home-greeting">${greeting}</div>
+      `;
+      homeWrapper.appendChild(header);
+
+      // 2x3 Quick Access Grid
+      const quickGrid = document.createElement("div");
+      quickGrid.className = "mobile-quick-grid";
+
+      // 1. Liked Songs
+      const likedCard = document.createElement("div");
+      likedCard.className = "mobile-quick-card";
+      likedCard.innerHTML = `
+        <div class="mobile-quick-thumb fav-thumb">
+          <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </div>
+        <div class="mobile-quick-title">Любимые треки</div>
+      `;
+      likedCard.addEventListener("click", () => this.navigateTo({ type: "liked", title: "Любимые треки" }));
+      quickGrid.appendChild(likedCard);
+
+      // 2. All Tracks
+      const allCard = document.createElement("div");
+      allCard.className = "mobile-quick-card";
+      allCard.innerHTML = `
+        <div class="mobile-quick-thumb" style="background: linear-gradient(135deg, #1db954, #121212);">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </div>
+        <div class="mobile-quick-title">Все треки</div>
+      `;
+      allCard.addEventListener("click", () => {
+        if (tracks.length > 0) this.player.playTrack(tracks[0], 0, tracks);
+      });
+      quickGrid.appendChild(allCard);
+
+      // 3-6. Playlists or Artists
+      const playlists = this.library.getPlaylists().slice(0, 4);
+      playlists.forEach((pl) => {
+        const card = document.createElement("div");
+        card.className = "mobile-quick-card";
+        card.innerHTML = `
+          <div class="mobile-quick-thumb">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--sp-text-subdued)"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+          </div>
+          <div class="mobile-quick-title">${this.escapeHTML(pl.name)}</div>
+        `;
+        card.addEventListener("click", () => this.navigateTo({ type: "playlist", id: pl.id, title: pl.name }));
+        quickGrid.appendChild(card);
+      });
+
+      homeWrapper.appendChild(quickGrid);
+
+      // Section title
+      const secTitle = document.createElement("h2");
+      secTitle.className = "mobile-section-title";
+      secTitle.textContent = "Ваши треки";
+      homeWrapper.appendChild(secTitle);
+
+      homeWrapper.appendChild(this.createActionBar(tracks));
+      homeWrapper.appendChild(this.createTrackTable(tracks));
+
+      container.appendChild(homeWrapper);
+      return;
+    }
+
+    // Standard desktop home view
     const totalDur = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
 
     const header = document.createElement("div");
@@ -612,6 +945,239 @@ export class UIController {
     container.appendChild(header);
     container.appendChild(this.createActionBar(tracks));
     container.appendChild(this.createTrackTable(tracks));
+  }
+
+  renderSearchView(container) {
+    const searchWrapper = document.createElement("div");
+    searchWrapper.className = "mobile-search-view";
+
+    const title = document.createElement("h1");
+    title.className = "mobile-search-title";
+    title.textContent = "Поиск";
+    searchWrapper.appendChild(title);
+
+    const searchBar = document.createElement("div");
+    searchBar.className = "mobile-search-bar-box";
+    searchBar.innerHTML = `
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 1 0 1.414-1.414l-4.344-4.344a9.157 9.157 0 0 0 2.077-5.816c0-5.14-4.226-9.279-9.407-9.279zm-7.407 9.279c0-4.006 3.302-7.279 7.407-7.279s7.407 3.273 7.407 7.279-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.279z"/></svg>
+      <input type="text" class="mobile-search-input" placeholder="Что хотите послушать?" value="${this.escapeHTML(this.searchQuery)}" />
+      ${this.searchQuery ? '<button class="mobile-search-clear" title="Очистить">&times;</button>' : ""}
+    `;
+    searchWrapper.appendChild(searchBar);
+
+    const input = searchBar.querySelector(".mobile-search-input");
+    const clearBtn = searchBar.querySelector(".mobile-search-clear");
+
+    input.addEventListener("input", (e) => {
+      this.searchQuery = e.target.value.trim();
+      const desktopInput = document.getElementById("mainSearchInput");
+      if (desktopInput) desktopInput.value = this.searchQuery;
+      this.refreshCurrentView();
+    });
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        this.searchQuery = "";
+        const desktopInput = document.getElementById("mainSearchInput");
+        if (desktopInput) desktopInput.value = "";
+        this.refreshCurrentView();
+      });
+    }
+
+    if (!this.searchQuery) {
+      const catHeader = document.createElement("h2");
+      catHeader.className = "mobile-section-title";
+      catHeader.textContent = "Все категории";
+      searchWrapper.appendChild(catHeader);
+
+      const catGrid = document.createElement("div");
+      catGrid.className = "mobile-search-categories";
+      catGrid.innerHTML = `
+        <div class="mobile-cat-card cat-purple" data-action="liked">
+          <span>Любимые треки</span>
+          <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </div>
+        <div class="mobile-cat-card cat-blue" data-action="artists">
+          <span>Исполнители</span>
+          <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        </div>
+        <div class="mobile-cat-card cat-orange" data-action="albums">
+          <span>Альбомы</span>
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>
+        </div>
+        <div class="mobile-cat-card cat-green" data-action="playlists">
+          <span>Плейлисты</span>
+          <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+        </div>
+        <div class="mobile-cat-card cat-teal" data-action="import">
+          <span>Добавить файлы</span>
+          <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </div>
+        <div class="mobile-cat-card cat-pink" data-action="all">
+          <span>Все треки</span>
+          <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </div>
+      `;
+
+      catGrid.querySelector('[data-action="liked"]').addEventListener("click", () => this.navigateTo({ type: "liked", title: "Любимые треки" }));
+      catGrid.querySelector('[data-action="artists"]').addEventListener("click", () => this.navigateTo({ type: "library", title: "Моя медиатека", tab: "artists" }));
+      catGrid.querySelector('[data-action="albums"]').addEventListener("click", () => this.navigateTo({ type: "library", title: "Моя медиатека", tab: "albums" }));
+      catGrid.querySelector('[data-action="playlists"]').addEventListener("click", () => this.navigateTo({ type: "library", title: "Моя медиатека", tab: "playlists" }));
+      catGrid.querySelector('[data-action="import"]').addEventListener("click", () => this.triggerMobileFileImport());
+      catGrid.querySelector('[data-action="all"]').addEventListener("click", () => this.navigateTo({ type: "home", title: "Все треки" }));
+
+      searchWrapper.appendChild(catGrid);
+    } else {
+      const results = this.library.search(this.searchQuery);
+      const resHeader = document.createElement("h2");
+      resHeader.className = "mobile-section-title";
+      resHeader.textContent = `Найдено треков: ${results.length}`;
+      searchWrapper.appendChild(resHeader);
+
+      if (results.length > 0) {
+        searchWrapper.appendChild(this.createTrackTable(results));
+      } else {
+        const empty = document.createElement("div");
+        empty.style.cssText = "padding: 40px 0; text-align: center; color: var(--sp-text-subdued);";
+        empty.innerHTML = `<h3>Ничего не найдено</h3><p style="margin-top: 8px;">Попробуйте поискать по другому названию или исполнителю.</p>`;
+        searchWrapper.appendChild(empty);
+      }
+    }
+
+    container.appendChild(searchWrapper);
+  }
+
+  renderLibraryView(container) {
+    const libWrapper = document.createElement("div");
+    libWrapper.className = "mobile-library-view";
+
+    const header = document.createElement("div");
+    header.className = "mobile-library-header";
+    header.innerHTML = `
+      <div class="mobile-library-title-row">
+        <h1 class="mobile-library-title">Моя медиатека</h1>
+        <div class="mobile-library-actions">
+          <button class="mobile-lib-btn" id="btnMobileLibAdd" title="Добавить">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="mobile-library-pills">
+        <button class="mobile-lib-pill active" data-filter="all">Все</button>
+        <button class="mobile-lib-pill" data-filter="playlists">Плейлисты</button>
+        <button class="mobile-lib-pill" data-filter="artists">Исполнители</button>
+        <button class="mobile-lib-pill" data-filter="albums">Альбомы</button>
+      </div>
+    `;
+    libWrapper.appendChild(header);
+
+    const listContainer = document.createElement("div");
+    listContainer.className = "mobile-library-list";
+    libWrapper.appendChild(listContainer);
+
+    let activeFilter = this.currentView.tab || "all";
+
+    const renderItems = (filter) => {
+      listContainer.innerHTML = "";
+
+      // 1. Liked songs
+      if (filter === "all" || filter === "playlists") {
+        const likedTracks = this.library.getLikedTracks();
+        const likedRow = document.createElement("div");
+        likedRow.className = "mobile-lib-row";
+        likedRow.innerHTML = `
+          <div class="mobile-lib-thumb liked-thumb">
+            <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          </div>
+          <div class="mobile-lib-meta">
+            <span class="mobile-lib-name">Любимые треки</span>
+            <span class="mobile-lib-sub">Закреплено • Плейлист • ${likedTracks.length} треков</span>
+          </div>
+        `;
+        likedRow.addEventListener("click", () => this.navigateTo({ type: "liked", title: "Любимые треки" }));
+        listContainer.appendChild(likedRow);
+      }
+
+      // 2. Playlists
+      if (filter === "all" || filter === "playlists") {
+        const playlists = this.library.getPlaylists();
+        playlists.forEach((pl) => {
+          const row = document.createElement("div");
+          row.className = "mobile-lib-row";
+          row.innerHTML = `
+            <div class="mobile-lib-thumb">
+              <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+            </div>
+            <div class="mobile-lib-meta">
+              <span class="mobile-lib-name">${this.escapeHTML(pl.name)}</span>
+              <span class="mobile-lib-sub">Плейлист • ${pl.trackIds.length} треков</span>
+            </div>
+          `;
+          row.addEventListener("click", () => this.navigateTo({ type: "playlist", id: pl.id, title: pl.name }));
+          listContainer.appendChild(row);
+        });
+      }
+
+      // 3. Artists
+      if (filter === "all" || filter === "artists") {
+        const artists = this.library.getArtists();
+        artists.forEach((art) => {
+          const row = document.createElement("div");
+          row.className = "mobile-lib-row";
+          const thumbHtml = art.pictureUrl
+            ? `<img src="${art.pictureUrl}" alt="Artist" />`
+            : `<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
+          row.innerHTML = `
+            <div class="mobile-lib-thumb round">${thumbHtml}</div>
+            <div class="mobile-lib-meta">
+              <span class="mobile-lib-name">${this.escapeHTML(art.name)}</span>
+              <span class="mobile-lib-sub">Исполнитель</span>
+            </div>
+          `;
+          row.addEventListener("click", () => this.navigateTo({ type: "artist", id: art.name, title: art.name }));
+          listContainer.appendChild(row);
+        });
+      }
+
+      // 4. Albums
+      if (filter === "all" || filter === "albums") {
+        const albums = this.library.getAlbums();
+        albums.forEach((alb) => {
+          const row = document.createElement("div");
+          row.className = "mobile-lib-row";
+          const thumbHtml = alb.pictureUrl
+            ? `<img src="${alb.pictureUrl}" alt="Album" />`
+            : `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`;
+          row.innerHTML = `
+            <div class="mobile-lib-thumb">${thumbHtml}</div>
+            <div class="mobile-lib-meta">
+              <span class="mobile-lib-name">${this.escapeHTML(alb.name)}</span>
+              <span class="mobile-lib-sub">Альбом • ${this.escapeHTML(alb.artist)}</span>
+            </div>
+          `;
+          row.addEventListener("click", () => this.navigateTo({ type: "album", id: alb.name, title: alb.name, extra: alb.artist }));
+          listContainer.appendChild(row);
+        });
+      }
+    };
+
+    header.querySelectorAll(".mobile-lib-pill").forEach((pill) => {
+      pill.classList.toggle("active", pill.dataset.filter === activeFilter);
+      pill.addEventListener("click", () => {
+        header.querySelectorAll(".mobile-lib-pill").forEach((p) => p.classList.remove("active"));
+        pill.classList.add("active");
+        activeFilter = pill.dataset.filter;
+        renderItems(activeFilter);
+      });
+    });
+
+    renderItems(activeFilter);
+
+    header.querySelector("#btnMobileLibAdd")?.addEventListener("click", () => {
+      this.showMobileAddSheet();
+    });
+
+    container.appendChild(libWrapper);
   }
 
   renderLikedView(container) {
@@ -1419,9 +1985,18 @@ export class UIController {
         </div>
       `;
 
-      // Play on row double-click or click on play icon
+      // Play on mobile single tap or desktop double-click
+      row.addEventListener("click", (e) => {
+        if (this.isMobile) {
+          if (!e.target.closest(".track-like-btn") && !e.target.closest(".track-menu-btn") && !e.target.closest(".track-artist") && !e.target.closest(".track-col-album")) {
+            this.player.playTrack(track, index, tracks, playlistContext);
+          }
+        }
+      });
       row.addEventListener("dblclick", () => {
-        this.player.playTrack(track, index, tracks, playlistContext);
+        if (!this.isMobile) {
+          this.player.playTrack(track, index, tracks, playlistContext);
+        }
       });
       row.querySelector(".track-row-play").addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1438,7 +2013,7 @@ export class UIController {
         e.stopPropagation();
         const liked = await this.library.toggleLike(track.id);
         this.updateLikeButtons(track.id, liked);
-        this.showToast(liked ? "Добавлено в Любимые треки" : "Удалено из Любимых треков");
+        this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
       });
 
       // Artist link
@@ -1461,11 +2036,19 @@ export class UIController {
       const moreBtn = row.querySelector(".track-menu-btn");
       moreBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.showTrackContextMenu(e.clientX, e.clientY, track, playlistContext);
+        if (this.isMobile) {
+          this.showMobileTrackOptionsSheet(track, index, tracks, playlistContext);
+        } else {
+          this.showTrackContextMenu(e.clientX, e.clientY, track, playlistContext);
+        }
       });
       row.addEventListener("contextmenu", (e) => {
         e.preventDefault();
-        this.showTrackContextMenu(e.clientX, e.clientY, track, playlistContext);
+        if (this.isMobile) {
+          this.showMobileTrackOptionsSheet(track, index, tracks, playlistContext);
+        } else {
+          this.showTrackContextMenu(e.clientX, e.clientY, track, playlistContext);
+        }
       });
 
       table.appendChild(row);
@@ -1688,7 +2271,155 @@ export class UIController {
     });
 
     if (this.player.currentTrack && this.player.currentTrack.id === trackId) {
-      document.getElementById("btnPlayerLike").classList.toggle("liked", isLiked);
+      document.getElementById("btnPlayerLike")?.classList.toggle("liked", isLiked);
+      document.getElementById("mobileMiniLike")?.classList.toggle("liked", isLiked);
+      document.getElementById("btnMobileFsLike")?.classList.toggle("liked", isLiked);
+    }
+  }
+
+  showMobileTrackOptionsSheet(track, index, tracks, playlistContext = null) {
+    const sheet = document.createElement("div");
+    sheet.className = "mobile-bottom-sheet";
+    const coverHtml = track.pictureUrl
+      ? `<img src="${track.pictureUrl}" alt="Cover" />`
+      : `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
+
+    sheet.innerHTML = `
+      <div class="mobile-sheet-overlay"></div>
+      <div class="mobile-sheet-content">
+        <div class="mobile-sheet-handle"></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="width: 48px; height: 48px; border-radius: 4px; overflow: hidden; background: #282828; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+            ${coverHtml}
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 15px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHTML(track.title)}</div>
+            <div style="font-size: 13px; color: var(--sp-text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHTML(track.artist)}</div>
+          </div>
+        </div>
+        <button class="mobile-sheet-item" id="sheetOptLike">
+          <svg viewBox="0 0 16 16" width="20" height="20"><path d="M8 1.314C12.438-3.248 23.534 4.735 8 15-7.534 4.736 3.562-3.248 8 1.314z"/></svg>
+          <span>${track.liked ? "Удалить из любимых треков" : "Добавить в любимые треки"}</span>
+        </button>
+        <button class="mobile-sheet-item" id="sheetOptQueue">
+          <svg viewBox="0 0 16 16" width="20" height="20"><path d="M15 15H1v-1.5h14V15zm0-4.5H1V9h14v1.5zm-14-7A2.5 2.5 0 0 1 3.5 1h9a2.5 2.5 0 0 1 2.5 2.5v2a.75.75 0 0 1-1.5 0v-2a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v2a.75.75 0 0 1-1.5 0v-2z"/></svg>
+          <span>Добавить в очередь воспроизведения</span>
+        </button>
+        <button class="mobile-sheet-item" id="sheetOptAddToPlaylist">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+          <span>Добавить в плейлист...</span>
+        </button>
+        <button class="mobile-sheet-item" id="sheetOptArtist">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          <span>Перейти к исполнителю: ${this.escapeHTML(track.artist)}</span>
+        </button>
+        <button class="mobile-sheet-item" id="sheetOptLyrics">
+          <svg viewBox="0 0 16 16" width="20" height="20"><path d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797zM10.5 8.693l-3.247-3.247L1.879 10.82a.75.75 0 0 0-.22.53v2.899c0 .414.336.75.75.75h2.899a.75.75 0 0 0 .53-.22L10.5 8.693z"/></svg>
+          <span>Показать текст песни</span>
+        </button>
+        <button class="mobile-sheet-cancel" id="sheetOptCancel">Закрыть</button>
+      </div>
+    `;
+
+    document.body.appendChild(sheet);
+    requestAnimationFrame(() => sheet.classList.add("active"));
+
+    const closeSheet = () => {
+      sheet.classList.remove("active");
+      setTimeout(() => sheet.remove(), 300);
+    };
+
+    sheet.querySelector(".mobile-sheet-overlay").addEventListener("click", closeSheet);
+    sheet.querySelector("#sheetOptCancel").addEventListener("click", closeSheet);
+
+    sheet.querySelector("#sheetOptLike").addEventListener("click", async () => {
+      closeSheet();
+      const liked = await this.library.toggleLike(track.id);
+      this.updateLikeButtons(track.id, liked);
+      this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
+    });
+
+    sheet.querySelector("#sheetOptQueue").addEventListener("click", () => {
+      closeSheet();
+      this.player.addToQueue(track);
+      this.showToast("Добавлено в очередь");
+    });
+
+    sheet.querySelector("#sheetOptAddToPlaylist").addEventListener("click", () => {
+      closeSheet();
+      this.showAddToPlaylistModal(track.id);
+    });
+
+    sheet.querySelector("#sheetOptArtist").addEventListener("click", () => {
+      closeSheet();
+      document.getElementById("mobileFullscreenPlayer")?.classList.remove("active");
+      this.navigateTo({ type: "artist", id: track.artist, title: track.artist });
+    });
+
+    sheet.querySelector("#sheetOptLyrics").addEventListener("click", () => {
+      closeSheet();
+      document.getElementById("mobileFullscreenPlayer")?.classList.remove("active");
+      this.navigateTo({ type: "lyrics", title: "Текст песни" });
+    });
+  }
+
+  showMobileAddSheet() {
+    const sheet = document.createElement("div");
+    sheet.className = "mobile-bottom-sheet";
+    sheet.innerHTML = `
+      <div class="mobile-sheet-overlay"></div>
+      <div class="mobile-sheet-content">
+        <div class="mobile-sheet-handle"></div>
+        <h3 class="mobile-sheet-title">Добавить в медиатеку</h3>
+        <button class="mobile-sheet-item" id="sheetAddFiles">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          <span>Выбрать аудиофайлы с телефона</span>
+        </button>
+        <button class="mobile-sheet-item" id="sheetCreatePl">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+          <span>Создать новый плейлист</span>
+        </button>
+        <button class="mobile-sheet-item" id="sheetAddFolder">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+          <span>Выбрать папку с музыкой</span>
+        </button>
+        <button class="mobile-sheet-cancel" id="sheetCancel">Отмена</button>
+      </div>
+    `;
+
+    document.body.appendChild(sheet);
+    requestAnimationFrame(() => sheet.classList.add("active"));
+
+    const closeSheet = () => {
+      sheet.classList.remove("active");
+      setTimeout(() => sheet.remove(), 300);
+    };
+
+    sheet.querySelector(".mobile-sheet-overlay").addEventListener("click", closeSheet);
+    sheet.querySelector("#sheetCancel").addEventListener("click", closeSheet);
+
+    sheet.querySelector("#sheetAddFiles").addEventListener("click", () => {
+      closeSheet();
+      this.triggerMobileFileImport();
+    });
+
+    sheet.querySelector("#sheetCreatePl").addEventListener("click", () => {
+      closeSheet();
+      this.showCreatePlaylistModal();
+    });
+
+    sheet.querySelector("#sheetAddFolder").addEventListener("click", () => {
+      closeSheet();
+      this.triggerFolderPicker();
+    });
+  }
+
+  triggerMobileFileImport() {
+    const audioPicker = document.getElementById("hiddenAudioFilesPicker");
+    if (audioPicker) {
+      audioPicker.click();
+    } else {
+      this.triggerFolderPicker();
     }
   }
 
