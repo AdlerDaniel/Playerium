@@ -102,7 +102,7 @@ jobs:
           gradle wrapper --gradle-version 8.4
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Playerium-1.0.2.apk
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/Playerium-1.0.3.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -118,8 +118,7 @@ jobs:
 
     steps:
       - name: Create release directory
-        run: |
-          mkdir -p release-assets
+        run: mkdir -p release-assets
 
       - name: Download Windows EXE Artifacts
         uses: actions/download-artifact@v4
@@ -139,29 +138,30 @@ jobs:
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.2
-          name: "Playerium v1.0.2"
+          tag_name: v1.0.3
+          name: "Playerium v1.0.3"
           draft: false
           prerelease: false
           body: |
-            ## 🎵 Playerium v1.0.2 — Official Release
+            ## 🎵 Playerium v1.0.3 — UI Polish & Emil Kowalski Design Engine
 
-            Обновление Playerium с исправлением загрузки обновлений на Android, визуальным индикатором прогресса и авто-предложением установки APK!
+            Крупное обновление интерфейса Playerium с внедрением принципов Emil Kowalski (Design Engineering, Mobile Native & Animate)!
 
             ### 📦 Файлы для установки:
-            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.2.exe`
-            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.2.exe`
-            - 📱 **Android Приложение**: `Playerium-1.0.2.apk`
+            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.3.exe`
+            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.3.exe`
+            - 📱 **Android Приложение**: `Playerium-1.0.3.apk`
 
-            ### ✨ Что нового в v1.0.2:
-            - 📥 **Исправлена кнопка «Скачать обновление» на Android**:
-              - Нативное скачивание через Android DownloadManager со статусом в шторке уведомлений
-              - Анимированный визуальный индикатор прогресса (спиннер, статусная плашка, toast-уведомление)
-              - Автоматическое предложение установить скачанный APK сразу после завершения загрузки
-            - 🖥️ **Поддержка открытия внешних ссылок**: системный браузер открывает ссылки на скачивание как в Windows/Electron, так и в Android WebView
-            - 🎨 **Официальная иконка приложения**: белый сквиркл с нотой
-            - 📲 **Шторка воспроизведения Android (Media Notification)**: системный виджет управления музыкой
-            - 📁 **Авто-синхронизация плейлистов из папок**
+            ### ✨ Что нового в v1.0.3:
+            - 🎨 **Полировка интерфейса по правилам Emil Kowalski**:
+              - Токены плавности (`--ease-out`, `--ease-in-out`, `--ease-drawer`) для естественных и отзывчивых анимаций
+              - Гейтирование всех hover-состояний (`@media (hover: hover) and (pointer: fine)`), устраняющее "залипания" подсветки на смартфонах при тапах
+              - Тактильный отклик при нажатиях (`:active { transform: scale(...) }`) на карточках, кнопках плеера и навигации
+              - Полноэкранный плеер и нижняя шторка открываются по нативной кривой `--ease-drawer`
+              - Защита от случайных свайпов страниц с `overscroll-behavior: contain`
+              - Адаптивный `viewport` без блокировки масштабирования (`interactive-widget=resizes-content`)
+            - 🧠 **Встроенные AI-скиллы разработки**:
+              - `emil-design-eng`, `mobile-native`, `animate`
           files: |
             release-assets/*.exe
             release-assets/*.apk

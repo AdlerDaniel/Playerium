@@ -55,7 +55,7 @@ class App {
       };
 
       this.ui.handleDownloadUpdate = (info) => {
-        const updateInfo = info || this.lastUpdateInfo || { latestVersion: "1.0.2" };
+        const updateInfo = info || this.lastUpdateInfo || { latestVersion: "1.0.3" };
         const dlBtn = document.getElementById("btnDownloadUpdate");
         const statusBox = document.getElementById("updateDownloadStatus");
         const statusText = document.getElementById("updateStatusText");
@@ -65,7 +65,7 @@ class App {
 
         const url = updateInfo.downloadUrl || updateInfo.htmlUrl || "https://github.com/AdlerDaniel/Playerium/releases/latest";
         const isAndroid = /Android/i.test(navigator.userAgent) || Boolean(window.AndroidBridge);
-        const fileName = isAndroid ? `Playerium-${updateInfo.latestVersion || "1.0.2"}.apk` : `Playerium-Setup-${updateInfo.latestVersion || "1.0.2"}.exe`;
+        const fileName = isAndroid ? `Playerium-${updateInfo.latestVersion || "1.0.3"}.apk` : `Playerium-Setup-${updateInfo.latestVersion || "1.0.3"}.exe`;
 
         // Immediate visual response
         if (dlText) dlText.textContent = "Загрузка...";
