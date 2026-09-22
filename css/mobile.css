@@ -91,7 +91,7 @@
   }
 
   .topbar-left .search-input {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .topbar-right {
@@ -389,12 +389,15 @@
     justify-content: center;
     width: 100%;
     margin: auto 0;
-    padding: 12px 0;
+    padding: 8px 0;
+    flex-shrink: 1;
+    min-height: 0;
   }
 
   .mobile-fs-artwork {
     width: 100%;
-    max-width: 340px;
+    max-width: min(340px, 38vh);
+    max-height: min(340px, 38vh);
     aspect-ratio: 1 / 1;
     border-radius: 12px;
     background-color: var(--sp-dark-600);
@@ -412,8 +415,8 @@
   }
 
   .mobile-fs-artwork svg {
-    width: 72px;
-    height: 72px;
+    width: 64px;
+    height: 64px;
     fill: var(--sp-text-subdued);
   }
 
@@ -423,7 +426,8 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+    min-width: 0;
   }
 
   .mobile-fs-title-col {
@@ -433,7 +437,7 @@
   }
 
   .mobile-fs-track-title {
-    font-size: 22px;
+    font-size: clamp(18px, 5.2vw, 24px);
     font-weight: 800;
     color: var(--sp-text-primary);
     line-height: 1.25;
@@ -443,9 +447,9 @@
   }
 
   .mobile-fs-track-artist {
-    font-size: 15px;
+    font-size: clamp(13px, 3.8vw, 15px);
     color: var(--sp-text-secondary);
-    margin-top: 4px;
+    margin-top: 3px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1271,5 +1275,54 @@
     margin-top: 10px;
     cursor: pointer;
     width: 100%;
+  }
+
+  /* ==========================================================================
+     10. Mobile Toast Notification Positioning
+     ========================================================================== */
+  .toast-container {
+    bottom: calc(var(--sp-mobile-nav-height) + var(--sp-mobile-mini-height) + var(--sp-mobile-safe-bottom) + 16px) !important;
+    left: 16px !important;
+    right: 16px !important;
+    transform: none !important;
+    max-width: calc(100vw - 32px) !important;
+    width: auto !important;
+    align-items: center !important;
+  }
+
+  .toast {
+    font-size: 13px !important;
+    padding: 9px 16px !important;
+    border-radius: 8px !important;
+    max-width: 100% !important;
+    text-align: center !important;
+  }
+
+  /* ==========================================================================
+     11. Mobile Modals (Bottom Sheet Style)
+     ========================================================================== */
+  .modal-overlay {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+
+  .modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 16px 16px 0 0 !important;
+    max-height: calc(100dvh - 48px) !important;
+    margin: 0 !important;
+  }
+
+  .modal-header {
+    padding: 18px 20px 10px !important;
+  }
+
+  .modal-body {
+    padding: 10px 20px 16px !important;
+  }
+
+  .modal-footer {
+    padding: 12px 20px calc(16px + var(--sp-mobile-safe-bottom)) 20px !important;
   }
 }
