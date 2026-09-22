@@ -283,6 +283,8 @@ button {
   justify-content: center;
   z-index: 999;
   backdrop-filter: blur(4px);
+  padding: 16px;
+  box-sizing: border-box;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s var(--ease-out);
@@ -293,9 +295,12 @@ button {
 }
 .modal-card {
   background-color: var(--sp-dark-700);
-  border-radius: 10px;
+  border-radius: 12px;
   width: 480px;
-  max-width: 90vw;
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
   overflow: hidden;
   transform: scale(0.95);
@@ -307,17 +312,24 @@ button {
   opacity: 1;
 }
 .modal-header {
-  padding: 24px 24px 12px;
+  padding: 20px 24px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 .modal-header h2 {
-  font-size: 22px;
+  font-size: clamp(17px, 3.5vw, 22px);
   font-weight: 700;
+  line-height: 1.25;
+  word-break: break-word;
 }
 .modal-body {
-  padding: 12px 24px 24px;
+  padding: 12px 24px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
 }
 .modal-footer {
   padding: 16px 24px;
@@ -325,6 +337,7 @@ button {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 /* Toast Notifications */
@@ -336,21 +349,28 @@ button {
   z-index: 9999;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   pointer-events: none;
+  max-width: min(520px, 92vw);
+  width: max-content;
 }
 .toast {
   background-color: var(--sp-blue);
   color: #fff;
   padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: 8px;
+  font-size: clamp(12px, 3.2vw, 14px);
   font-weight: 600;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  line-height: 1.35;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
   pointer-events: auto;
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out);
+  max-width: 100%;
+  text-align: center;
+  word-break: break-word;
 }
 .toast.entering {
   opacity: 0;
