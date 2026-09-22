@@ -8,9 +8,20 @@ android {
         applicationId "com.playerium.music"
         minSdk 22
         targetSdk 34
-        versionCode 5
-        versionName "1.0.4"
+        versionCode 6
+        versionName "1.0.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        release {
+            if (file("playerium.keystore").exists()) {
+                storeFile file("playerium.keystore")
+                storePassword "playerium123"
+                keyAlias "playerium"
+                keyPassword "playerium123"
+            }
+        }
     }
 
     compileOptions {
@@ -19,7 +30,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (file("playerium.keystore").exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
         release {
+            if (file("playerium.keystore").exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

@@ -8,10 +8,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
@@ -42,24 +46,24 @@ public class MainActivity extends AppCompatActivity {
     private final static int FOLDER_PICKER_RESULTCODE = 1002;
     private final static int PERMISSION_REQUEST_CODE = 2001;
 
+    private long activeDownloadId = -1;
+    private Handler progressHandler;
+    private Runnable progressRunnable;
+    private boolean isDownloadNotified = false;
+
     private final BroadcastReceiver onDownloadCompleteReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-            if (id != -1) {
-                try {
-                    DownloadManager downloadManager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                    if (downloadManager != null) {
-                        Uri downloadUri = downloadManager.getUriForDownloadedFile(id);
-                        if (downloadUri != null) {
-                            Intent installIntent = new Intent(Intent.ACTION_VIEW);
-                            installIntent.setDataAndType(downloadUri, "application/vnd.android.package-archive");
-                            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(installIntent);
-                        }
+            if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                if (id != -1 && (activeDownloadId == -1 || id == activeDownloadId)) {
+                    activeDownloadId = id;
+                    stopDownloadProgressMonitor();
+                    if (!isDownloadNotified) {
+                        isDownloadNotified = true;
+                        notifyJsDownloadComplete(id);
+                        triggerApkInstall(id);
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
                 }
             }
         }
@@ -272,8 +276,10 @@ public class MainActivity extends AppCompatActivity {
 
                         DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                         if (manager != null) {
-                            manager.enqueue(request);
-                            Toast.makeText(MainActivity.this, "Загрузка началась! Проверьте шторку уведомлений.", Toast.LENGTH_LONG).show();
+                            isDownloadNotified = false;
+                            activeDownloadId = manager.enqueue(request);
+                            startDownloadProgressMonitor(activeDownloadId);
+                            Toast.makeText(MainActivity.this, "Загрузка началась! Проверьте шторку уведомлений.", Toast.LENGTH_SHORT).show();
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -286,6 +292,17 @@ public class MainActivity extends AppCompatActivity {
                             ex.printStackTrace();
                         }
                     }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void installDownloadedUpdate(final long downloadId) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    long id = (downloadId > 0) ? downloadId : activeDownloadId;
+                    triggerApkInstall(id);
                 }
             });
         }
@@ -304,6 +321,142 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             });
+        }
+    }
+
+    private void startDownloadProgressMonitor(final long downloadId) {
+        stopDownloadProgressMonitor();
+        if (progressHandler == null) {
+            progressHandler = new Handler(Looper.getMainLooper());
+        }
+
+        progressRunnable = new Runnable() {
+            @Override
+            public void run() {
+                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                if (dm == null) return;
+
+                DownloadManager.Query q = new DownloadManager.Query();
+                q.setFilterById(downloadId);
+                Cursor cursor = null;
+                boolean shouldContinue = true;
+                try {
+                    cursor = dm.query(q);
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int bytesIdx = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
+                        int totalIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES);
+                        int statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+
+                        long bytesDownloaded = (bytesIdx != -1) ? cursor.getLong(bytesIdx) : 0;
+                        long totalBytes = (totalIdx != -1) ? cursor.getLong(totalIdx) : 0;
+                        int status = (statusIdx != -1) ? cursor.getInt(statusIdx) : -1;
+
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            shouldContinue = false;
+                            stopDownloadProgressMonitor();
+                            if (!isDownloadNotified) {
+                                isDownloadNotified = true;
+                                notifyJsDownloadComplete(downloadId);
+                                triggerApkInstall(downloadId);
+                            }
+                            return;
+                        } else if (status == DownloadManager.STATUS_FAILED) {
+                            shouldContinue = false;
+                            stopDownloadProgressMonitor();
+                            notifyJsDownloadFailed("Загрузка обновления не удалась");
+                            return;
+                        } else {
+                            int percent = totalBytes > 0 ? (int)((bytesDownloaded * 100L) / totalBytes) : 0;
+                            notifyJsDownloadProgress(percent, bytesDownloaded, totalBytes);
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    if (cursor != null) cursor.close();
+                }
+
+                if (shouldContinue && progressHandler != null && progressRunnable != null) {
+                    progressHandler.postDelayed(this, 250);
+                }
+            }
+        };
+        progressHandler.post(progressRunnable);
+    }
+
+    private void stopDownloadProgressMonitor() {
+        if (progressHandler != null && progressRunnable != null) {
+            progressHandler.removeCallbacks(progressRunnable);
+            progressRunnable = null;
+        }
+    }
+
+    private void notifyJsDownloadProgress(final int percent, final long downloaded, final long total) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (webView != null) {
+                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadProgress && window.playerApp.onUpdateDownloadProgress(%d, %d, %d);", percent, downloaded, total);
+                    webView.evaluateJavascript(script, null);
+                }
+            }
+        });
+    }
+
+    private void notifyJsDownloadComplete(final long downloadId) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (webView != null) {
+                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadComplete && window.playerApp.onUpdateDownloadComplete(%d);", downloadId);
+                    webView.evaluateJavascript(script, null);
+                }
+            }
+        });
+    }
+
+    private void notifyJsDownloadFailed(final String reason) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (webView != null) {
+                    String safeReason = reason != null ? reason.replace("'", "\\'") : "Ошибка";
+                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadFailed && window.playerApp.onUpdateDownloadFailed('%s');", safeReason);
+                    webView.evaluateJavascript(script, null);
+                }
+            }
+        });
+    }
+
+    private void triggerApkInstall(final long downloadId) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!getPackageManager().canRequestPackageInstalls()) {
+                    Intent settingsIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
+                    settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(settingsIntent);
+                    Toast.makeText(MainActivity.this, "Разрешите установку обновлений для Playerium", Toast.LENGTH_LONG).show();
+                    return;
+                }
+            }
+
+            DownloadManager downloadManager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (downloadManager == null) return;
+
+            Uri downloadUri = downloadManager.getUriForDownloadedFile(downloadId);
+            if (downloadUri != null) {
+                Intent installIntent = new Intent(Intent.ACTION_VIEW);
+                installIntent.setDataAndType(downloadUri, "application/vnd.android.package-archive");
+                installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(installIntent);
+            } else {
+                Intent downloadsIntent = new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS);
+                downloadsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(downloadsIntent);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(MainActivity.this, "Ошибка запуска установщика: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -408,6 +561,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        stopDownloadProgressMonitor();
         try {
             unregisterReceiver(onDownloadCompleteReceiver);
         } catch (Exception ignored) {}
