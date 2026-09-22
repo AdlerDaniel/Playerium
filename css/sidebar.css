@@ -15,10 +15,12 @@
   font-size: 16px;
   padding: 4px 8px;
   border-radius: 4px;
-  transition: color 0.2s ease;
+  transition: color 0.2s var(--ease-out);
 }
-.library-btn:hover {
-  color: var(--sp-text-primary);
+@media (hover: hover) and (pointer: fine) {
+  .library-btn:hover {
+    color: var(--sp-text-primary);
+  }
 }
 .library-btn svg {
   width: 24px;
@@ -39,11 +41,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.icon-circle-btn:hover {
-  background-color: var(--sp-dark-700);
-  color: var(--sp-text-primary);
+@media (hover: hover) and (pointer: fine) {
+  .icon-circle-btn:hover {
+    background-color: var(--sp-dark-700);
+    color: var(--sp-text-primary);
+  }
+}
+.icon-circle-btn:active {
+  transform: scale(0.93);
 }
 .icon-circle-btn svg {
   width: 18px;
@@ -117,11 +124,17 @@
   padding: 8px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
   position: relative;
 }
-.sidebar-item:hover {
-  background-color: var(--sp-dark-800);
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-item:hover {
+    background-color: var(--sp-dark-800);
+  }
+}
+.sidebar-item:active {
+  background-color: var(--sp-dark-700);
+  transform: scale(0.98);
 }
 .sidebar-item.active {
   background-color: var(--sp-dark-700);

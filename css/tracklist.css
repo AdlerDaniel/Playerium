@@ -108,11 +108,16 @@
 
 .action-icon-btn {
   color: var(--sp-text-subdued);
-  transition: color 0.15s ease, transform 0.15s ease;
+  transition: color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.action-icon-btn:hover {
-  color: var(--sp-text-primary);
-  transform: scale(1.05);
+@media (hover: hover) and (pointer: fine) {
+  .action-icon-btn:hover {
+    color: var(--sp-text-primary);
+    transform: scale(1.05);
+  }
+}
+.action-icon-btn:active {
+  transform: scale(0.93);
 }
 .action-icon-btn.liked {
   color: var(--sp-green);
@@ -134,8 +139,10 @@
   padding: 6px 10px;
   border-radius: 4px;
 }
-.sort-dropdown:hover {
-  color: var(--sp-text-primary);
+@media (hover: hover) and (pointer: fine) {
+  .sort-dropdown:hover {
+    color: var(--sp-text-primary);
+  }
 }
 .sort-dropdown option {
   background-color: var(--sp-dark-700);
@@ -184,15 +191,17 @@
   padding: 8px 16px;
   border-radius: 4px;
   align-items: center;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s var(--ease-out);
   cursor: pointer;
   user-select: none;
 }
 .track-row.no-album {
   grid-template-columns: 48px 5fr 2fr 80px;
 }
-.track-row:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+@media (hover: hover) and (pointer: fine) {
+  .track-row:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
 }
 .track-row.playing {
   background-color: rgba(255, 255, 255, 0.06);
@@ -219,11 +228,13 @@
   display: none;
   color: var(--sp-text-primary);
 }
-.track-row:hover .track-number {
-  display: none;
-}
-.track-row:hover .track-row-play {
-  display: flex;
+@media (hover: hover) and (pointer: fine) {
+  .track-row:hover .track-number {
+    display: none;
+  }
+  .track-row:hover .track-row-play {
+    display: flex;
+  }
 }
 .track-row.playing .track-number {
   display: none;
@@ -243,11 +254,13 @@
 .track-row.playing.is-playing .track-row-play {
   display: none;
 }
-.track-row.playing.is-playing:hover .track-row-play {
-  display: flex;
-}
-.track-row.playing.is-playing:hover .equalizer-bars {
-  display: none;
+@media (hover: hover) and (pointer: fine) {
+  .track-row.playing.is-playing:hover .track-row-play {
+    display: flex;
+  }
+  .track-row.playing.is-playing:hover .equalizer-bars {
+    display: none;
+  }
 }
 .equalizer-bars {
   display: none;
@@ -318,11 +331,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 2px;
-  transition: color 0.15s ease;
+  transition: color 0.15s var(--ease-out);
 }
-.track-artist:hover {
-  color: var(--sp-text-primary);
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .track-artist:hover {
+    color: var(--sp-text-primary);
+    text-decoration: underline;
+  }
 }
 
 /* Track Album */
@@ -333,11 +348,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   padding-right: 12px;
-  transition: color 0.15s ease;
+  transition: color 0.15s var(--ease-out);
 }
-.track-col-album:hover {
-  color: var(--sp-text-primary);
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .track-col-album:hover {
+    color: var(--sp-text-primary);
+    text-decoration: underline;
+  }
 }
 
 /* Track Date Added */
@@ -361,22 +378,26 @@
 .track-like-btn {
   color: var(--sp-text-subdued);
   opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  transition: opacity 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 .track-like-btn.liked {
   opacity: 1;
   color: var(--sp-green);
 }
-.track-row:hover .track-like-btn {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .track-row:hover .track-like-btn {
+    opacity: 1;
+  }
 }
 .track-menu-btn {
   color: var(--sp-text-subdued);
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s var(--ease-out);
 }
-.track-row:hover .track-menu-btn {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .track-row:hover .track-menu-btn {
+    opacity: 1;
+  }
 }
 
 /* Card Grids for Artists & Albums views */
@@ -394,10 +415,15 @@
   flex-direction: column;
   cursor: pointer;
   position: relative;
-  transition: background-color 0.25s ease;
+  transition: background-color 0.25s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.media-card:hover {
-  background-color: var(--sp-dark-700);
+@media (hover: hover) and (pointer: fine) {
+  .media-card:hover {
+    background-color: var(--sp-dark-700);
+  }
+}
+.media-card:active {
+  transform: scale(0.97);
 }
 .media-card-img-wrap {
   position: relative;
@@ -442,15 +468,21 @@
   box-shadow: 0 8px 16px rgba(0,0,0,0.5);
   opacity: 0;
   transform: translateY(8px);
-  transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.15s ease;
+  transition: transform 0.2s var(--ease-out), opacity 0.2s var(--ease-out), background-color 0.15s var(--ease-out);
 }
-.media-card:hover .card-play-btn {
-  opacity: 1;
-  transform: translateY(0);
+@media (hover: hover) and (pointer: fine) {
+  .media-card:hover .card-play-btn {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .card-play-btn:hover {
+    background-color: var(--sp-green-hover);
+    transform: scale(1.06) translateY(0);
+  }
 }
-.card-play-btn:hover {
-  background-color: var(--sp-green-hover);
-  transform: scale(1.06) translateY(0);
+.card-play-btn:active {
+  transform: scale(0.97) translateY(0);
+  background-color: var(--sp-green-active);
 }
 
 .media-card-title {

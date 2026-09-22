@@ -39,11 +39,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out), opacity 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.nav-circle-btn:not(:disabled):hover {
-  background-color: rgba(0, 0, 0, 0.8);
-  color: var(--sp-text-primary);
+@media (hover: hover) and (pointer: fine) {
+  .nav-circle-btn:not(:disabled):hover {
+    background-color: rgba(0, 0, 0, 0.8);
+    color: var(--sp-text-primary);
+  }
+}
+.nav-circle-btn:not(:disabled):active {
+  transform: scale(0.93);
 }
 .nav-circle-btn:disabled {
   opacity: 0.4;
@@ -64,18 +69,20 @@
   border-radius: var(--sp-btn-radius);
   padding: 0 40px 0 48px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--sp-text-primary);
   outline: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 .search-input::placeholder {
   color: var(--sp-text-subdued);
   font-weight: 400;
 }
-.search-input:hover {
-  background-color: var(--sp-dark-600);
-  border-color: rgba(255, 255, 255, 0.2);
+@media (hover: hover) and (pointer: fine) {
+  .search-input:hover {
+    background-color: var(--sp-dark-600);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
 }
 .search-input:focus {
   background-color: var(--sp-dark-600);
@@ -104,8 +111,10 @@
 .search-clear-btn.visible {
   display: flex;
 }
-.search-clear-btn:hover {
-  color: var(--sp-text-primary);
+@media (hover: hover) and (pointer: fine) {
+  .search-clear-btn:hover {
+    color: var(--sp-text-primary);
+  }
 }
 
 .topbar-right {
@@ -124,12 +133,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.topbar-btn:hover {
-  background-color: rgba(0, 0, 0, 0.85);
-  color: var(--sp-text-primary);
-  transform: scale(1.05);
+@media (hover: hover) and (pointer: fine) {
+  .topbar-btn:hover {
+    background-color: rgba(0, 0, 0, 0.85);
+    color: var(--sp-text-primary);
+    transform: scale(1.05);
+  }
+}
+.topbar-btn:active {
+  transform: scale(0.93);
 }
 .topbar-btn.active {
   background-color: var(--sp-text-primary);

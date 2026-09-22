@@ -147,10 +147,16 @@ input:checked + .slider-toggle:before {
   color: var(--sp-text-subdued);
   padding: 4px;
   border-radius: 4px;
+  transition: color 0.15s var(--ease-out), background-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.btn-remove-folder:hover {
-  color: var(--sp-red);
-  background-color: rgba(255, 255, 255, 0.1);
+@media (hover: hover) and (pointer: fine) {
+  .btn-remove-folder:hover {
+    color: var(--sp-red);
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+.btn-remove-folder:active {
+  transform: scale(0.93);
 }
 
 .settings-btn-primary {
@@ -163,10 +169,16 @@ input:checked + .slider-toggle:before {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  transition: transform 0.12s var(--ease-out), background-color 0.15s var(--ease-out);
 }
-.settings-btn-primary:hover {
-  transform: scale(1.03);
-  background-color: #f6f6f6;
+@media (hover: hover) and (pointer: fine) {
+  .settings-btn-primary:hover {
+    transform: scale(1.03);
+    background-color: #f6f6f6;
+  }
+}
+.settings-btn-primary:active {
+  transform: scale(0.97);
 }
 .settings-btn-secondary {
   background-color: transparent;
@@ -176,10 +188,16 @@ input:checked + .slider-toggle:before {
   border-radius: var(--sp-btn-radius);
   font-weight: 700;
   font-size: 13px;
+  transition: border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.settings-btn-secondary:hover {
-  border-color: var(--sp-text-primary);
-  transform: scale(1.03);
+@media (hover: hover) and (pointer: fine) {
+  .settings-btn-secondary:hover {
+    border-color: var(--sp-text-primary);
+    transform: scale(1.03);
+  }
+}
+.settings-btn-secondary:active {
+  transform: scale(0.97);
 }
 
 /* 10-Band Equalizer Styles */
@@ -263,10 +281,15 @@ input:checked + .slider-toggle:before {
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
 }
-.theme-dot:hover {
-  transform: scale(1.15);
+@media (hover: hover) and (pointer: fine) {
+  .theme-dot:hover {
+    transform: scale(1.15);
+  }
+}
+.theme-dot:active {
+  transform: scale(1.05);
 }
 .theme-dot.active {
   border-color: #ffffff;

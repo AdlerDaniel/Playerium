@@ -52,11 +52,18 @@
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.35);
   cursor: pointer;
-  transition: color 0.25s ease, transform 0.25s ease;
+  transition: color 0.25s var(--ease-out), transform 0.25s var(--ease-out);
   transform-origin: left center;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.lyrics-line:hover {
-  color: rgba(255, 255, 255, 0.7);
+@media (hover: hover) and (pointer: fine) {
+  .lyrics-line:hover {
+    color: rgba(255, 255, 255, 0.7);
+  }
+}
+.lyrics-line:active {
+  color: rgba(255, 255, 255, 0.85);
 }
 .lyrics-line.active {
   color: #ffffff;

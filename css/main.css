@@ -27,6 +27,19 @@
   --sp-theme-color: #1ed760;
   --sp-banner-gradient: linear-gradient(180deg, rgba(83, 83, 83, 0.8) 0%, rgba(18, 18, 18, 1) 100%);
   --sp-zoom: 1;
+
+  /* Emil Kowalski easing tokens */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+
+/* Mobile-native baseline (Emil Kowalski mobile-native skill) */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
 }
 
 * {
@@ -164,11 +177,16 @@ button {
   justify-content: center;
   font-family: inherit;
   font-size: 14px;
-  transition: all 0.15s ease;
+  transition: color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
   outline: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
-button:hover {
-  color: var(--sp-text-primary);
+@media (hover: hover) and (pointer: fine) {
+  button:hover {
+    color: var(--sp-text-primary);
+  }
 }
 
 /* Primary Round Green Button (Spotify Play Button) */
@@ -182,15 +200,17 @@ button:hover {
   align-items: center;
   justify-content: center;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-  transition: transform 0.15s ease, background-color 0.15s ease;
+  transition: transform 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
 }
-.btn-primary-play:hover {
-  transform: scale(1.06);
-  background-color: var(--sp-green-hover);
-  color: var(--sp-black);
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary-play:hover {
+    transform: scale(1.06);
+    background-color: var(--sp-green-hover);
+    color: var(--sp-black);
+  }
 }
 .btn-primary-play:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
   background-color: var(--sp-green-active);
 }
 .btn-primary-play svg {
@@ -208,10 +228,15 @@ button:hover {
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.pill-btn:hover {
-  background-color: var(--sp-dark-600);
+@media (hover: hover) and (pointer: fine) {
+  .pill-btn:hover {
+    background-color: var(--sp-dark-600);
+  }
+}
+.pill-btn:active {
+  transform: scale(0.97);
 }
 .pill-btn.active {
   background-color: var(--sp-text-primary);
@@ -237,13 +262,15 @@ button:hover {
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.15s var(--ease-out), transform 0.15s var(--ease-out);
   box-shadow: 0 4px 12px rgba(0,0,0,0.5);
   z-index: 1000;
 }
-[data-tooltip]:hover::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
+@media (hover: hover) and (pointer: fine) {
+  [data-tooltip]:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* Modals */
@@ -258,7 +285,7 @@ button:hover {
   backdrop-filter: blur(4px);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s var(--ease-out);
 }
 .modal-overlay.active {
   opacity: 1;
@@ -271,11 +298,13 @@ button:hover {
   max-width: 90vw;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
   overflow: hidden;
-  animation: modalScale 0.2s ease-out;
+  transform: scale(0.95);
+  opacity: 0;
+  transition: transform 0.2s var(--ease-out), opacity 0.2s var(--ease-out);
 }
-@keyframes modalScale {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+.modal-overlay.active .modal-card {
+  transform: scale(1);
+  opacity: 1;
 }
 .modal-header {
   padding: 24px 24px 12px;
@@ -318,8 +347,14 @@ button:hover {
   font-size: 14px;
   font-weight: 600;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  animation: toastFade 0.3s ease;
   pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out);
+}
+.toast.entering {
+  opacity: 0;
+  transform: translateY(20px);
 }
 .toast.success {
   background-color: var(--sp-green);
@@ -327,10 +362,6 @@ button:hover {
 }
 .toast.danger {
   background-color: var(--sp-red);
-}
-@keyframes toastFade {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
 }
 
 /* Context Menu */
@@ -343,9 +374,15 @@ button:hover {
   box-shadow: 0 16px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1);
   z-index: 10000;
   display: none;
+  transform: scale(0.95);
+  opacity: 0;
+  transition: transform 0.15s var(--ease-out), opacity 0.15s var(--ease-out);
+  transform-origin: top left;
 }
 .context-menu.active {
   display: block;
+  transform: scale(1);
+  opacity: 1;
 }
 .context-menu-item {
   padding: 10px 12px;
@@ -356,10 +393,18 @@ button:hover {
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  transition: background-color 0.1s ease;
+  transition: background-color 0.1s var(--ease-out);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.context-menu-item:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+@media (hover: hover) and (pointer: fine) {
+  .context-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+}
+.context-menu-item:active {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 .context-menu-item svg {
   width: 16px;

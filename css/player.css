@@ -46,9 +46,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.now-playing-title:hover {
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .now-playing-title:hover {
+    text-decoration: underline;
+  }
 }
 .now-playing-artist {
   font-size: 12px;
@@ -58,19 +62,28 @@
   text-overflow: ellipsis;
   cursor: pointer;
   margin-top: 2px;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.now-playing-artist:hover {
-  color: var(--sp-text-primary);
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .now-playing-artist:hover {
+    color: var(--sp-text-primary);
+    text-decoration: underline;
+  }
 }
 
 .now-playing-like {
   color: var(--sp-text-subdued);
-  transition: color 0.15s ease, transform 0.15s ease;
+  transition: color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.now-playing-like:hover {
-  color: var(--sp-text-primary);
-  transform: scale(1.1);
+@media (hover: hover) and (pointer: fine) {
+  .now-playing-like:hover {
+    color: var(--sp-text-primary);
+    transform: scale(1.1);
+  }
+}
+.now-playing-like:active {
+  transform: scale(0.93);
 }
 .now-playing-like.liked {
   color: var(--sp-green);
@@ -100,10 +113,15 @@
 
 .control-btn {
   color: var(--sp-text-subdued);
-  transition: color 0.15s ease, transform 0.15s ease;
+  transition: color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.control-btn:hover {
-  color: var(--sp-text-primary);
+@media (hover: hover) and (pointer: fine) {
+  .control-btn:hover {
+    color: var(--sp-text-primary);
+  }
+}
+.control-btn:active {
+  transform: scale(0.93);
 }
 .control-btn.active {
   color: var(--sp-green);
@@ -135,12 +153,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.1s ease, background-color 0.1s ease;
+  transition: transform 0.1s var(--ease-out), background-color 0.1s var(--ease-out);
 }
-.btn-play-pause:hover {
-  transform: scale(1.06);
-  background-color: #f0f0f0;
-  color: #000000;
+@media (hover: hover) and (pointer: fine) {
+  .btn-play-pause:hover {
+    transform: scale(1.06);
+    background-color: #f0f0f0;
+    color: #000000;
+  }
 }
 .btn-play-pause:active {
   transform: scale(0.96);
@@ -208,11 +228,13 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
   display: none;
 }
-.progress-slider-container:hover .progress-slider-fill {
-  background-color: var(--sp-green);
-}
-.progress-slider-container:hover .progress-slider-handle {
-  display: block;
+@media (hover: hover) and (pointer: fine) {
+  .progress-slider-container:hover .progress-slider-fill {
+    background-color: var(--sp-green);
+  }
+  .progress-slider-container:hover .progress-slider-handle {
+    display: block;
+  }
 }
 
 /* Hover time preview tooltip */
@@ -230,8 +252,10 @@
   display: none;
   white-space: nowrap;
 }
-.progress-slider-container:hover .time-hover-tooltip {
-  display: block;
+@media (hover: hover) and (pointer: fine) {
+  .progress-slider-container:hover .time-hover-tooltip {
+    display: block;
+  }
 }
 
 /* Right Section (Lyrics, Queue, Volume, Fullscreen) */
@@ -268,7 +292,7 @@
   width: 80%;
   background-color: #ffffff;
   border-radius: 2px;
-  transition: background-color 0.1s ease;
+  transition: background-color 0.1s var(--ease-out);
   position: relative;
 }
 .volume-slider-handle {
@@ -282,9 +306,11 @@
   background-color: #ffffff;
   display: none;
 }
-.volume-slider-container:hover .volume-slider-fill {
-  background-color: var(--sp-green);
-}
-.volume-slider-container:hover .volume-slider-handle {
-  display: block;
+@media (hover: hover) and (pointer: fine) {
+  .volume-slider-container:hover .volume-slider-fill {
+    background-color: var(--sp-green);
+  }
+  .volume-slider-container:hover .volume-slider-handle {
+    display: block;
+  }
 }
