@@ -188,9 +188,10 @@
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  flex: 1;
 }
 .item-title {
-  font-size: 14px;
+  font-size: clamp(13px, 1.05vw, 14px);
   font-weight: 500;
   color: var(--sp-text-primary);
   white-space: nowrap;
@@ -198,7 +199,7 @@
   text-overflow: ellipsis;
 }
 .item-subtitle {
-  font-size: 12px;
+  font-size: clamp(11px, 0.95vw, 12px);
   color: var(--sp-text-subdued);
   white-space: nowrap;
   overflow: hidden;
@@ -211,6 +212,7 @@
   margin-left: auto;
   color: var(--sp-green);
   display: none;
+  flex-shrink: 0;
 }
 .sidebar-item.playing .playing-speaker-icon {
   display: flex;

@@ -23,12 +23,14 @@
   align-items: center;
   gap: 16px;
   flex: 1;
+  min-width: 0;
 }
 
 /* History back/forward navigation circles */
 .history-nav {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 .nav-circle-btn {
   width: 32px;
@@ -58,7 +60,8 @@
 /* Search bar inside topbar */
 .search-container {
   position: relative;
-  width: 360px;
+  width: clamp(200px, 32vw, 360px);
+  min-width: 140px;
   max-width: 100%;
 }
 .search-input {
@@ -121,6 +124,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 /* Quick Action Badges / Settings button */
@@ -134,6 +138,7 @@
   align-items: center;
   justify-content: center;
   transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+  flex-shrink: 0;
 }
 @media (hover: hover) and (pointer: fine) {
   .topbar-btn:hover {
@@ -161,10 +166,13 @@
   align-items: center;
   gap: 6px;
   color: var(--sp-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .status-chip .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background-color: var(--sp-green);
+  flex-shrink: 0;
 }

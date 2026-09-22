@@ -64,16 +64,26 @@
   margin-bottom: 24px;
 }
 .now-playing-panel-title {
-  font-size: 20px;
+  font-size: clamp(16px, 1.4vw, 20px);
   font-weight: 700;
   color: var(--sp-text-primary);
   margin-bottom: 4px;
+  line-height: 1.25;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .now-playing-panel-artist {
-  font-size: 14px;
+  font-size: clamp(12px, 1vw, 14px);
   color: var(--sp-text-secondary);
+  line-height: 1.3;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .now-playing-panel-card {
@@ -90,20 +100,25 @@
 .panel-card-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 13px;
   padding: 6px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 12px;
 }
 .panel-card-label {
   color: var(--sp-text-subdued);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .panel-card-val {
   color: var(--sp-text-primary);
   text-align: right;
-  max-width: 60%;
+  max-width: 65%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 /* Queue Tab in Right Panel */
