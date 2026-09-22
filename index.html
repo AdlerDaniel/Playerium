@@ -377,15 +377,16 @@
         <div id="updateDownloadStatus" style="display: none; margin-top: 14px; background: rgba(31, 223, 100, 0.1); border: 1px solid rgba(31, 223, 100, 0.3); border-radius: 8px; padding: 12px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--sp-green); border-top-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite;"></span>
-              <span id="updateStatusText" style="font-size: 13px; font-weight: 600; color: #fff;">Загрузка обновления началась...</span>
+              <span id="updateSpinner" class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--sp-green); border-top-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite;"></span>
+              <span id="updateStatusText" style="font-size: 13px; font-weight: 600; color: #fff;">Загрузка обновления...</span>
             </div>
+            <span id="updatePercentText" style="font-size: 13px; font-weight: 700; color: var(--sp-green); font-variant-numeric: tabular-nums;">0%</span>
           </div>
           <div style="font-size: 12px; color: var(--sp-text-secondary); margin-bottom: 8px;" id="updateStatusDetail">
-            Файл загружается. Проверьте шторку уведомлений Android или браузер.
+            Подготовка к загрузке...
           </div>
           <div style="height: 6px; width: 100%; background: var(--sp-dark-700); border-radius: 3px; overflow: hidden; position: relative;">
-            <div id="updateProgressBarFill" style="position: absolute; top: 0; left: 0; height: 100%; width: 40%; background: var(--sp-green); border-radius: 3px; animation: updatePulse 1.5s ease-in-out infinite;"></div>
+            <div id="updateProgressBarFill" style="height: 100%; width: 0%; background: var(--sp-green); border-radius: 3px; transition: width 0.25s ease;"></div>
           </div>
         </div>
       </div>
