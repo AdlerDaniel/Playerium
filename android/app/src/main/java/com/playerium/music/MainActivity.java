@@ -17,6 +17,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.Base64;
+import android.media.MediaMetadataRetriever;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.content.UriPermission;
+import androidx.webkit.WebViewAssetLoader;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -46,6 +53,9 @@ public class MainActivity extends AppCompatActivity {
     private final static int FOLDER_PICKER_RESULTCODE = 1002;
     private final static int PERMISSION_REQUEST_CODE = 2001;
 
+    private final java.util.Map<String, JSONObject> metadataCache = new java.util.LinkedHashMap<>(128, 0.75f, true);
+    private final java.util.Map<String, DocumentFile> lyricFiles = new java.util.HashMap<>();
+
     private long activeDownloadId = -1;
     private Handler progressHandler;
     private Runnable progressRunnable;
@@ -56,7 +66,8 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
                 long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-                if (id != -1 && (activeDownloadId == -1 || id == activeDownloadId)) {
+                if (id > 0 && id == activeDownloadId) {
+                    if (!isSuccessfulDownload(id)) return;
                     activeDownloadId = id;
                     stopDownloadProgressMonitor();
                     if (!isDownloadNotified) {
@@ -85,29 +96,29 @@ public class MainActivity extends AppCompatActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
 
         // Add JavaScript Interface for Android Media Session, Folder Picker, and Updater
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
+        final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
         webView.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return loader.shouldInterceptRequest(request.getUrl());
+            }
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url != null && !url.startsWith("file:///android_asset/")) {
-                    try {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(intent);
-                        return true;
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                // Never load remote pages into a WebView with a native bridge.
+                if (url != null) {
+                    try { if (isWebUrl(url)) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+                    catch (Exception ignored) {}
                 }
-                return false;
+                return true;
             }
         });
 
@@ -126,11 +137,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Register receiver for downloaded APK auto-installation prompt
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(onDownloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
-            } else {
-                registerReceiver(onDownloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
-            }
+            ContextCompat.registerReceiver(this, onDownloadCompleteReceiver,
+                new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_EXPORTED);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -143,7 +151,10 @@ public class MainActivity extends AppCompatActivity {
                 }
                 uploadMessage = filePathCallback;
 
-                Intent intent = fileChooserParams.createIntent();
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/*");
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
                 try {
                     startActivityForResult(intent, FILECHOOSER_RESULTCODE);
                 } catch (Exception e) {
@@ -154,9 +165,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.loadUrl("file:///android_asset/index.html");
+        boolean migrated = getSharedPreferences("playerium", MODE_PRIVATE).getBoolean("secure_origin_migrated", false);
+        webView.loadUrl(migrated ? "https://appassets.androidplatform.net/assets/index.html" : "file:///android_asset/migration.html");
 
         checkAndRequestPermissions();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (webView != null) webView.evaluateJavascript("window.playerApp && window.playerApp.library && window.playerApp.library.db && window.playerApp.library.initFolderWatchers();", null);
     }
 
     private void checkAndRequestPermissions() {
@@ -180,42 +197,71 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void sendMediaCommand(final String command) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (webView == null) return;
-                if ("playPause".equals(command)) {
-                    webView.evaluateJavascript("window.playerApp && window.playerApp.player && window.playerApp.player.togglePlay();", null);
-                } else if ("next".equals(command)) {
-                    webView.evaluateJavascript("window.playerApp && window.playerApp.player && window.playerApp.player.next();", null);
-                } else if ("prev".equals(command)) {
-                    webView.evaluateJavascript("window.playerApp && window.playerApp.player && window.playerApp.player.prev();", null);
-                }
-            }
+    public void sendPlayerState(final JSONObject state) {
+        runOnUiThread(() -> {
+            if (webView != null) webView.evaluateJavascript("window.onNativePlayerState && window.onNativePlayerState(" + state + ");", null);
         });
     }
 
-    public class AndroidBridge {
-        @JavascriptInterface
-        public void updatePlaybackState(String title, String artist, String album, boolean isPlaying, String artworkBase64) {
-            Intent serviceIntent = new Intent(MainActivity.this, MediaNotificationService.class);
-            serviceIntent.setAction(MediaNotificationService.ACTION_UPDATE_STATE);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_TITLE, title);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_ARTIST, artist);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_ALBUM, album);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_IS_PLAYING, isPlaying);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_ARTWORK_BASE64, artworkBase64);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isPlaying) {
-                startForegroundService(serviceIntent);
-            } else {
-                startService(serviceIntent);
-            }
+    static boolean hasMusicPermission(Context context, Uri uri) {
+        if (!"content".equals(uri.getScheme())) return false;
+        for (UriPermission permission : context.getContentResolver().getPersistedUriPermissions()) {
+            if (!permission.isReadPermission()) continue;
+            if (uri.equals(permission.getUri())) return true;
+            try {
+                if (android.provider.DocumentsContract.getTreeDocumentId(uri).equals(android.provider.DocumentsContract.getTreeDocumentId(permission.getUri()))
+                    && uri.getAuthority().equals(permission.getUri().getAuthority())) {
+                    String treeId = android.provider.DocumentsContract.getTreeDocumentId(uri);
+                    if (!android.provider.DocumentsContract.isDocumentUri(context, uri)) return true;
+                    String documentId = android.provider.DocumentsContract.getDocumentId(uri);
+                    if (documentId.equals(treeId) || documentId.startsWith(treeId + "/")) return true;
+                    if (Build.VERSION.SDK_INT >= 29 && android.provider.DocumentsContract.isChildDocument(context.getContentResolver(),
+                        android.provider.DocumentsContract.buildDocumentUriUsingTree(permission.getUri(), treeId), uri)) return true;
+                }
+            } catch (Exception ignored) {}
         }
+        return false;
+    }
+
+    private static boolean isWebUrl(String value) {
+        Uri uri = Uri.parse(value);
+        return ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) && uri.getHost() != null;
+    }
+
+    public class AndroidBridge {
+        @JavascriptInterface public void saveLegacyLibrary(final String data) {
+            runOnUiThread(() -> {
+                if (webView == null || !"file:///android_asset/migration.html".equals(webView.getUrl())) return;
+                if (!getSharedPreferences("playerium", MODE_PRIVATE).contains("legacy_library"))
+                    getSharedPreferences("playerium", MODE_PRIVATE).edit().putString("legacy_library", data).apply();
+                webView.loadUrl("https://appassets.androidplatform.net/assets/index.html");
+            });
+        }
+        @JavascriptInterface public String getLegacyLibrary() {
+            return getSharedPreferences("playerium", MODE_PRIVATE).getString("legacy_library", "");
+        }
+        @JavascriptInterface public void completeLegacyMigration() {
+            getSharedPreferences("playerium", MODE_PRIVATE).edit().putBoolean("secure_origin_migrated", true).remove("legacy_library").apply();
+        }
+
+        @JavascriptInterface public void setPlaybackQueue(final String queue) {
+            runOnUiThread(() -> {
+                MediaNotificationService.submitQueue(MainActivity.this, queue);
+            });
+        }
+        @JavascriptInterface public void playbackCommand(final String command, final double value) {
+            runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class)
+                .putExtra("command", command).putExtra("value", value)));
+        }
+        @JavascriptInterface public void setEqualizer(final String settings) {
+            runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class).putExtra("equalizer", settings)));
+        }
+        @JavascriptInterface public void clearSelectedFiles() { getSharedPreferences("playerium", MODE_PRIVATE).edit().remove("selected_music_files").apply(); }
+        @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
 
         @JavascriptInterface
         public void openFolderPicker() {
+            runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             try {
@@ -223,6 +269,7 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+            });
         }
 
         @JavascriptInterface
@@ -231,7 +278,9 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     try {
+                        if ("android-files".equals(folderUriStr)) { scanSelectedFiles(false); return; }
                         Uri treeUri = Uri.parse(folderUriStr);
+                        if (!hasMusicPermission(MainActivity.this, treeUri)) throw new SecurityException("Unauthorized folder");
                         scanFolderAndSend(treeUri, false);
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -241,32 +290,14 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public String readFileAsBase64(String fileUriStr) {
-            try {
-                Uri fileUri = Uri.parse(fileUriStr);
-                InputStream is = getContentResolver().openInputStream(fileUri);
-                if (is == null) return null;
-                ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
-                byte[] buffer = new byte[8192];
-                int len;
-                while ((len = is.read(buffer)) != -1) {
-                    byteBuffer.write(buffer, 0, len);
-                }
-                is.close();
-                return Base64.encodeToString(byteBuffer.toByteArray(), Base64.NO_WRAP);
-            } catch (Exception e) {
-                e.printStackTrace();
-                return null;
-            }
-        }
-
-        @JavascriptInterface
         public void downloadUpdate(final String url, final String fileName) {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        String name = (fileName != null && !fileName.isEmpty()) ? fileName : "Playerium-update.apk";
+                        Uri updateUri = Uri.parse(url);
+                        if (!"https".equals(updateUri.getScheme()) || !"github.com".equals(updateUri.getHost()) || !updateUri.getPath().contains("/releases/download/")) throw new SecurityException("Invalid update URL");
+                        String name = (fileName != null && fileName.matches("[A-Za-z0-9._ -]+\\.apk")) ? fileName : "Playerium-update.apk";
                         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
                         request.setTitle("Playerium " + name);
                         request.setDescription("Загрузка обновления Playerium...");
@@ -284,7 +315,8 @@ public class MainActivity extends AppCompatActivity {
                     } catch (Exception e) {
                         e.printStackTrace();
                         try {
-                            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                            if (!isWebUrl(url)) return;
+                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                             browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             startActivity(browserIntent);
                             Toast.makeText(MainActivity.this, "Открытие загрузки в браузере...", Toast.LENGTH_SHORT).show();
@@ -302,7 +334,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     long id = (downloadId > 0) ? downloadId : activeDownloadId;
-                    triggerApkInstall(id);
+                    if (id == activeDownloadId && isSuccessfulDownload(id)) triggerApkInstall(id);
                 }
             });
         }
@@ -313,6 +345,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     try {
+                        if (!isWebUrl(url)) return;
                         Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                         browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         startActivity(browserIntent);
@@ -397,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 if (webView != null) {
                     String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadProgress && window.playerApp.onUpdateDownloadProgress(%d, %d, %d);", percent, downloaded, total);
-                    webView.evaluateJavascript(script, null);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             }
         });
@@ -409,7 +442,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 if (webView != null) {
                     String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadComplete && window.playerApp.onUpdateDownloadComplete(%d);", downloadId);
-                    webView.evaluateJavascript(script, null);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             }
         });
@@ -420,15 +453,24 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (webView != null) {
-                    String safeReason = reason != null ? reason.replace("'", "\\'") : "Ошибка";
-                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadFailed && window.playerApp.onUpdateDownloadFailed('%s');", safeReason);
-                    webView.evaluateJavascript(script, null);
+                    String safeReason = JSONObject.quote(reason != null ? reason : "Ошибка");
+                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadFailed && window.playerApp.onUpdateDownloadFailed(%s);", safeReason);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             }
         });
     }
 
+    private boolean isSuccessfulDownload(long id) {
+        if (id <= 0) return false;
+        DownloadManager manager = (DownloadManager)getSystemService(DOWNLOAD_SERVICE);
+        try (Cursor cursor = manager.query(new DownloadManager.Query().setFilterById(id))) {
+            return cursor != null && cursor.moveToFirst() && cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL;
+        } catch (Exception e) { return false; }
+    }
+
     private void triggerApkInstall(final long downloadId) {
+        if (downloadId != activeDownloadId || !isSuccessfulDownload(downloadId)) return;
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!getPackageManager().canRequestPackageInstalls()) {
@@ -460,7 +502,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void scanFolderAndSend(Uri treeUri, boolean isInitial) {
+    private synchronized void scanFolderAndSend(Uri treeUri, boolean isInitial) {
         DocumentFile rootDir = DocumentFile.fromTreeUri(this, treeUri);
         if (rootDir == null || !rootDir.isDirectory()) return;
 
@@ -470,11 +512,28 @@ public class MainActivity extends AppCompatActivity {
         }
 
         List<DocumentFile> audioFiles = new ArrayList<>();
+        lyricFiles.clear();
         findAudioFilesRecursively(rootDir, audioFiles);
 
+        sendNativeFiles(folderName, treeUri.toString(), audioFiles, isInitial);
+    }
+
+    private synchronized void scanSelectedFiles(boolean isInitial) {
+        List<DocumentFile> files = new ArrayList<>();
+        lyricFiles.clear();
+        for (String value : getSharedPreferences("playerium", MODE_PRIVATE).getStringSet("selected_music_files", java.util.Collections.emptySet())) {
+            Uri uri = Uri.parse(value);
+            if (!hasMusicPermission(this, uri)) continue;
+            DocumentFile file = DocumentFile.fromSingleUri(this, uri);
+            if (file != null && file.exists()) files.add(file);
+        }
+        sendNativeFiles("Мои треки", "android-files", files, isInitial);
+    }
+
+    private void sendNativeFiles(String folderName, String folderSource, List<DocumentFile> audioFiles, boolean isInitial) {
         try {
             JSONObject folderObj = new JSONObject();
-            folderObj.put("folderUri", treeUri.toString());
+            folderObj.put("folderUri", folderSource);
             folderObj.put("folderName", folderName);
             folderObj.put("isInitial", isInitial);
 
@@ -485,15 +544,24 @@ public class MainActivity extends AppCompatActivity {
                 fileObj.put("uri", df.getUri().toString());
                 fileObj.put("size", df.length());
                 fileObj.put("lastModified", df.lastModified());
+                fileObj.put("relativePath", android.provider.DocumentsContract.getDocumentId(df.getUri()));
+                DocumentFile lrc = lyricFiles.get(df.getUri().toString());
+                String cacheKey = df.getUri().toString() + ":" + df.length() + ":" + df.lastModified() + ":" + (lrc == null ? 0 : lrc.lastModified());
+                JSONObject metadata = metadataCache.get(cacheKey);
+                if (metadata == null) { metadata = readMetadata(df); metadataCache.put(cacheKey, metadata);
+                    if (metadataCache.size() > 128) metadataCache.remove(metadataCache.keySet().iterator().next());
+                }
+                fileObj.put("metadata", metadata);
                 filesArray.put(fileObj);
             }
+
             folderObj.put("files", filesArray);
 
             final String script = "window.playerApp && window.playerApp.onFolderImported && window.playerApp.onFolderImported(" + folderObj.toString() + ");";
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    webView.evaluateJavascript(script, null);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             });
         } catch (Exception e) {
@@ -501,9 +569,52 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private JSONObject readMetadata(DocumentFile file) {
+        JSONObject data = new JSONObject();
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(this, file.getUri());
+            data.put("title", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE));
+            data.put("artist", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST));
+            data.put("album", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM));
+            data.put("year", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR));
+            data.put("trackNo", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER));
+            String duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            data.put("duration", duration == null ? 0 : Long.parseLong(duration) / 1000.0);
+            byte[] art = retriever.getEmbeddedPicture();
+            if (art != null && art.length <= 8 * 1024 * 1024) {
+                BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeByteArray(art, 0, art.length, bounds);
+                BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1;
+                while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 512) options.inSampleSize *= 2;
+                Bitmap image = BitmapFactory.decodeByteArray(art, 0, art.length, options);
+                if (image != null) {
+                    ByteArrayOutputStream output = new ByteArrayOutputStream(); image.compress(Bitmap.CompressFormat.JPEG, 80, output); image.recycle();
+                    data.put("pictureBase64", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP));
+                }
+            }
+        } catch (Exception ignored) {}
+        finally { try { retriever.release(); } catch (Exception ignored) {} }
+        try {
+            DocumentFile sibling = lyricFiles.get(file.getUri().toString());
+            if (sibling != null && sibling.length() <= 1024 * 1024) {
+                try (InputStream input = getContentResolver().openInputStream(sibling.getUri()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                    byte[] bytes = new byte[8192]; int count;
+                    while ((count = input.read(bytes)) != -1 && output.size() < 1024 * 1024) output.write(bytes, 0, count);
+                    data.put("lyrics", output.toString("UTF-8"));
+                    data.put("lyricsModified", sibling.lastModified());
+                }
+            }
+        } catch (Exception ignored) {}
+        return data;
+    }
+
     private void findAudioFilesRecursively(DocumentFile dir, List<DocumentFile> results) {
         DocumentFile[] files = dir.listFiles();
         if (files == null) return;
+        java.util.Map<String, DocumentFile> lyrics = new java.util.HashMap<>();
+        for (DocumentFile f : files) if (f.getName() != null && f.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".lrc"))
+            lyrics.put(f.getName().toLowerCase(java.util.Locale.ROOT).replaceFirst("\\.lrc$", ""), f);
 
         for (DocumentFile file : files) {
             if (file.isDirectory()) {
@@ -511,10 +622,12 @@ public class MainActivity extends AppCompatActivity {
             } else if (file.isFile()) {
                 String name = file.getName();
                 if (name != null) {
-                    String lower = name.toLowerCase();
+                    String lower = name.toLowerCase(java.util.Locale.ROOT);
                     if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
                         lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac")) {
                         results.add(file);
+                        DocumentFile lrc = lyrics.get(lower.replaceFirst("\\.[^.]+$", ""));
+                        if (lrc != null) lyricFiles.put(file.getUri().toString(), lrc);
                     }
                 }
             }
@@ -526,8 +639,22 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == FILECHOOSER_RESULTCODE) {
             if (uploadMessage == null) return;
-            uploadMessage.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+            // Import persistent native URIs; no full audio files cross the WebView bridge.
+            uploadMessage.onReceiveValue(null);
             uploadMessage = null;
+            if (resultCode == RESULT_OK && data != null) {
+                java.util.Set<String> saved = new java.util.HashSet<>(getSharedPreferences("playerium", MODE_PRIVATE)
+                    .getStringSet("selected_music_files", java.util.Collections.emptySet()));
+                List<Uri> selected = new ArrayList<>();
+                if (data.getData() != null) selected.add(data.getData());
+                if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) selected.add(data.getClipData().getItemAt(i).getUri());
+                for (Uri uri : selected) {
+                    try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); saved.add(uri.toString()); }
+                    catch (Exception e) { Toast.makeText(this, "Не удалось сохранить доступ. Выберите папку с музыкой.", Toast.LENGTH_LONG).show(); }
+                }
+                getSharedPreferences("playerium", MODE_PRIVATE).edit().putStringSet("selected_music_files", saved).apply();
+                new Thread(() -> scanSelectedFiles(true)).start();
+            }
         } else if (requestCode == FOLDER_PICKER_RESULTCODE && resultCode == RESULT_OK && data != null) {
             final Uri treeUri = data.getData();
             if (treeUri != null) {
@@ -566,6 +693,7 @@ public class MainActivity extends AppCompatActivity {
             unregisterReceiver(onDownloadCompleteReceiver);
         } catch (Exception ignored) {}
         instance = null;
+        if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); webView = null; }
         super.onDestroy();
     }
 }

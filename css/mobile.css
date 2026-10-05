@@ -1326,3 +1326,19 @@
     padding: 12px 20px calc(16px + var(--sp-mobile-safe-bottom)) 20px !important;
   }
 }
+
+/* The mobile queue opens as a full-screen panel instead of a hidden desktop sidebar. */
+@media (max-width: 768px) {
+  .right-panel:not(.hidden) {
+    display: flex !important;
+    position: fixed;
+    inset: 0;
+    width: 100% !important;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    z-index: 1500;
+  }
+}
