@@ -92,6 +92,8 @@ test('home shelves, library filters and navigation expose the imported collectio
   await expect(page.locator('.shelf-heading h2')).toHaveText('Ваши альбомы');
   await page.locator('#mainSearchInput').fill('Song');
   await expect(page.locator('.track-name')).toHaveText('Song');
+  await page.locator('#btnNavBack').click();
+  await expect(page.locator('.home-dashboard')).toBeVisible();
   await page.locator('#btnGlobalHome').click();
   await expect(page.locator('#mainSearchInput')).toHaveValue('');
   expect(errors).toEqual([]);

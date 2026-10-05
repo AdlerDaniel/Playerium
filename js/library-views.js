@@ -115,7 +115,6 @@ export function renderSidebar() {
 }
 
 export function renderHomeView(container) {
-  if (this.searchQuery) return this.renderSearchView(container);
   return renderHomeDashboard.call(this, container);
 }
 
