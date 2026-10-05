@@ -15,6 +15,7 @@ test('import, playback and restart preserve files, lyrics, likes and covers', as
     {name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()},
     {name:'Artist - Song.lrc',mimeType:'text/plain',buffer:Buffer.from('[00:00.00]hello\n[00:01.00]world')}
   ]);
+  await page.evaluate(() => window.playerApp.ui.navigateTo({type:'allTracks',title:'Все треки'}));
   await expect(page.locator('.track-name').first()).toHaveText('Song');
   const id = await page.evaluate(async () => {
     const lib=window.playerApp.library, t=lib.getTracks()[0];
@@ -26,6 +27,7 @@ test('import, playback and restart preserve files, lyrics, likes and covers', as
   await page.locator('.track-row').first().dblclick();
   await page.waitForFunction(() => window.playerApp.player.isPlaying);
   await page.reload(); await page.waitForFunction(() => window.playerApp?.library.db);
+  await page.evaluate(() => window.playerApp.ui.navigateTo({type:'allTracks',title:'Все треки'}));
   expect(await page.evaluate(id => window.playerApp.library.getTrackById(id).liked,id)).toBe(true);
   expect(await page.evaluate(id => window.playerApp.library.getTrackById(id).lyrics,id)).toContain('hello');
   await page.locator('.track-row').first().dblclick();
@@ -57,6 +59,7 @@ test('mobile controls open player, queue and equalizer after import',async({page
   await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
+  await page.evaluate(() => window.playerApp.ui.navigateTo({type:'allTracks',title:'Все треки'}));
   await expect(page.locator('.track-name').first()).toHaveText('Song');
   await page.locator('.track-row').first().click();
   await page.waitForFunction(()=>window.playerApp.player.isPlaying);
@@ -69,5 +72,48 @@ test('mobile controls open player, queue and equalizer after import',async({page
   await page.locator('#mobileMiniTitle').click();
   await page.locator('#btnMobileFsEq').click();
   await expect(page.getByText('10-полосный эквалайзер',{exact:true})).toBeVisible();
+  expect(errors).toEqual([]);
+});
+test('home shelves, library filters and navigation expose the imported collection',async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('.shelf-title').first()).toHaveText('Song');
+  await page.locator('.home-quick-card').filter({hasText:'Все треки'}).click();
+  await expect(page.locator('.track-name')).toHaveText('Song');
+  await page.locator('#btnNavBack').click();
+  await expect(page.locator('.home-dashboard')).toBeVisible();
+  await page.locator('#librarySearchInput').fill('not present');
+  await expect(page.locator('.sidebar-item:visible')).toHaveCount(0);
+  await page.locator('#librarySearchInput').fill('Artist');
+  await expect(page.locator('.sidebar-item:visible')).toHaveCount(2);
+  for(const text of await page.locator('.sidebar-item:visible').allTextContents()) expect(text).toContain('Artist');
+  await page.locator('.home-filters').getByRole('button',{name:'Альбомы',exact:true}).click();
+  await expect(page.locator('.shelf-heading h2')).toHaveText('Ваши альбомы');
+  await page.locator('#mainSearchInput').fill('Song');
+  await expect(page.locator('.track-name')).toHaveText('Song');
+  await page.locator('#btnNavBack').click();
+  await expect(page.locator('.home-dashboard')).toBeVisible();
+  await page.locator('#btnGlobalHome').click();
+  await expect(page.locator('#mainSearchInput')).toHaveValue('');
+  expect(errors).toEqual([]);
+});
+test('mobile home filters remain visible and search keeps focus while typing',async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await expect(page.locator('#mainTopbar .home-filters')).toBeVisible();
+  const box=await page.locator('#mainTopbar .home-filters').boundingBox();
+  expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(80);
+  await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
+  await page.locator('#mobileNavSearch').click();
+  await page.locator('.mobile-search-input').pressSequentially('Song');
+  await expect(page.locator('.mobile-search-input')).toBeFocused();
+  await expect(page.locator('.mobile-search-input')).toHaveValue('Song');
+  await expect(page.locator('.track-name')).toHaveText('Song');
+  await page.locator('#mobileNavHome').click();
+  await page.setViewportSize({width:1280,height:800});
+  await expect(page.locator('#mainTopbar .home-filters')).toHaveCount(0);
+  await expect(page.locator('.home-dashboard .home-filters')).toBeVisible();
   expect(errors).toEqual([]);
 });

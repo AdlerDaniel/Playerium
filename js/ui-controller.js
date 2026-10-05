@@ -1,4 +1,5 @@
-import { renderSidebar, renderHomeView, renderSearchView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, renderAlbumView, createActionBar } from "./library-views.js";
+import { saveIcon } from "./design-icons.js";
+import { renderSidebar, renderAllTracksView, renderHomeView, renderSearchView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, renderAlbumView, createActionBar } from "./library-views.js";
 import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
 import { renderRightQueue } from "./queue-view.js";
@@ -21,7 +22,7 @@ export class UIController {
     // Navigation state
     this.history = [];
     this.historyIndex = -1;
-    this.currentView = { type: "home", id: null, title: "Все треки" };
+    this.currentView = { type: "home", id: null, title: "Главная" };
 
     // Search query & sorting
     this.searchQuery = "";
@@ -41,7 +42,7 @@ export class UIController {
     this.bindMobileEvents();
     this.bindPlayerEvents();
     this.renderSidebar();
-    this.navigateTo({ type: "home", title: "Все треки" });
+    this.navigateTo({ type: "home", title: "Главная" });
     this.setupDropZone();
     setTimeout(() => this.updater.checkForUpdates(false), 2000);
   }
@@ -64,6 +65,17 @@ export class UIController {
   // --- DOM Binding ---
 
   bindDOM() {
+    for (const id of ["btnBrandHome", "btnGlobalHome"]) document.getElementById(id).addEventListener("click", () => {
+      this.searchQuery = ""; document.getElementById("mainSearchInput").value = "";
+      document.getElementById("searchClearBtn").classList.remove("visible");
+      this.navigateTo({type:"home",title:"Главная"});
+    });
+    document.getElementById("btnLibraryHeader").addEventListener("click", () => this.navigateTo({type:"library",title:"Моя медиатека"}));
+    document.getElementById("librarySearchInput").addEventListener("input", e => {this.libraryQuery=e.target.value.trim();this.renderSidebar();});
+    for(const id of ["btnPlayerLike","mobileMiniLike","btnMobileFsLike"]) {
+      document.getElementById(id).innerHTML=saveIcon;
+      document.getElementById(id).setAttribute("aria-pressed", "false");
+    }
     // Navigation arrows
     document.getElementById("btnNavBack").addEventListener("click", () => this.navigateBack());
     document.getElementById("btnNavForward").addEventListener("click", () => this.navigateForward());
@@ -74,7 +86,8 @@ export class UIController {
     searchInput.addEventListener("input", (e) => {
       this.searchQuery = e.target.value.trim();
       searchClear.classList.toggle("visible", !!this.searchQuery);
-      this.refreshCurrentView();
+      if(this.currentView.type !== "search") this.navigateTo({type:"search",title:"Поиск"});
+      else this.refreshCurrentView();
     });
     searchClear.addEventListener("click", () => {
       searchInput.value = "";
@@ -347,6 +360,7 @@ export class UIController {
     };
 
     this.player.onTrackChange = (track) => {
+      this.updateArtworkTheme(track.pictureUrl);
       // Update bottom player
       document.getElementById("nowPlayingTitle").textContent = track.title || "Неизвестный трек";
       document.getElementById("nowPlayingArtist").textContent = track.artist || "Неизвестный исполнитель";
@@ -538,16 +552,24 @@ export class UIController {
   }
 
   loadView(view) {
+    document.querySelector('#mainTopbar .home-filters')?.remove();
     this.currentView = view;
+    document.body.dataset.view = view.type;
+    document.getElementById("btnGlobalHome").classList.toggle("active",view.type === "home");
     if (view.type === "home") this.updateMobileNavActive("home");
     else if (view.type === "search") this.updateMobileNavActive("search");
     else if (view.type === "library") this.updateMobileNavActive("library");
     else this.updateMobileNavActive("");
 
+    const focusedSearch = document.activeElement?.classList.contains("mobile-search-input");
+    const caret = focusedSearch ? document.activeElement.selectionStart : null;
     const container = document.getElementById("mainViewContent");
     container.innerHTML = "";
 
     switch (view.type) {
+      case "allTracks":
+        renderAllTracksView.call(this,container);
+        break;
       case "home":
         this.renderHomeView(container);
         break;
@@ -580,6 +602,11 @@ export class UIController {
         break;
     }
 
+    if (focusedSearch) {
+      const input = container.querySelector(".mobile-search-input");
+      input?.focus(); if (input && caret !== null) input.setSelectionRange(caret, caret);
+    }
+    this.renderSidebar();
     // Scroll to top
     document.getElementById("mainScrollContainer").scrollTop = 0;
   }
@@ -987,18 +1014,38 @@ export class UIController {
     if (input) input.click();
   }
 
+  updateArtworkTheme(url) {
+    const mini = document.getElementById("mobileMiniPlayer");
+    const full = document.getElementById("mobileFullscreenPlayer");
+    mini.style.setProperty("--art-color", "#333333");full.style.setProperty("--art-color", "#454545");
+    if (!url) return;
+    const id=this.player.currentTrack?.id;
+    const image=new Image();image.onload=()=>{
+      if(this.player.currentTrack?.id!==id)return;
+      try {
+        const canvas=document.createElement("canvas");canvas.width=canvas.height=1;
+        const ctx=canvas.getContext("2d");ctx.drawImage(image,0,0,1,1);
+        const [r,g,b]=ctx.getImageData(0,0,1,1).data;
+        const color=`rgb(${Math.round(r*.5)}, ${Math.round(g*.5)}, ${Math.round(b*.5)})`;
+        mini.style.setProperty("--art-color",color);full.style.setProperty("--art-color",color);
+      } catch {} // Non-readable artwork retains the neutral background.
+    };image.src=url;
+  }
+
   // --- UI Helpers ---
 
   updateLikeButtons(trackId, isLiked) {
     document.querySelectorAll(`.track-like-btn[data-like-id="${trackId}"]`).forEach((btn) => {
       btn.classList.toggle("liked", isLiked);
+      btn.setAttribute("aria-pressed", String(isLiked));
       btn.title = isLiked ? "Удалить из любимых" : "Добавить в любимые";
     });
 
     if (this.player.currentTrack && this.player.currentTrack.id === trackId) {
-      document.getElementById("btnPlayerLike")?.classList.toggle("liked", isLiked);
-      document.getElementById("mobileMiniLike")?.classList.toggle("liked", isLiked);
-      document.getElementById("btnMobileFsLike")?.classList.toggle("liked", isLiked);
+      for(const id of ["btnPlayerLike","mobileMiniLike","btnMobileFsLike"]) {
+        const button=document.getElementById(id);button.classList.toggle("liked",isLiked);
+        button.setAttribute("aria-pressed",String(isLiked));button.title=isLiked?"Удалить из любимых":"Добавить в любимые";
+      }
     }
   }
 
@@ -1009,6 +1056,7 @@ export class UIController {
   triggerMobileFileImport(...args) { return triggerMobileFileImport.apply(this, args); }
 
   focusSearch() {
+    if (this.isMobile) {this.navigateTo({type:"search",title:"Поиск"});document.querySelector(".mobile-search-input")?.focus();return;}
     const input = document.getElementById("mainSearchInput");
     input.focus();
     input.select();
