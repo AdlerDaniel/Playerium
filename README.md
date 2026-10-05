@@ -82,6 +82,7 @@ PR и push в основную ветку запускают проверки, �
 
 - `js/library.js`: IndexedDB, импорт и синхронизация папок.
 - `js/audio-player.js`: воспроизведение, очередь и платформенный адаптер.
+- `js/library-views.js`, `js/settings-view.js`, `js/queue-view.js`, `js/mobile-controls.js`: представления медиатеки, настройки, очередь и мобильное управление.
 - `js/track-table.js`, `js/virtual-list.js`: таблица и виртуализация.
 - `js/update-controller.js`, `js/updater.js`: интерфейс загрузки и проверка релизов.
 - `main.js`, `desktop-files.js`, `preload.js`: ограниченный Electron IPC и потоковый доступ.

@@ -343,7 +343,7 @@ export class Library {
     const folderSource = source || `web:${folderName}`;
     this.blockedSources.delete(folderSource);
     const descriptors = files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified,
-      relativePath: file.relativePath || file.webkitRelativePath || file.name, file, handle: file.handle }));
+      relativePath: file.relativePath || (file.webkitRelativePath ? file.webkitRelativePath.split("/").slice(1).join("/") : file.name), file, handle: file.handle }));
     const result = await this.syncFolderToPlaylist(folderName, folderSource, descriptors, false, progressCallback, false);
     return result.addedCount;
   }

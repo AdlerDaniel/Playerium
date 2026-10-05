@@ -51,3 +51,23 @@ test('5000 tracks render a bounded list and scrolling reaches the end', async ({
   expect(await page.locator('.track-row').count()).toBeLessThan(60);
   expect(errors).toEqual([]);
 });
+test('mobile controls open player, queue and equalizer after import',async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('.track-name').first()).toHaveText('Song');
+  await page.locator('.track-row').first().click();
+  await page.waitForFunction(()=>window.playerApp.player.isPlaying);
+  await page.locator('#mobileMiniTitle').click();
+  await expect(page.locator('#mobileFullscreenPlayer')).toHaveClass(/active/);
+  await page.locator('#btnMobileFsQueue').click();
+  await expect(page.locator('#rightPanelContent')).toBeVisible();
+  await expect(page.locator('#rightPanelContent')).toContainText('Сейчас играет');
+  await page.locator('#btnCloseRightPanel').click();
+  await page.locator('#mobileMiniTitle').click();
+  await page.locator('#btnMobileFsEq').click();
+  await expect(page.getByText('10-полосный эквалайзер',{exact:true})).toBeVisible();
+  expect(errors).toEqual([]);
+});
