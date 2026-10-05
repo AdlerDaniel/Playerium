@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 async function library() {
   const { Library } = await modules();
-  const lib = new Library(); await lib.init(); await lib.clearAll(); return lib;
+  const lib = new Library(); await lib.init(); await lib.clearAll(); lib.blockedSources.clear(); return lib;
 }
 function descriptor(name, filePath, title = name) {
   return { name, fullPath: filePath, size: 100, lastModified: 1, metadata: { title, artist: 'Artist', duration: 42 } };
@@ -126,4 +126,32 @@ test('version comparison honors prerelease ordering and rejects malformed tags',
   assert.equal(updater.compareVersions('1.1.0','1.1.0-beta.2'),1);
   assert.equal(updater.compareVersions('1.1.0-beta.10','1.1.0-beta.2'),1);
   assert.equal(updater.compareVersions('broken','1.1.0'),0);
+});
+test('removing one of two equally named folders removes only its tracks and references',async()=>{
+  const lib=await library();
+  await lib.syncFolderToPlaylist('Music','/a',[descriptor('song.mp3','/a/song.mp3')]);
+  await lib.syncFolderToPlaylist('Music','/b',[descriptor('song.mp3','/b/song.mp3')]);
+  const manual=await lib.createPlaylist('Manual');const first=lib.getTracks().find(t=>t.folderSource==='/a');
+  await lib.addTrackToPlaylist(manual.id,first.id);
+  const folder=lib.folders.find(f=>f.source==='/a');await lib.removeFolder(folder.id);
+  assert.equal(lib.getTracks().length,1);assert.equal(lib.getTracks()[0].folderSource,'/b');
+  assert.deepEqual(lib.getPlaylistTracks(manual.id),[]);
+  const event=await lib.syncFolderToPlaylist('Music','/a',[descriptor('song.mp3','/a/song.mp3')]);
+  assert.equal(event.ignored,true);assert.equal(lib.getTracks().length,1);
+});
+test('clearing library stops desktop watchers and ignores their late scan results',async()=>{
+  const lib=await library();let unwatched;
+  await lib.syncFolderToPlaylist('Music','/music',[descriptor('song.mp3','/music/song.mp3')]);
+  window.electronAPI={unwatchFolder:async source=>unwatched=source};
+  await lib.clearAll();assert.equal(unwatched,'/music');assert.equal(lib.getTracks().length,0);
+  assert.equal((await lib.syncFolderToPlaylist('Music','/music',[descriptor('song.mp3','/music/song.mp3')])).ignored,true);
+});
+test('reimport of one unambiguous legacy file restores its ID, likes and playlist references',async()=>{
+  const lib=await library();
+  const old={id:'old-browser-track',title:'Old',fileName:'song.mp3',fileSize:100,folderName:'Music',liked:true};
+  lib.tracks.set(old.id,old);await lib.putInStore('tracks',old);
+  const playlist=await lib.createPlaylist('Saved');await lib.addTrackToPlaylist(playlist.id,old.id);
+  await lib.syncFolderToPlaylist('Music','/music',[descriptor('song.mp3','/music/song.mp3')]);
+  assert.equal(lib.getTracks().length,1);assert.equal(lib.getTracks()[0].id,old.id);
+  assert.equal(lib.getPlaylistTracks(playlist.id)[0].liked,true);
 });

@@ -1534,6 +1534,7 @@ export class UIController {
     settingsDiv.querySelectorAll(".btn-remove-folder").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const folderId = btn.dataset.folderId;
+        if (this.player.currentTrack?.folderSource === this.library.folders.find(f => f.id === folderId)?.source) this.player.stop();
         await this.library.removeFolder(folderId);
         this.showToast("Папка удалена из медиатеки");
         this.renderSettingsView(container);

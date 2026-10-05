@@ -256,6 +256,7 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public void setEqualizer(final String settings) {
             runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class).putExtra("equalizer", settings)));
         }
+        @JavascriptInterface public void clearSelectedFiles() { getSharedPreferences("playerium", MODE_PRIVATE).edit().remove("selected_music_files").apply(); }
         @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
 
         @JavascriptInterface
@@ -277,7 +278,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     try {
-                        if ("android-files".equals(folderUriStr)) { scanSelectedFiles(); return; }
+                        if ("android-files".equals(folderUriStr)) { scanSelectedFiles(false); return; }
                         Uri treeUri = Uri.parse(folderUriStr);
                         if (!hasMusicPermission(MainActivity.this, treeUri)) throw new SecurityException("Unauthorized folder");
                         scanFolderAndSend(treeUri, false);
@@ -517,7 +518,7 @@ public class MainActivity extends AppCompatActivity {
         sendNativeFiles(folderName, treeUri.toString(), audioFiles, isInitial);
     }
 
-    private synchronized void scanSelectedFiles() {
+    private synchronized void scanSelectedFiles(boolean isInitial) {
         List<DocumentFile> files = new ArrayList<>();
         lyricFiles.clear();
         for (String value : getSharedPreferences("playerium", MODE_PRIVATE).getStringSet("selected_music_files", java.util.Collections.emptySet())) {
@@ -526,7 +527,7 @@ public class MainActivity extends AppCompatActivity {
             DocumentFile file = DocumentFile.fromSingleUri(this, uri);
             if (file != null && file.exists()) files.add(file);
         }
-        sendNativeFiles("Мои треки", "android-files", files, true);
+        sendNativeFiles("Мои треки", "android-files", files, isInitial);
     }
 
     private void sendNativeFiles(String folderName, String folderSource, List<DocumentFile> audioFiles, boolean isInitial) {
@@ -652,7 +653,7 @@ public class MainActivity extends AppCompatActivity {
                     catch (Exception e) { Toast.makeText(this, "Не удалось сохранить доступ. Выберите папку с музыкой.", Toast.LENGTH_LONG).show(); }
                 }
                 getSharedPreferences("playerium", MODE_PRIVATE).edit().putStringSet("selected_music_files", saved).apply();
-                new Thread(() -> scanSelectedFiles()).start();
+                new Thread(() -> scanSelectedFiles(true)).start();
             }
         } else if (requestCode == FOLDER_PICKER_RESULTCODE && resultCode == RESULT_OK && data != null) {
             final Uri treeUri = data.getData();

@@ -11,9 +11,12 @@ npm ci
 npm start
 npm run check
 npm test
+npm run test:desktop
 npx playwright install chromium
 npm run test:browser
 ```
+
+Проверка Electron требует графического окружения (в Linux — X11/Xvfb); в CI она выполняется на Windows и проверяет реальный сигнал Web Audio, а не только состояние воспроизведения.
 
 Для браузера запустите `python3 -m http.server 8080` и откройте `http://localhost:8080`. Для браузерных тестов также нужен Python 3. В Linux можно указать установленный Chromium через `PLAYERIUM_BROWSER_PATH`.
 

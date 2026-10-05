@@ -241,6 +241,7 @@ export class AudioPlayer {
 
   applyNativeState(state) {
     if (!state) return;
+    if (state.error) this.onError?.(state.error);
     if (!this.nativePlayback && state.queue?.length && !this.currentTrack) {
       this.queue = state.queue.map(id => this.library.getTrackById(id)).filter(Boolean);
       if (this.queue.length) { this.originalQueue = [...this.queue]; this.nativePlayback = true; }
@@ -261,7 +262,6 @@ export class AudioPlayer {
     this.nativeTime = state.position / 1000;
     this.nativeDuration = state.duration / 1000;
     this.onTimeUpdate?.(this.nativeTime, this.nativeDuration);
-    if (state.error) this.onError?.(state.error);
   }
 
   getCurrentTime() { return this.nativePlayback ? this.nativeTime || 0 : this.audio.currentTime; }

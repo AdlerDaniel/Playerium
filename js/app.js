@@ -24,6 +24,7 @@ class App {
       window.playerApp = this;
 
       await this.library.init();
+      this.player.loadSavedPreferences();
       this.ui.init();
       if (window.AndroidBridge?.getPlaybackState) {
         try { this.player.applyNativeState(JSON.parse(window.AndroidBridge.getPlaybackState())); } catch {}
@@ -93,7 +94,9 @@ class App {
   }
 
   async handleFolderFilesReceived(folderName, folderSource, files, isAndroid, isInitial) {
+    if (isInitial) this.library.blockedSources.delete(folderSource);
     const res = await this.library.syncFolderToPlaylist(folderName, folderSource, files, isAndroid);
+    if (res.ignored) return;
     if (res.failedCount) this.ui.showToast(`Не удалось прочитать метаданные ${res.failedCount} файлов. Повторите импорт.`, "error");
     if (res.isNewPlaylist) {
       this.ui.showToast(`Создан плейлист «${res.playlist.name}» (${res.addedCount} треков)`, "success");

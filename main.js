@@ -33,6 +33,7 @@ async function openExternal(url) {
 function startWatchingFolder(root) {
   if (watchers.has(root)) return;
   let timer;
+  let active = true;
   let scan = Promise.resolve();
   const watcher = fs.watch(root, { recursive: true }, () => {
     clearTimeout(timer);
@@ -40,15 +41,15 @@ function startWatchingFolder(root) {
       scan = scan.catch(() => {}).then(async () => {
         try {
           const files = await scanDirectory(root);
-          mainWindow?.webContents.send('folder:updated', { folderPath: root, folderName: path.basename(root), files, isInitial: false });
+          if (active) mainWindow?.webContents.send('folder:updated', { folderPath: root, folderName: path.basename(root), files, isInitial: false });
         } catch (error) {
-          mainWindow?.webContents.send('folder:updated', { folderPath: root, error: 'Не удалось прочитать папку. Восстановите доступ к ней.' });
+          if (active) mainWindow?.webContents.send('folder:updated', { folderPath: root, error: 'Не удалось прочитать папку. Восстановите доступ к ней.' });
         }
       });
     }, 800);
   });
   watcher.on('error', error => console.warn('Folder watcher failed:', error.message));
-  watchers.set(root, { close() { clearTimeout(timer); watcher.close(); } });
+  watchers.set(root, { close() { active = false; clearTimeout(timer); watcher.close(); } });
 }
 function createWindow() {
   mainWindow = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, title: 'Playerium', backgroundColor: '#121212', autoHideMenuBar: true,
@@ -83,7 +84,15 @@ app.whenReady().then(async () => {
     return { folderPath: root, folderName: path.basename(root), files: await scanDirectory(root), isInitial: true };
   });
   handle('folder:watch', async root => { const real = await authorize(root); startWatchingFolder(real); return scanDirectory(real); });
-  handle('file:source', async file => {
+  handle('folder:unwatch', async root => {
+    if (typeof root !== 'string') throw new Error('Invalid folder');
+    // Removed/missing folders still need their watcher and approval cleaned up.
+    const real = await fsp.realpath(root).catch(() => path.resolve(root));
+    watchers.get(real)?.close(); watchers.delete(real); roots.delete(real);
+    await fsp.writeFile(rootsFile, JSON.stringify([...roots]));
+    return true;
+  });
+  handle('file:source' , async file => {
     const real = await authorize(file);
     if (!AUDIO_EXTS.has(path.extname(real).toLowerCase())) throw new Error('Not an audio file');
     const id = require('node:crypto').randomUUID();

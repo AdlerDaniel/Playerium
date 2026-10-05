@@ -20,6 +20,7 @@ export class Library {
     this.onLibraryChanged = null;
     this.importChain = Promise.resolve();
     this.coverUrls = new Map();
+    this.blockedSources = new Set();
   }
 
   async init() {
@@ -340,6 +341,7 @@ export class Library {
   async processFiles(files, folderName = "Локальная музыка", progressCallback = null, source = null) {
     // File objects must stay available until committed, including after a restart.
     const folderSource = source || `web:${folderName}`;
+    this.blockedSources.delete(folderSource);
     const descriptors = files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified,
       relativePath: file.relativePath || file.webkitRelativePath || file.name, file, handle: file.handle }));
     const result = await this.syncFolderToPlaylist(folderName, folderSource, descriptors, false, progressCallback, false);
@@ -369,27 +371,39 @@ export class Library {
    * Remove folder and its tracks from library
    */
   async removeFolder(folderId) {
-    const folder = this.folders.find((f) => f.id === folderId);
+    const folder = this.folders.find(f => f.id === folderId);
     if (!folder) return;
-    
-    // Find tracks in this folder
-    const tracksToRemove = this.getTracks().filter((t) => t.folderName === folder.name);
-    for (const t of tracksToRemove) {
-      this.tracks.delete(t.id);
-      this.audioBlobs.delete(t.id);
-      await this.deleteFromStore("tracks", t.id);
+    if (folder.source) this.blockedSources.add(folder.source);
+    await this.importChain.catch(() => {});
+    if (folder.source && window.electronAPI?.unwatchFolder && !folder.source.startsWith("web:") && !folder.source.startsWith("content:") && folder.source !== "android-files")
+      await window.electronAPI.unwatchFolder(folder.source);
+    const removed = new Set(this.getTracks().filter(t => folder.source ? t.folderSource === folder.source : t.folderName === folder.name).map(t => t.id));
+    for (const id of removed) {
+      await this.deleteFromStore("tracks", id); await this.deleteFromStore("files", id);
+      this.tracks.delete(id); this.audioBlobs.delete(id);
+      if (this.coverUrls.has(id)) URL.revokeObjectURL(this.coverUrls.get(id));
+      this.coverUrls.delete(id);
     }
-
-    this.folders = this.folders.filter((f) => f.id !== folderId);
+    for (const p of this.getPlaylists()) {
+      if (p.folderSource === folder.source && folder.source) { await this.deleteFromStore("playlists", p.id); this.playlists.delete(p.id); }
+      else { p.trackIds = p.trackIds.filter(id => !removed.has(id)); await this.putInStore("playlists", p); }
+    }
+    this.folders = this.folders.filter(f => f.id !== folderId);
     await this.deleteFromStore("folders", folderId);
-
-    if (this.onLibraryChanged) this.onLibraryChanged();
+    this.onLibraryChanged?.();
   }
 
   /**
    * Clear all tracks and library data
    */
   async clearAll() {
+    await this.importChain.catch(() => {});
+    for (const p of this.getPlaylists()) if (p.folderSource) {
+      this.blockedSources.add(p.folderSource);
+      if (window.electronAPI?.unwatchFolder && !p.isAndroid && !p.folderSource.startsWith("web:"))
+        await window.electronAPI.unwatchFolder(p.folderSource).catch(() => {});
+    }
+    window.AndroidBridge?.clearSelectedFiles?.();
     this.tracks.clear();
     this.audioBlobs.clear();
     for (const url of this.coverUrls.values()) URL.revokeObjectURL(url);
@@ -422,6 +436,7 @@ export class Library {
   }
 
   async importFolder(folderName, folderSource, files, isAndroid = false, progressCallback = null, replaceContents = true) {
+    if (this.blockedSources.has(folderSource)) return { ignored: true };
     const audio = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac)$/i.test(f.name));
     const identity = f => f.fullPath || f.uri || `${folderSource}/${f.relativePath || f.name}`;
     const lyricsKey = f => (f.relativePath || f.fullPath || f.uri || f.name).replace(/\.[^/.]+$/, "").toLowerCase();
@@ -433,6 +448,12 @@ export class Library {
         trackIds: [], createdAt: Date.now(), updatedAt: Date.now(), coverUrl: null, isFolderPlaylist: true, folderSource, isAndroid };
     }
     const index = new Map(this.getTracks().map(t => [t.sourceKey || t.filePath || t.nativeUri, t]));
+    const legacyIndex = new Map();
+    for (const t of this.getTracks()) if (!t.sourceKey && !t.filePath && !t.nativeUri) {
+      const legacyKey = `${t.folderName}/${t.fileName}/${t.fileSize}`;
+      const candidates = legacyIndex.get(legacyKey) || []; candidates.push(t); legacyIndex.set(legacyKey, candidates);
+    }
+    const restoredLegacy = new Set();
     const ids = [];
     const playlistIds = new Set(playlist.trackIds);
     let addedCount = 0;
@@ -441,6 +462,12 @@ export class Library {
       const f = audio[i];
       const key = identity(f);
       let track = index.get(key);
+      if (!track) {
+        const candidates = legacyIndex.get(`${folderName}/${f.name}/${f.size}`);
+        if (candidates?.length === 1 && !restoredLegacy.has(candidates[0].id)) {
+          track = candidates[0]; restoredLegacy.add(track.id);
+        }
+      }
       const lyricsFile = lyrics.get(lyricsKey(f));
       const lyricsModified = lyricsFile?.lastModified || lyricsFile?.file?.lastModified || f.metadata?.lyricsModified || 0;
       const changed = !track || track.lyricsModified !== lyricsModified || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
@@ -500,6 +527,11 @@ export class Library {
     playlist.updatedAt = Date.now();
     await this.putInStore("playlists", playlist);
     this.playlists.set(playlist.id, playlist);
+    let folder = this.folders.find(f => f.source === folderSource);
+    if (!folder) folder = { id: `fld_${crypto.randomUUID()}`, name: folderName, source: folderSource, dateAdded: Date.now() };
+    folder.count = playlist.trackIds.length;
+    await this.putInStore("folders", folder);
+    if (!this.folders.some(f => f.id === folder.id)) this.folders.push(folder);
     this.onLibraryChanged?.();
     return { playlist, addedCount, failedCount, isNewPlaylist };
   }
