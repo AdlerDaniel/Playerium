@@ -1,3 +1,4 @@
+import { saveIcon } from "./design-icons.js";
 import { mountTrackRows } from "./virtual-list.js";
 export function createTrackTable(tracks, playlistContext = null, showAlbumCol = true) {
     const table = document.createElement("div");
@@ -20,9 +21,9 @@ export function createTrackTable(tracks, playlistContext = null, showAlbumCol = 
     header.className = "track-table-header" + (!showAlbumCol ? " no-album" : "");
     header.innerHTML = `
       <div class="th-num">#</div>
-      <div>НАЗВАНИЕ</div>
-      ${showAlbumCol ? `<div>АЛЬБОМ</div>` : ""}
-      <div>ДАТА ДОБАВЛЕНИЯ</div>
+      <div>Название</div>
+      ${showAlbumCol ? `<div>Альбом</div>` : ""}
+      <div class="th-date">Дата добавления</div>
       <div class="th-duration">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm9-3.25V8H5.75a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 .75-.75V4.75a.75.75 0 0 0-1.5 0z"/></svg>
       </div>
@@ -65,7 +66,7 @@ export function createTrackTable(tracks, playlistContext = null, showAlbumCol = 
         <div class="track-col-date">${this.formatDate(track.dateAdded)}</div>
         <div class="track-col-duration">
           <button class="track-like-btn ${track.liked ? "liked" : ""}" data-like-id="${track.id}" title="${track.liked ? "Удалить из любимых" : "Добавить в любимые"}">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.314C12.438-3.248 23.534 4.735 8 15-7.534 4.736 3.562-3.248 8 1.314z"/></svg>
+${saveIcon}
           </button>
           <span>${this.formatTime(track.duration)}</span>
           <button class="track-menu-btn" data-track-id="${track.id}" title="Ещё">
@@ -98,6 +99,7 @@ export function createTrackTable(tracks, playlistContext = null, showAlbumCol = 
 
       // Like button click
       const likeBtn = row.querySelector(".track-like-btn");
+      likeBtn.setAttribute("aria-pressed",String(!!track.liked));
       likeBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         const liked = await this.library.toggleLike(track.id);

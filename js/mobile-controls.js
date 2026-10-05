@@ -6,6 +6,9 @@ export function bindMobileEvents() {
 
     if (navHome) {
       navHome.addEventListener("click", () => {
+        this.searchQuery = "";
+        document.getElementById("mainSearchInput").value = "";
+        document.getElementById("searchClearBtn").classList.remove("visible");
         this.updateMobileNavActive("home");
         this.navigateTo({ type: "home", title: "Главная" });
       });
@@ -14,7 +17,7 @@ export function bindMobileEvents() {
       navSearch.addEventListener("click", () => {
         this.updateMobileNavActive("search");
         this.navigateTo({ type: "search", title: "Поиск" });
-        setTimeout(() => document.getElementById("mainSearchInput")?.focus(), 100);
+        setTimeout(() => document.querySelector(".mobile-search-input")?.focus(), 100);
       });
     }
     if (navLibrary) {

@@ -1,3 +1,5 @@
+import { renderHomeDashboard } from "./home-view.js";
+import { icons } from "./design-icons.js";
 export function renderSidebar() {
     const list = document.getElementById("sidebarList");
     list.innerHTML = "";
@@ -27,14 +29,13 @@ export function renderSidebar() {
     if (this.sidebarFilter === "all" || this.sidebarFilter === "playlists") {
       const playlists = this.library.getPlaylists();
       playlists.forEach((pl) => {
+        const cover = this.library.getPlaylistTracks(pl.id).find(t => t.pictureUrl)?.pictureUrl;
         const item = document.createElement("div");
         item.className = "sidebar-item" + (this.currentView.type === "playlist" && this.currentView.id === pl.id ? " active" : "");
         item.dataset.playlistId = pl.id;
 
         item.innerHTML = `
-          <div class="item-thumb">
-            <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
-          </div>
+          <div class="item-thumb">${cover ? `<img src="${this.escapeHTML(cover)}" alt="">` : icons.music}</div>
           <div class="item-info">
             <span class="item-title">${this.escapeHTML(pl.name)}</span>
             <span class="item-subtitle">Плейлист • ${pl.trackIds.length} треков</span>
@@ -104,93 +105,24 @@ export function renderSidebar() {
         list.appendChild(item);
       });
     }
+    const query = (this.libraryQuery || "").toLocaleLowerCase();
+    for (const item of list.children) {
+      item.hidden = query && !item.textContent.toLocaleLowerCase().includes(query);
+      item.tabIndex = 0;
+      item.setAttribute("role", "button");
+      item.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " ") {e.preventDefault();item.click();} });
+    }
 }
 
 export function renderHomeView(container) {
+  if (this.searchQuery) return this.renderSearchView(container);
+  return renderHomeDashboard.call(this, container);
+}
+
+export function renderAllTracksView(container) {
     let tracks = this.library.getTracks();
-    if (this.searchQuery) {
-      tracks = this.library.search(this.searchQuery);
-    }
+    if (this.searchQuery) tracks = this.library.search(this.searchQuery);
     tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
-
-    // If on mobile and not searching, show authentic Spotify Mobile Home!
-    if (this.isMobile && !this.searchQuery) {
-      const homeWrapper = document.createElement("div");
-      homeWrapper.className = "mobile-home-view";
-
-      const hour = new Date().getHours();
-      let greeting = "Добрый день";
-      if (hour >= 5 && hour < 12) greeting = "Доброе утро";
-      else if (hour >= 18 && hour < 23) greeting = "Добрый вечер";
-      else if (hour >= 23 || hour < 5) greeting = "Доброй ночи";
-
-      const header = document.createElement("div");
-      header.className = "mobile-home-header";
-      header.innerHTML = `
-        <div class="mobile-home-greeting">${greeting}</div>
-      `;
-      homeWrapper.appendChild(header);
-
-      // 2x3 Quick Access Grid
-      const quickGrid = document.createElement("div");
-      quickGrid.className = "mobile-quick-grid";
-
-      // 1. Liked Songs
-      const likedCard = document.createElement("div");
-      likedCard.className = "mobile-quick-card";
-      likedCard.innerHTML = `
-        <div class="mobile-quick-thumb fav-thumb">
-          <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-        </div>
-        <div class="mobile-quick-title">Любимые треки</div>
-      `;
-      likedCard.addEventListener("click", () => this.navigateTo({ type: "liked", title: "Любимые треки" }));
-      quickGrid.appendChild(likedCard);
-
-      // 2. All Tracks
-      const allCard = document.createElement("div");
-      allCard.className = "mobile-quick-card";
-      allCard.innerHTML = `
-        <div class="mobile-quick-thumb" style="background: linear-gradient(135deg, #1db954, #121212);">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-        </div>
-        <div class="mobile-quick-title">Все треки</div>
-      `;
-      allCard.addEventListener("click", () => {
-        if (tracks.length > 0) this.player.playTrack(tracks[0], 0, tracks);
-      });
-      quickGrid.appendChild(allCard);
-
-      // 3-6. Playlists or Artists
-      const playlists = this.library.getPlaylists().slice(0, 4);
-      playlists.forEach((pl) => {
-        const card = document.createElement("div");
-        card.className = "mobile-quick-card";
-        card.innerHTML = `
-          <div class="mobile-quick-thumb">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--sp-text-subdued)"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
-          </div>
-          <div class="mobile-quick-title">${this.escapeHTML(pl.name)}</div>
-        `;
-        card.addEventListener("click", () => this.navigateTo({ type: "playlist", id: pl.id, title: pl.name }));
-        quickGrid.appendChild(card);
-      });
-
-      homeWrapper.appendChild(quickGrid);
-
-      // Section title
-      const secTitle = document.createElement("h2");
-      secTitle.className = "mobile-section-title";
-      secTitle.textContent = "Ваши треки";
-      homeWrapper.appendChild(secTitle);
-
-      homeWrapper.appendChild(this.createActionBar(tracks));
-      homeWrapper.appendChild(this.createTrackTable(tracks));
-
-      container.appendChild(homeWrapper);
-      return;
-    }
-
     // Standard desktop home view
     const totalDur = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
 
@@ -295,8 +227,12 @@ export function renderSearchView(container) {
       catGrid.querySelector('[data-action="albums"]').addEventListener("click", () => this.navigateTo({ type: "library", title: "Моя медиатека", tab: "albums" }));
       catGrid.querySelector('[data-action="playlists"]').addEventListener("click", () => this.navigateTo({ type: "library", title: "Моя медиатека", tab: "playlists" }));
       catGrid.querySelector('[data-action="import"]').addEventListener("click", () => this.triggerMobileFileImport());
-      catGrid.querySelector('[data-action="all"]').addEventListener("click", () => this.navigateTo({ type: "home", title: "Все треки" }));
+      catGrid.querySelector('[data-action="all"]').addEventListener("click", () => this.navigateTo({ type: "allTracks", title: "Все треки" }));
 
+      catGrid.querySelectorAll(".mobile-cat-card").forEach(card => {
+        card.tabIndex = 0; card.setAttribute("role", "button");
+        card.addEventListener("keydown", e => {if(e.key === "Enter" || e.key === " "){e.preventDefault();card.click();}});
+      });
       searchWrapper.appendChild(catGrid);
     } else {
       const results = this.library.search(this.searchQuery);
@@ -351,6 +287,11 @@ export function renderLibraryView(container) {
     const renderItems = (filter) => {
       listContainer.innerHTML = "";
 
+      if (filter === "all") {
+        const all = document.createElement("div");all.className="mobile-lib-row";
+        all.innerHTML=`<div class="mobile-lib-thumb local-art">${icons.music}</div><div class="mobile-lib-meta"><span class="mobile-lib-name">Все треки</span><span class="mobile-lib-sub">${this.library.getTracks().length} треков</span></div>`;
+        all.addEventListener("click",()=>this.navigateTo({type:"allTracks",title:"Все треки"}));listContainer.append(all);
+      }
       // 1. Liked songs
       if (filter === "all" || filter === "playlists") {
         const likedTracks = this.library.getLikedTracks();
@@ -438,11 +379,21 @@ export function renderLibraryView(container) {
         header.querySelectorAll(".mobile-lib-pill").forEach((p) => p.classList.remove("active"));
         pill.classList.add("active");
         activeFilter = pill.dataset.filter;
+        this.currentView.tab = activeFilter;
         renderItems(activeFilter);
       });
     });
 
     renderItems(activeFilter);
+    const makeAccessible = () => listContainer.querySelectorAll(".mobile-lib-row").forEach(row => {
+      row.tabIndex = 0; row.setAttribute("role", "button");
+      row.onkeydown = e => { if(e.key === "Enter" || e.key === " ") {e.preventDefault();row.click();} };
+    });
+    makeAccessible();
+    const accessibilityObserver = new MutationObserver(makeAccessible);
+    accessibilityObserver.observe(listContainer,{childList:true});
+    const cleanupObserver = new MutationObserver(() => {if(!libWrapper.isConnected){accessibilityObserver.disconnect();cleanupObserver.disconnect();}});
+    requestAnimationFrame(()=>cleanupObserver.observe(container,{childList:true}));
 
     header.querySelector("#btnMobileLibAdd")?.addEventListener("click", () => {
       this.showMobileAddSheet();
@@ -470,7 +421,7 @@ export function renderLikedView(container) {
         <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
       </div>
       <div class="view-header-details">
-        <span class="view-type-badge">ПЛЕЙЛИСТ</span>
+        <span class="view-type-badge">Плейлист</span>
         <h1 class="view-title">Любимые треки</h1>
         <div class="view-metadata">
           <strong>Вы</strong>
@@ -504,6 +455,7 @@ export function renderPlaylistView(container, playlistId) {
     tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
 
     const totalDur = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
+    const playlistCover = tracks.find(t => t.pictureUrl)?.pictureUrl;
 
     const header = document.createElement("div");
     header.className = "view-header";
@@ -512,7 +464,7 @@ export function renderPlaylistView(container, playlistId) {
         <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
       </div>
       <div class="view-header-details">
-        <span class="view-type-badge">ПЛЕЙЛИСТ</span>
+        <span class="view-type-badge">Плейлист</span>
         <h1 class="view-title">${this.escapeHTML(pl.name)}</h1>
         ${pl.description ? `<p style="color: var(--sp-text-secondary); margin-bottom: 8px;">${this.escapeHTML(pl.description)}</p>` : ""}
         <div class="view-metadata">
@@ -525,6 +477,7 @@ export function renderPlaylistView(container, playlistId) {
       </div>
     `;
 
+    if (playlistCover) header.querySelector(".view-header-cover").innerHTML = `<img src="${this.escapeHTML(playlistCover)}" alt="">`;
     container.appendChild(header);
     container.appendChild(this.createActionBar(tracks, pl));
     container.appendChild(this.createTrackTable(tracks, pl));
@@ -543,7 +496,7 @@ export function renderArtistView(container, artistName) {
         ${!coverUrl ? `<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>` : ""}
       </div>
       <div class="view-header-details">
-        <span class="view-type-badge">ИСПОЛНИТЕЛЬ</span>
+        <span class="view-type-badge">Исполнитель</span>
         <h1 class="view-title">${this.escapeHTML(artistName)}</h1>
         <div class="view-metadata">
           <span>${sorted.length} треков</span>
@@ -557,7 +510,7 @@ export function renderArtistView(container, artistName) {
 }
 
 export function renderAlbumView(container, albumName, artistName) {
-    const albumTracks = this.library.getTracks().filter((t) => t.album === albumName);
+    const albumTracks = this.library.getTracks().filter((t) => t.album === albumName && (!artistName || t.artist === artistName));
     const coverUrl = albumTracks.find((t) => t.pictureUrl)?.pictureUrl;
     const sorted = this.library.sortTracks(albumTracks, "trackNo", true);
     const totalDur = sorted.reduce((acc, t) => acc + (t.duration || 0), 0);
@@ -569,7 +522,7 @@ export function renderAlbumView(container, albumName, artistName) {
         ${!coverUrl ? `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>` : ""}
       </div>
       <div class="view-header-details">
-        <span class="view-type-badge">АЛЬБОМ</span>
+        <span class="view-type-badge">Альбом</span>
         <h1 class="view-title">${this.escapeHTML(albumName)}</h1>
         <div class="view-metadata">
           <strong>${this.escapeHTML(artistName || sorted[0]?.artist || "")}</strong>
@@ -626,7 +579,7 @@ export function createActionBar(tracks, playlist = null) {
         if (confirm(`Удалить плейлист «${playlist.name}»?`)) {
           await this.library.deletePlaylist(playlist.id);
           this.showToast("Плейлист удален");
-          this.navigateTo({ type: "home", title: "Все треки" });
+          this.navigateTo({ type: "allTracks", title: "Все треки" });
         }
       });
     }
