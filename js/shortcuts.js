@@ -25,7 +25,7 @@ export class ShortcutsManager {
         return;
       }
 
-      if (isInput || target.tagName === "BUTTON" || target.closest(".track-row")) return;
+      if (isInput || e.defaultPrevented || (target.tagName === "BUTTON" && ["Space", "Enter"].includes(e.code))) return;
 
       switch (e.code) {
         case "Space":

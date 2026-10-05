@@ -3,6 +3,7 @@
   const settings = {};
   for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); settings[key] = localStorage.getItem(key); }
   const request = indexedDB.open('spotify_local_player_db');
+  request.onupgradeneeded = () => request.transaction.abort(); // Do not create an empty legacy database on a fresh install.
   request.onerror = () => window.AndroidBridge.saveLegacyLibrary(JSON.stringify({settings}));
   request.onsuccess = async () => {
     const db = request.result;

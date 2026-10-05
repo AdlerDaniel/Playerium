@@ -246,9 +246,9 @@ export class AudioPlayer {
       if (this.queue.length) { this.originalQueue = [...this.queue]; this.nativePlayback = true; }
     }
     if (!this.nativePlayback) return;
-    const index = this.queue.findIndex(t => t.id === state.id);
+    const index = Number.isInteger(state.index) && this.queue[state.index]?.id === state.id ? state.index : this.queue.findIndex(t => t.id === state.id);
     if (index < 0) return;
-    if (this.currentTrack?.id !== state.id) {
+    if (this.currentTrack?.id !== state.id || this.queueIndex !== index) {
       this.queueIndex = index;
       this.currentTrack = this.queue[index];
       this.onTrackChange?.(this.currentTrack);

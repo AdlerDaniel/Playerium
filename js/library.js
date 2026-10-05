@@ -3,6 +3,7 @@
  * IndexedDB persistence for tracks, playlists, folders, and likes.
  */
 
+import { resizeArtwork } from "./artwork.js";
 import { ID3Parser } from "./id3-parser.js";
 
 const DB_NAME = "spotify_local_player_db";
@@ -471,7 +472,7 @@ export class Library {
           sourceKey: key, folderSource, folderName, lyricsModified, filePath: f.fullPath || null, nativeUri: f.uri || null,
           liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, unavailable: false };
         delete track.picture; delete track.pictureBase64;
-        if (track.pictureBlob) track.pictureUrl = this.coverURL(id, track.pictureBlob);
+        if (track.pictureBlob) { track.pictureBlob = await resizeArtwork(track.pictureBlob); track.pictureUrl = this.coverURL(id, track.pictureBlob); }
         else {
           if (this.coverUrls.has(id)) URL.revokeObjectURL(this.coverUrls.get(id));
           this.coverUrls.delete(id); track.pictureUrl = null;

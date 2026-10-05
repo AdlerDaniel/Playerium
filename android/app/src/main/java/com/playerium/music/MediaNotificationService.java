@@ -100,7 +100,8 @@ public class MediaNotificationService extends MediaSessionService {
         String currentId = player.getCurrentMediaItem() == null ? "" : player.getCurrentMediaItem().mediaId;
         int index = Math.max(0, Math.min(items.size() - 1, data.optInt("index")));
         long position = 0;
-        if (!play) {
+        if (!play && items.get(index).mediaId.equals(currentId)) position = player.getCurrentPosition();
+        else if (!play) {
             for (int i = 0; i < items.size(); i++) if (items.get(i).mediaId.equals(currentId)) { index = i; position = player.getCurrentPosition(); break; }
         }
         boolean wasPlaying = player.getPlayWhenReady();
@@ -150,6 +151,7 @@ public class MediaNotificationService extends MediaSessionService {
             JSONArray queue = new JSONArray();
             for (int i = 0; i < player.getMediaItemCount(); i++) queue.put(player.getMediaItemAt(i).mediaId);
             data.put("queue", queue);
+            data.put("index", player.getCurrentMediaItemIndex());
             data.put("repeat", player.getRepeatMode());
             data.put("playing", player.isPlaying()); data.put("position", player.getCurrentPosition());
             data.put("duration", Math.max(0, player.getDuration()));

@@ -98,7 +98,10 @@ export class ID3Parser {
       const audio = new Audio();
       audio.preload = "metadata";
 
+      let timer;
       const cleanup = () => {
+        clearTimeout(timer);
+        audio.onloadedmetadata = null; audio.onerror = null;
         URL.revokeObjectURL(url);
         audio.removeAttribute("src");
         audio.load();
@@ -116,7 +119,7 @@ export class ID3Parser {
       };
 
       // Timeout fallback after 2.5s
-      setTimeout(() => {
+      timer = setTimeout(() => {
         cleanup();
         resolve(0);
       }, 2500);
@@ -201,7 +204,7 @@ export class ID3Parser {
         result.trackNo = this.decodeText(data).trim();
       } else if (["USLT", "ULT"].includes(frameId)) {
         result.lyrics = this.decodeLyrics(data);
-      } else if (["APIC", "PIC"].includes(frameId) && !result.pictureUrl) {
+      } else if (["APIC", "PIC"].includes(frameId) && !result.pictureBlob) {
         result.pictureBlob = this.decodePicture(data);
       }
     } catch (e) {

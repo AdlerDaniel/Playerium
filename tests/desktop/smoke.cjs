@@ -23,7 +23,9 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     await win.waitForFunction(()=>window.playerApp?.library.db);
     await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},folder);
     await win.evaluate(()=>window.playerApp.selectMusicFolder());
-    const track=await win.evaluate(folder=>window.playerApp.library.getTracks().find(t=>t.filePath?.startsWith(folder)),folder);
+    const tracks=await win.evaluate(()=>window.playerApp.library.getTracks().map(t=>({title:t.title,duration:t.duration,lyrics:t.lyrics,fileName:t.fileName})));
+    assert.equal(tracks.length,1, `Expected one audio track, got ${tracks.length}; errors: ${errors.join("; ")}`);
+    const track=tracks[0];
     assert.equal(track.title,'Song');assert.equal(track.duration,3);assert.match(track.lyrics,/desktop lyrics/);
     await win.evaluate(()=>window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))));
     await win.waitForFunction(()=>window.playerApp.player.isPlaying && window.playerApp.player.audio.duration>0);
