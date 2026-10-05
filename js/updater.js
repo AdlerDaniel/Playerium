@@ -124,15 +124,24 @@ export class AutoUpdater {
    * Returns: 1 if verA > verB, -1 if verA < verB, 0 if equal
    */
   compareVersions(verA, verB) {
-    const partsA = verA.split(".").map((n) => parseInt(n, 10) || 0);
-    const partsB = verB.split(".").map((n) => parseInt(n, 10) || 0);
-
-    const len = Math.max(partsA.length, partsB.length);
-    for (let i = 0; i < len; i++) {
-      const a = partsA[i] || 0;
-      const b = partsB[i] || 0;
-      if (a > b) return 1;
-      if (a < b) return -1;
+    const parse = value => {
+      const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
+      return match ? { numbers: match.slice(1, 4).map(Number), pre: match[4]?.split(".") } : null;
+    };
+    const a = parse(verA), b = parse(verB);
+    if (!a || !b) return 0;
+    for (let i = 0; i < 3; i++) if (a.numbers[i] !== b.numbers[i]) return Math.sign(a.numbers[i] - b.numbers[i]);
+    if (!a.pre && !b.pre) return 0;
+    if (!a.pre) return 1;
+    if (!b.pre) return -1;
+    for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i++) {
+      if (a.pre[i] === undefined) return -1;
+      if (b.pre[i] === undefined) return 1;
+      if (a.pre[i] === b.pre[i]) continue;
+      const numericA = /^\d+$/.test(a.pre[i]), numericB = /^\d+$/.test(b.pre[i]);
+      if (numericA && numericB) return Math.sign(Number(a.pre[i]) - Number(b.pre[i]));
+      if (numericA !== numericB) return numericA ? -1 : 1;
+      return a.pre[i] < b.pre[i] ? -1 : 1;
     }
     return 0;
   }

@@ -25,7 +25,7 @@ export class ShortcutsManager {
         return;
       }
 
-      if (isInput) return;
+      if (isInput || target.tagName === "BUTTON" || target.closest(".track-row")) return;
 
       switch (e.code) {
         case "Space":
@@ -40,7 +40,7 @@ export class ShortcutsManager {
           } else {
             // Seek +5 seconds
             e.preventDefault();
-            this.player.seekToTime(this.player.audio.currentTime + 5);
+            this.player.seekToTime(this.player.getCurrentTime() + 5);
           }
           break;
 
@@ -51,7 +51,7 @@ export class ShortcutsManager {
           } else {
             // Seek -5 seconds
             e.preventDefault();
-            this.player.seekToTime(this.player.audio.currentTime - 5);
+            this.player.seekToTime(this.player.getCurrentTime() - 5);
           }
           break;
 

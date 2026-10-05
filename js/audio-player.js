@@ -263,6 +263,8 @@ export class AudioPlayer {
     if (state.error) this.onError?.(state.error);
   }
 
+  getCurrentTime() { return this.nativePlayback ? this.nativeTime || 0 : this.audio.currentTime; }
+
   getDuration() { return this.nativePlayback ? this.nativeDuration || this.currentTrack?.duration || 0 : this.audio.duration; }
 
   handlePlaybackError(message) {
@@ -370,9 +372,9 @@ export class AudioPlayer {
     this.isMuted = v === 0;
 
     if (this.gainNode) {
-      this.gainNode.gain.value = v;
+      this.gainNode.gain.value = this.volume;
     } else {
-      this.audio.volume = v;
+      this.audio.volume = this.volume;
     }
 
     if (this.onVolumeChange) this.onVolumeChange(this.volume, this.isMuted);

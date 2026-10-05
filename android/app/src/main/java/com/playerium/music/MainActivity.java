@@ -205,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
                     if (!android.provider.DocumentsContract.isDocumentUri(context, uri)) return true;
                     String documentId = android.provider.DocumentsContract.getDocumentId(uri);
                     if (documentId.equals(treeId) || documentId.startsWith(treeId + "/")) return true;
-                    if (Build.VERSION.SDK_INT >= 24 && android.provider.DocumentsContract.isChildDocument(context.getContentResolver(),
+                    if (Build.VERSION.SDK_INT >= 29 && android.provider.DocumentsContract.isChildDocument(context.getContentResolver(),
                         android.provider.DocumentsContract.buildDocumentUriUsingTree(permission.getUri(), treeId), uri)) return true;
                 }
             } catch (Exception ignored) {}
@@ -555,6 +555,7 @@ public class MainActivity extends AppCompatActivity {
                         byte[] bytes = new byte[8192]; int count;
                         while ((count = input.read(bytes)) != -1 && output.size() < 1024 * 1024) output.write(bytes, 0, count);
                         data.put("lyrics", output.toString("UTF-8"));
+                        data.put("lyricsModified", sibling.lastModified());
                     }
                     break;
                 }
@@ -573,7 +574,7 @@ public class MainActivity extends AppCompatActivity {
             } else if (file.isFile()) {
                 String name = file.getName();
                 if (name != null) {
-                    String lower = name.toLowerCase();
+                    String lower = name.toLowerCase(java.util.Locale.ROOT);
                     if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
                         lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac")) {
                         results.add(file);

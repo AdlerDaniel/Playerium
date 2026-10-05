@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Owns audio, queue, audio focus and lock-screen controls independently of Activity. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public class MediaNotificationService extends MediaSessionService {
     private static volatile String stateSnapshot = "{}";
     private ExoPlayer player;

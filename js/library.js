@@ -326,7 +326,7 @@ export class Library {
     const folderSource = source || `web:${folderName}`;
     const descriptors = files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified,
       relativePath: file.relativePath || file.webkitRelativePath || file.name, file, handle: file.handle }));
-    const result = await this.syncFolderToPlaylist(folderName, folderSource, descriptors, false, progressCallback);
+    const result = await this.syncFolderToPlaylist(folderName, folderSource, descriptors, false, progressCallback, false);
     return result.addedCount;
   }
 
@@ -405,7 +405,7 @@ export class Library {
     return result;
   }
 
-  async importFolder(folderName, folderSource, files, isAndroid = false, progressCallback = null) {
+  async importFolder(folderName, folderSource, files, isAndroid = false, progressCallback = null, replaceContents = true) {
     const audio = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac)$/i.test(f.name));
     const identity = f => f.fullPath || f.uri || `${folderSource}/${f.relativePath || f.name}`;
     const lyricsKey = f => (f.relativePath || f.fullPath || f.uri || f.name).replace(/\.[^/.]+$/, "").toLowerCase();
@@ -424,7 +424,9 @@ export class Library {
       const f = audio[i];
       const key = identity(f);
       let track = index.get(key);
-      const changed = !track || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
+      const lyricsFile = lyrics.get(lyricsKey(f));
+      const lyricsModified = lyricsFile?.lastModified || lyricsFile?.file?.lastModified || f.metadata?.lyricsModified || 0;
+      const changed = !track || track.lyricsModified !== lyricsModified || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
       if (changed) {
         const cleanName = f.name.replace(/\.[^/.]+$/, "");
         const parts = cleanName.split(" - ");
@@ -450,11 +452,14 @@ export class Library {
         const id = track?.id || `trk_${crypto.randomUUID()}`;
         const previous = track;
         track = { ...metadata, id, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
-          sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
+          sourceKey: key, folderSource, folderName, lyricsModified, filePath: f.fullPath || null, nativeUri: f.uri || null,
           liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, unavailable: false };
         delete track.picture; delete track.pictureBase64;
         if (track.pictureBlob) track.pictureUrl = this.coverURL(id, track.pictureBlob);
-        else track.pictureUrl = null;
+        else {
+          if (this.coverUrls.has(id)) URL.revokeObjectURL(this.coverUrls.get(id));
+          this.coverUrls.delete(id); track.pictureUrl = null;
+        }
         // Never store ephemeral object URLs produced by the parser.
         if (metadata.pictureUrl) URL.revokeObjectURL(metadata.pictureUrl);
         if (f.file) await this.putInStore("files", { id, ...(f.handle ? { handle: f.handle } : { blob: f.file }) });
@@ -469,11 +474,11 @@ export class Library {
       if (i % 20 === 0) await new Promise(resolve => setTimeout(resolve, 0));
     }
     // Preserve IDs/likes/manual playlists, but remove disappeared files from the folder playlist.
-    for (const id of playlist.trackIds.filter(id => !ids.includes(id))) {
+    for (const id of (replaceContents ? playlist.trackIds.filter(id => !ids.includes(id)) : [])) {
       const t = this.tracks.get(id);
       if (t) { t.unavailable = true; await this.putInStore("tracks", t); }
     }
-    playlist.trackIds = [...new Set(ids)];
+    playlist.trackIds = [...new Set(replaceContents ? ids : [...playlist.trackIds, ...ids])];
     playlist.updatedAt = Date.now();
     await this.putInStore("playlists", playlist);
     this.playlists.set(playlist.id, playlist);

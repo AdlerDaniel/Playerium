@@ -10,7 +10,8 @@
     "test": "node --test tests/*.test.cjs",
     "check": "node scripts/check.js",
     "version:sync": "node scripts/sync-version.js",
-    "android:assets": "node scripts/sync-assets.js"
+    "android:assets": "node scripts/sync-assets.js",
+    "test:browser": "playwright test"
   },
   "build": {
     "appId": "com.playerium.music",
