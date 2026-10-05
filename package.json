@@ -11,7 +11,8 @@
     "check": "node scripts/check.js",
     "version:sync": "node scripts/sync-version.js",
     "android:assets": "node scripts/sync-assets.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:desktop": "node tests/desktop/smoke.cjs"
   },
   "build": {
     "appId": "com.playerium.music",
@@ -68,7 +69,7 @@
   "license": "MIT",
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "electron": "^40.10.6",
+    "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
     "fake-indexeddb": "^6.0.0"
   },

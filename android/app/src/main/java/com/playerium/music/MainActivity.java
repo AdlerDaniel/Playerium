@@ -151,7 +151,10 @@ public class MainActivity extends AppCompatActivity {
                 }
                 uploadMessage = filePathCallback;
 
-                Intent intent = fileChooserParams.createIntent();
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/*");
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
                 try {
                     startActivityForResult(intent, FILECHOOSER_RESULTCODE);
                 } catch (Exception e) {
@@ -204,6 +207,7 @@ public class MainActivity extends AppCompatActivity {
         if (!"content".equals(uri.getScheme())) return false;
         for (UriPermission permission : context.getContentResolver().getPersistedUriPermissions()) {
             if (!permission.isReadPermission()) continue;
+            if (uri.equals(permission.getUri())) return true;
             try {
                 if (android.provider.DocumentsContract.getTreeDocumentId(uri).equals(android.provider.DocumentsContract.getTreeDocumentId(permission.getUri()))
                     && uri.getAuthority().equals(permission.getUri().getAuthority())) {
@@ -273,6 +277,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     try {
+                        if ("android-files".equals(folderUriStr)) { scanSelectedFiles(); return; }
                         Uri treeUri = Uri.parse(folderUriStr);
                         if (!hasMusicPermission(MainActivity.this, treeUri)) throw new SecurityException("Unauthorized folder");
                         scanFolderAndSend(treeUri, false);
@@ -509,9 +514,25 @@ public class MainActivity extends AppCompatActivity {
         lyricFiles.clear();
         findAudioFilesRecursively(rootDir, audioFiles);
 
+        sendNativeFiles(folderName, treeUri.toString(), audioFiles, isInitial);
+    }
+
+    private synchronized void scanSelectedFiles() {
+        List<DocumentFile> files = new ArrayList<>();
+        lyricFiles.clear();
+        for (String value : getSharedPreferences("playerium", MODE_PRIVATE).getStringSet("selected_music_files", java.util.Collections.emptySet())) {
+            Uri uri = Uri.parse(value);
+            if (!hasMusicPermission(this, uri)) continue;
+            DocumentFile file = DocumentFile.fromSingleUri(this, uri);
+            if (file != null && file.exists()) files.add(file);
+        }
+        sendNativeFiles("Мои треки", "android-files", files, true);
+    }
+
+    private void sendNativeFiles(String folderName, String folderSource, List<DocumentFile> audioFiles, boolean isInitial) {
         try {
             JSONObject folderObj = new JSONObject();
-            folderObj.put("folderUri", treeUri.toString());
+            folderObj.put("folderUri", folderSource);
             folderObj.put("folderName", folderName);
             folderObj.put("isInitial", isInitial);
 
@@ -617,8 +638,22 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == FILECHOOSER_RESULTCODE) {
             if (uploadMessage == null) return;
-            uploadMessage.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+            // Import persistent native URIs; no full audio files cross the WebView bridge.
+            uploadMessage.onReceiveValue(null);
             uploadMessage = null;
+            if (resultCode == RESULT_OK && data != null) {
+                java.util.Set<String> saved = new java.util.HashSet<>(getSharedPreferences("playerium", MODE_PRIVATE)
+                    .getStringSet("selected_music_files", java.util.Collections.emptySet()));
+                List<Uri> selected = new ArrayList<>();
+                if (data.getData() != null) selected.add(data.getData());
+                if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) selected.add(data.getClipData().getItemAt(i).getUri());
+                for (Uri uri : selected) {
+                    try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); saved.add(uri.toString()); }
+                    catch (Exception e) { Toast.makeText(this, "Не удалось сохранить доступ. Выберите папку с музыкой.", Toast.LENGTH_LONG).show(); }
+                }
+                getSharedPreferences("playerium", MODE_PRIVATE).edit().putStringSet("selected_music_files", saved).apply();
+                new Thread(() -> scanSelectedFiles()).start();
+            }
         } else if (requestCode == FOLDER_PICKER_RESULTCODE && resultCode == RESULT_OK && data != null) {
             final Uri treeUri = data.getData();
             if (treeUri != null) {

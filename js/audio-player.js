@@ -11,6 +11,7 @@ export class AudioPlayer {
     this.library = library;
     this.audio = new Audio();
     this.audio.preload = "metadata";
+    this.audio.crossOrigin = "anonymous";
     this.playRequest = 0;
     this.sourceUrl = null;
     this.nativePlayback = false;

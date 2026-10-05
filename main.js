@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
+protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
 let roots = new Set();
 let rootsFile;
@@ -65,7 +65,12 @@ app.whenReady().then(async () => {
   protocol.handle('playerium-audio', async request => {
     const id = new URL(request.url).hostname;
     if (!sources.has(id)) return new Response('Not found', { status: 404 });
-    try { return net.fetch(pathToFileURL(await authorize(sources.get(id))).href, { headers: request.headers }); }
+    try {
+      const response = await net.fetch(pathToFileURL(await authorize(sources.get(id))).href, { headers: request.headers });
+      const headers = new Headers(response.headers);
+      headers.set('Access-Control-Allow-Origin', '*');
+      return new Response(response.body, { status: response.status, headers });
+    }
     catch { return new Response('Unavailable', { status: 403 }); }
   });
   handle('dialog:openDirectory', async () => {
