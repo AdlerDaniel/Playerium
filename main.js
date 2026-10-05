@@ -82,7 +82,8 @@ app.whenReady().then(async () => {
     const real = await authorize(file);
     if (!AUDIO_EXTS.has(path.extname(real).toLowerCase())) throw new Error('Not an audio file');
     const id = require('node:crypto').randomUUID();
-    sources.clear(); sources.set(id, real);
+    sources.set(id, real);
+    if (sources.size > 64) sources.delete(sources.keys().next().value);
     return `playerium-audio://${id}/track`;
   });
   handle('file:metadata', async file => {

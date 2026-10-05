@@ -24,6 +24,18 @@ export class Library {
   async init() {
     this.db = await this.openDatabase();
     await this.loadAll();
+    if (window.AndroidBridge?.getLegacyLibrary) {
+      const legacy = window.AndroidBridge.getLegacyLibrary();
+      if (legacy) {
+        const data = JSON.parse(legacy);
+        for (const name of ["tracks", "playlists", "folders"]) {
+          for (const item of data[name] || []) await this.putInStore(name, item);
+        }
+        for (const [key, value] of Object.entries(data.settings || {})) if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
+        this.tracks.clear(); this.playlists.clear(); await this.loadAll();
+      }
+      window.AndroidBridge.completeLegacyMigration();
+    }
     this.ensureDefaultPlaylists();
   }
 
@@ -31,7 +43,10 @@ export class Library {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        request.result.onversionchange = () => request.result.close();
+        resolve(request.result);
+      };
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
@@ -418,6 +433,7 @@ export class Library {
     }
     const index = new Map(this.getTracks().map(t => [t.sourceKey || t.filePath || t.nativeUri, t]));
     const ids = [];
+    const playlistIds = new Set(playlist.trackIds);
     let addedCount = 0;
     let failedCount = 0;
     for (let i = 0; i < audio.length; i++) {
@@ -468,13 +484,14 @@ export class Library {
       } else if (track.unavailable) {
         track.unavailable = false; await this.putInStore("tracks", track);
       }
-      if (!playlist.trackIds.includes(track.id)) addedCount++;
+      if (!playlistIds.has(track.id)) addedCount++;
       ids.push(track.id);
       progressCallback?.(i + 1, audio.length, f.name);
       if (i % 20 === 0) await new Promise(resolve => setTimeout(resolve, 0));
     }
     // Preserve IDs/likes/manual playlists, but remove disappeared files from the folder playlist.
-    for (const id of (replaceContents ? playlist.trackIds.filter(id => !ids.includes(id)) : [])) {
+    const importedIds = new Set(ids);
+    for (const id of (replaceContents ? playlist.trackIds.filter(id => !importedIds.has(id)) : [])) {
       const t = this.tracks.get(id);
       if (t) { t.unavailable = true; await this.putInStore("tracks", t); }
     }

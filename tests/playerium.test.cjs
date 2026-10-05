@@ -107,3 +107,23 @@ test('async directory scan handles nested audio/LRC and never traverses symlinks
     assert.equal(isInside(root,`${root}-outside/file`),false);assert.equal(isInside(root,path.join(root,'nested/song.mp3')),true);
   } finally { await fs.rm(root,{recursive:true,force:true}); }
 });
+test('legacy Android library and preferences migrate before switching to secure origin',async()=>{
+  const {Library}=await modules(); let completed=false;
+  window.AndroidBridge={getLegacyLibrary:()=>JSON.stringify({tracks:[{id:'legacy',nativeUri:'content://music/old',liked:true}],playlists:[{id:'old-playlist',trackIds:['legacy']}],settings:{sp_audio_prefs:'{"volume":0.3}'}}),completeLegacyMigration:()=>completed=true};
+  const lib=new Library();await lib.init();assert.equal(lib.getTrackById('legacy').liked,true);
+  assert.equal(lib.getPlaylistTracks('old-playlist')[0].id,'legacy');assert.equal(completed,true);assert.equal(JSON.parse(localStorage.getItem('sp_audio_prefs')).volume,0.3);
+});
+test('changing only lyrics refreshes text without changing the track ID',async()=>{
+  const lib=await library();let text='[00:01]old';
+  window.electronAPI={getMetadata:async()=>({title:'Song'}),readLyrics:async()=>text};
+  const files=[descriptor('song.mp3','/music/song.mp3'),{name:'song.lrc',fullPath:'/music/song.lrc',lastModified:1}];
+  await lib.syncFolderToPlaylist('Music','/music',files);const id=lib.getTracks()[0].id;
+  text='[00:01]new';files[1].lastModified=2;await lib.syncFolderToPlaylist('Music','/music',files);
+  assert.equal(lib.getTrackById(id).lyrics,text);
+});
+test('version comparison honors prerelease ordering and rejects malformed tags',async()=>{
+  const {AutoUpdater}=await import('../js/updater.js');const updater=new AutoUpdater();
+  assert.equal(updater.compareVersions('1.1.0','1.1.0-beta.2'),1);
+  assert.equal(updater.compareVersions('1.1.0-beta.10','1.1.0-beta.2'),1);
+  assert.equal(updater.compareVersions('broken','1.1.0'),0);
+});

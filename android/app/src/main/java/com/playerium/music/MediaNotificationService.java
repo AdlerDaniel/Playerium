@@ -1,6 +1,8 @@
 package com.playerium.music;
 
 import android.content.Intent;
+import android.content.Context;
+import java.util.concurrent.atomic.AtomicReference;
 import android.media.audiofx.Equalizer;
 import android.net.Uri;
 import android.os.Handler;
@@ -24,6 +26,12 @@ import java.util.List;
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public class MediaNotificationService extends MediaSessionService {
     private static volatile String stateSnapshot = "{}";
+    private static final AtomicReference<String> pendingQueue = new AtomicReference<>();
+    public static void submitQueue(Context context, String queue) {
+        pendingQueue.set(queue);
+        // Large libraries must not be serialized into Binder Intent extras.
+        context.startService(new Intent(context, MediaNotificationService.class).setAction("playerium.SET_QUEUE"));
+    }
     private ExoPlayer player;
     private MediaSession session;
     private Equalizer equalizer;
@@ -65,7 +73,10 @@ public class MediaNotificationService extends MediaSessionService {
         int result = super.onStartCommand(intent, flags, startId);
         if (intent != null) {
             try {
-                if (intent.hasExtra("queue")) setQueue(new JSONObject(intent.getStringExtra("queue")));
+                if ("playerium.SET_QUEUE".equals(intent.getAction())) {
+                    String queue = pendingQueue.getAndSet(null);
+                    if (queue != null) setQueue(new JSONObject(queue));
+                }
                 if (intent.hasExtra("command")) command(intent.getStringExtra("command"), intent.getDoubleExtra("value", 0));
                 if (intent.hasExtra("equalizer")) { equalizerSettings = intent.getStringExtra("equalizer"); configureEqualizer(player.getAudioSessionId()); }
             } catch (Exception e) { error = "Не удалось обновить очередь воспроизведения"; }

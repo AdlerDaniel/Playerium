@@ -53,6 +53,9 @@ public class MainActivity extends AppCompatActivity {
     private final static int FOLDER_PICKER_RESULTCODE = 1002;
     private final static int PERMISSION_REQUEST_CODE = 2001;
 
+    private final java.util.Map<String, JSONObject> metadataCache = new java.util.LinkedHashMap<>(128, 0.75f, true);
+    private final java.util.Map<String, DocumentFile> lyricFiles = new java.util.HashMap<>();
+
     private long activeDownloadId = -1;
     private Handler progressHandler;
     private Runnable progressRunnable;
@@ -134,11 +137,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Register receiver for downloaded APK auto-installation prompt
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(onDownloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
-            } else {
-                registerReceiver(onDownloadCompleteReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
-            }
+            ContextCompat.registerReceiver(this, onDownloadCompleteReceiver,
+                new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_EXPORTED);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -162,9 +162,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.loadUrl("https://appassets.androidplatform.net/assets/index.html");
+        boolean migrated = getSharedPreferences("playerium", MODE_PRIVATE).getBoolean("secure_origin_migrated", false);
+        webView.loadUrl(migrated ? "https://appassets.androidplatform.net/assets/index.html" : "file:///android_asset/migration.html");
 
         checkAndRequestPermissions();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (webView != null) webView.evaluateJavascript("window.playerApp && window.playerApp.library && window.playerApp.library.db && window.playerApp.library.initFolderWatchers();", null);
     }
 
     private void checkAndRequestPermissions() {
@@ -219,11 +225,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public class AndroidBridge {
+        @JavascriptInterface public void saveLegacyLibrary(final String data) {
+            runOnUiThread(() -> {
+                if (webView == null || !"file:///android_asset/migration.html".equals(webView.getUrl())) return;
+                if (!getSharedPreferences("playerium", MODE_PRIVATE).contains("legacy_library"))
+                    getSharedPreferences("playerium", MODE_PRIVATE).edit().putString("legacy_library", data).apply();
+                webView.loadUrl("https://appassets.androidplatform.net/assets/index.html");
+            });
+        }
+        @JavascriptInterface public String getLegacyLibrary() {
+            return getSharedPreferences("playerium", MODE_PRIVATE).getString("legacy_library", "");
+        }
+        @JavascriptInterface public void completeLegacyMigration() {
+            getSharedPreferences("playerium", MODE_PRIVATE).edit().putBoolean("secure_origin_migrated", true).remove("legacy_library").apply();
+        }
+
         @JavascriptInterface public void setPlaybackQueue(final String queue) {
             runOnUiThread(() -> {
-                Intent intent = new Intent(MainActivity.this, MediaNotificationService.class).putExtra("queue", queue);
-                // Media3 starts foreground notification once playback is prepared.
-                startService(intent);
+                MediaNotificationService.submitQueue(MainActivity.this, queue);
             });
         }
         @JavascriptInterface public void playbackCommand(final String command, final double value) {
@@ -477,7 +496,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void scanFolderAndSend(Uri treeUri, boolean isInitial) {
+    private synchronized void scanFolderAndSend(Uri treeUri, boolean isInitial) {
         DocumentFile rootDir = DocumentFile.fromTreeUri(this, treeUri);
         if (rootDir == null || !rootDir.isDirectory()) return;
 
@@ -487,6 +506,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         List<DocumentFile> audioFiles = new ArrayList<>();
+        lyricFiles.clear();
         findAudioFilesRecursively(rootDir, audioFiles);
 
         try {
@@ -503,9 +523,16 @@ public class MainActivity extends AppCompatActivity {
                 fileObj.put("size", df.length());
                 fileObj.put("lastModified", df.lastModified());
                 fileObj.put("relativePath", android.provider.DocumentsContract.getDocumentId(df.getUri()));
-                fileObj.put("metadata", readMetadata(df));
+                DocumentFile lrc = lyricFiles.get(df.getUri().toString());
+                String cacheKey = df.getUri().toString() + ":" + df.length() + ":" + df.lastModified() + ":" + (lrc == null ? 0 : lrc.lastModified());
+                JSONObject metadata = metadataCache.get(cacheKey);
+                if (metadata == null) { metadata = readMetadata(df); metadataCache.put(cacheKey, metadata);
+                    if (metadataCache.size() > 128) metadataCache.remove(metadataCache.keySet().iterator().next());
+                }
+                fileObj.put("metadata", metadata);
                 filesArray.put(fileObj);
             }
+
             folderObj.put("files", filesArray);
 
             final String script = "window.playerApp && window.playerApp.onFolderImported && window.playerApp.onFolderImported(" + folderObj.toString() + ");";
@@ -547,17 +574,13 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
         finally { try { retriever.release(); } catch (Exception ignored) {} }
         try {
-            DocumentFile parent = file.getParentFile();
-            String base = file.getName().replaceFirst("\\.[^.]+$", "");
-            if (parent != null) for (DocumentFile sibling : parent.listFiles()) {
-                if (sibling.getName() != null && sibling.getName().equalsIgnoreCase(base + ".lrc") && sibling.length() <= 1024 * 1024) {
-                    try (InputStream input = getContentResolver().openInputStream(sibling.getUri()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-                        byte[] bytes = new byte[8192]; int count;
-                        while ((count = input.read(bytes)) != -1 && output.size() < 1024 * 1024) output.write(bytes, 0, count);
-                        data.put("lyrics", output.toString("UTF-8"));
-                        data.put("lyricsModified", sibling.lastModified());
-                    }
-                    break;
+            DocumentFile sibling = lyricFiles.get(file.getUri().toString());
+            if (sibling != null && sibling.length() <= 1024 * 1024) {
+                try (InputStream input = getContentResolver().openInputStream(sibling.getUri()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                    byte[] bytes = new byte[8192]; int count;
+                    while ((count = input.read(bytes)) != -1 && output.size() < 1024 * 1024) output.write(bytes, 0, count);
+                    data.put("lyrics", output.toString("UTF-8"));
+                    data.put("lyricsModified", sibling.lastModified());
                 }
             }
         } catch (Exception ignored) {}
@@ -567,6 +590,9 @@ public class MainActivity extends AppCompatActivity {
     private void findAudioFilesRecursively(DocumentFile dir, List<DocumentFile> results) {
         DocumentFile[] files = dir.listFiles();
         if (files == null) return;
+        java.util.Map<String, DocumentFile> lyrics = new java.util.HashMap<>();
+        for (DocumentFile f : files) if (f.getName() != null && f.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".lrc"))
+            lyrics.put(f.getName().toLowerCase(java.util.Locale.ROOT).replaceFirst("\\.lrc$", ""), f);
 
         for (DocumentFile file : files) {
             if (file.isDirectory()) {
@@ -578,6 +604,8 @@ public class MainActivity extends AppCompatActivity {
                     if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
                         lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac")) {
                         results.add(file);
+                        DocumentFile lrc = lyrics.get(lower.replaceFirst("\\.[^.]+$", ""));
+                        if (lrc != null) lyricFiles.put(file.getUri().toString(), lrc);
                     }
                 }
             }
