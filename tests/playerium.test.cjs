@@ -1,0 +1,109 @@
+const { test, beforeEach } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { indexedDB, IDBKeyRange } = require('fake-indexeddb');
+const { scanDirectory, isInside } = require('../desktop-files');
+const storage = new Map();
+class FakeAudio {
+  constructor() { this.events = {}; this.duration = 100; this.currentTime = 0; this.volume = 1; this.src = ''; }
+  addEventListener(name, fn) { this.events[name] = fn; }
+  removeAttribute(name) { if (name === 'src') this.src = ''; }
+  load() {}
+  async play() { this.events.play?.(); }
+  pause() { this.events.pause?.(); }
+}
+async function modules() {
+  // CommonJS Electron entry stays intact; browser ES modules are loaded natively.
+  return { Library: (await import('../js/library.js')).Library, AudioPlayer: (await import('../js/audio-player.js')).AudioPlayer };
+}
+beforeEach(() => {
+  global.indexedDB = indexedDB; global.IDBKeyRange = IDBKeyRange;
+  global.window = {}; global.Audio = FakeAudio;
+  global.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key,value) => storage.set(key,value) };
+  storage.clear();
+});
+async function library() {
+  const { Library } = await modules();
+  const lib = new Library(); await lib.init(); await lib.clearAll(); return lib;
+}
+function descriptor(name, filePath, title = name) {
+  return { name, fullPath: filePath, size: 100, lastModified: 1, metadata: { title, artist: 'Artist', duration: 42 } };
+}
+test('folder import parses metadata, attaches lyrics, skips .lrc and preserves likes/IDs', async () => {
+  const lib = await library();
+  window.electronAPI = { getMetadata: async () => ({title:'Tagged song',artist:'Tagged artist',duration:42}), readLyrics: async () => '[00:01]hello' };
+  const files = [descriptor('song.mp3','/music/song.mp3'), {name:'song.lrc',fullPath:'/music/song.lrc',size:10}];
+  const first = await lib.syncFolderToPlaylist('Music','/music', files);
+  assert.equal(first.addedCount,1); const track = lib.getTracks()[0];
+  assert.equal(track.title,'Tagged song'); assert.equal(track.lyrics,'[00:01]hello');
+  await lib.toggleLike(track.id);
+  const again = await lib.syncFolderToPlaylist('Music','/music',files);
+  assert.equal(again.addedCount,0); assert.equal(lib.getTracks()[0].liked,true);
+  assert.equal(lib.getTracks()[0].id,track.id);
+  await lib.syncFolderToPlaylist('Music','/music',[]);
+  assert.deepEqual(lib.getPlaylistTracks(first.playlist.id),[]); assert.equal(lib.getTrackById(track.id).unavailable,true);
+});
+test('same file name and size in different folders never merge',async()=>{
+  const lib=await library();
+  await lib.syncFolderToPlaylist('A','/a',[descriptor('song.mp3','/a/song.mp3')]);
+  await lib.syncFolderToPlaylist('B','/b',[descriptor('song.mp3','/b/song.mp3')]);
+  assert.equal(lib.getTracks().length,2);
+});
+test('concurrent folder scans are serialized without duplicate playlists',async()=>{
+  const lib=await library(); const files=[descriptor('song.mp3','/a/song.mp3')];
+  await Promise.all([lib.syncFolderToPlaylist('A','/a',files),lib.syncFolderToPlaylist('A','/a',files)]);
+  assert.equal(lib.getPlaylists().length,1); assert.equal(lib.getTracks().length,1);
+});
+test('audio and cover blobs remain readable after database reopen',async()=>{
+  const lib=await library(); const id='persisted'; const blob=new Blob(['audio']); const pictureBlob=new Blob(['cover'],{type:'image/png'});
+  await lib.putInStore('files',{id,blob}); await lib.putInStore('tracks',{id,title:'Track',pictureBlob,pictureUrl:'blob:expired'});
+  const {Library}=await modules(); const reopened=new Library(); await reopened.init();
+  assert.equal(await (await reopened.getAudioFile({id})).text(),'audio');
+  assert.equal(await reopened.getTrackById(id).pictureBlob.text(),'cover');
+  assert.notEqual(reopened.getTrackById(id).pictureUrl,'blob:expired');
+});
+async function player(lib={ getAudioFile:async()=>new Blob(['a']) }) {
+  const {AudioPlayer}=await modules(); const p=new AudioPlayer(lib); p.initWebAudio=()=>{}; return p;
+}
+test('unavailable track clears old source and reports error instead of playing previous song',async()=>{
+  const p=await player({getAudioFile:async()=>null}); p.audio.src='old'; let error;
+  p.onError=message=>error=message;
+  await p.playTrack({id:'missing',title:'Missing'});
+  assert.equal(p.audio.src,''); assert.equal(p.isPlaying,false); assert.match(error,/доступ/i);
+});
+test('late file load cannot override newer selection',async()=>{
+  let resolve; const slow=new Promise(r=>resolve=r);
+  const p=await player({getAudioFile:t=>t.id==='slow'?slow:Promise.resolve(new Blob(['fast']))});
+  const first=p.playTrack({id:'slow'});
+  await p.playTrack({id:'fast'});
+  const url=p.audio.src; resolve(new Blob(['slow'])); await first;
+  assert.equal(p.currentTrack.id,'fast'); assert.equal(p.audio.src,url);
+});
+test('manual next ignores repeat-one while track ended repeats current song',async()=>{
+  const p=await player(); const a={id:'a'},b={id:'b'};
+  p.queue=[a,b];p.originalQueue=[a,b];p.queueIndex=0;p.currentTrack=a;p.repeatMode='one';
+  p.next(); await new Promise(r=>setTimeout(r,0)); assert.equal(p.currentTrack.id,'b');
+  let repeated=0;p.play=()=>repeated++;p.handleTrackEnded();assert.equal(repeated,1);
+});
+test('removing upcoming song and toggling shuffle cannot resurrect it',async()=>{
+  const p=await player(); const tracks=[{id:'a'},{id:'b'},{id:'c'}];
+  p.queue=[...tracks];p.originalQueue=[...tracks];p.currentTrack=tracks[0];p.queueIndex=0;
+  p.removeFromQueue(1);p.toggleShuffle();p.toggleShuffle();assert.deepEqual(p.queue.map(t=>t.id),['a','c']);
+  p.clearUpcomingQueue();p.toggleShuffle();p.toggleShuffle();assert.deepEqual(p.queue.map(t=>t.id),['a']);
+});
+test('native playback sends URI queue without reading audio into JavaScript',async()=>{
+  let queue; window.AndroidBridge={setPlaybackQueue:s=>queue=JSON.parse(s),playbackCommand:()=>{},setEqualizer:()=>{}};
+  const p=await player({getAudioFile:()=>{throw Error('must not read native files');}});
+  await p.playTrack({id:'native',nativeUri:'content://music/1',title:'Native'});
+  assert.equal(queue.tracks[0].uri,'content://music/1'); assert.equal(p.audio.src,'');
+  p.applyNativeState({id:'native',playing:true,position:2000,duration:42000});assert.equal(p.getDuration(),42);assert.equal(p.isPlaying,true);
+});
+test('async directory scan handles nested audio/LRC and never traverses symlinks',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'playerium-'));
+  try { await fs.mkdir(path.join(root,'nested'));await fs.writeFile(path.join(root,'nested/song.mp3'),'a');await fs.writeFile(path.join(root,'nested/song.lrc'),'b');await fs.writeFile(path.join(root,'ignore.txt'),'c');
+    await fs.symlink(os.tmpdir(),path.join(root,'link')); const files=await scanDirectory(root);assert.equal(files.length,2);assert.equal(files[0].relativePath.startsWith('nested/'),true);
+    assert.equal(isInside(root,`${root}-outside/file`),false);assert.equal(isInside(root,path.join(root,'nested/song.mp3')),true);
+  } finally { await fs.rm(root,{recursive:true,force:true}); }
+});

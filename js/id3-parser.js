@@ -202,7 +202,7 @@ export class ID3Parser {
       } else if (["USLT", "ULT"].includes(frameId)) {
         result.lyrics = this.decodeLyrics(data);
       } else if (["APIC", "PIC"].includes(frameId) && !result.pictureUrl) {
-        result.pictureUrl = this.decodePicture(data);
+        result.pictureBlob = this.decodePicture(data);
       }
     } catch (e) {
       console.warn("Error decoding frame", frameId, e);
@@ -286,7 +286,7 @@ export class ID3Parser {
 
     const imgBytes = bytes.subarray(offset);
     const blob = new Blob([imgBytes], { type: mime });
-    return URL.createObjectURL(blob);
+    return blob;
   }
 
   /**
@@ -374,7 +374,7 @@ export class ID3Parser {
 
           const imgBytes = new Uint8Array(buffer, offset + pOff, dataLen);
           const blob = new Blob([imgBytes], { type: mime || "image/jpeg" });
-          result.pictureUrl = URL.createObjectURL(blob);
+          result.pictureBlob = blob;
         } catch (e) {
           console.warn("FLAC picture parse error", e);
         }

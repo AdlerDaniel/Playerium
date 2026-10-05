@@ -4,7 +4,7 @@
  */
 
 export class AutoUpdater {
-  static CURRENT_VERSION = "1.0.5";
+  static CURRENT_VERSION = "1.1.0";
   static DEFAULT_REPO = "AdlerDaniel/Playerium"; // User can configure in Settings
 
   constructor() {
@@ -20,7 +20,8 @@ export class AutoUpdater {
 
   setRepo(newRepo) {
     if (newRepo && newRepo.trim()) {
-      this.repo = newRepo.trim().replace(/^https:\/\/github\.com\//, "");
+      if (!/^(https:\/\/github\.com\/)?[\w.-]+\/[\w.-]+\/?$/.test(newRepo.trim())) throw new Error("Укажите репозиторий в формате владелец/название");
+      this.repo = newRepo.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/$/, "");
       localStorage.setItem("playerium_github_repo", this.repo);
     }
   }
@@ -53,6 +54,7 @@ export class AutoUpdater {
 
     try {
       const response = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(15000),
         headers: {
           "Accept": "application/vnd.github.v3+json"
         }
@@ -86,7 +88,7 @@ export class AutoUpdater {
             assetName = apkAsset.name;
           }
         } else {
-          const exeAsset = release.assets.find((a) => a.name.toLowerCase().endsWith(".exe"));
+          const exeAsset = release.assets.find((a) => /setup.*\.exe$/i.test(a.name));
           if (exeAsset) {
             downloadUrl = exeAsset.browser_download_url;
             assetName = exeAsset.name;

@@ -6,7 +6,7 @@
 import { ID3Parser } from "./id3-parser.js";
 
 const DB_NAME = "spotify_local_player_db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export class Library {
   constructor() {
@@ -17,6 +17,8 @@ export class Library {
     this.audioBlobs = new Map(); // id -> Blob/File (for active session playback)
     this.fileHandles = new Map(); // id -> FileSystemFileHandle (if supported)
     this.onLibraryChanged = null;
+    this.importChain = Promise.resolve();
+    this.coverUrls = new Map();
   }
 
   async init() {
@@ -33,6 +35,7 @@ export class Library {
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
+        if (!db.objectStoreNames.contains("files")) db.createObjectStore("files", { keyPath: "id" });
         if (!db.objectStoreNames.contains("tracks")) {
           const trackStore = db.createObjectStore("tracks", { keyPath: "id" });
           trackStore.createIndex("title", "title", { unique: false });
@@ -55,7 +58,10 @@ export class Library {
 
   async loadAll() {
     const tracks = await this.getAllFromStore("tracks");
-    tracks.forEach((t) => this.tracks.set(t.id, t));
+    tracks.forEach((t) => {
+      t.pictureUrl = t.pictureBlob ? this.coverURL(t.id, t.pictureBlob) : null;
+      this.tracks.set(t.id, t);
+    });
 
     const playlists = await this.getAllFromStore("playlists");
     playlists.forEach((p) => this.playlists.set(p.id, p));
@@ -79,25 +85,49 @@ export class Library {
     });
   }
 
+  coverURL(id, blob) {
+    if (this.coverUrls.has(id)) URL.revokeObjectURL(this.coverUrls.get(id));
+    const url = URL.createObjectURL(blob);
+    this.coverUrls.set(id, url);
+    return url;
+  }
+
   putInStore(storeName, item) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, "readwrite");
-      const store = tx.objectStore(storeName);
-      const req = store.put(item);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      const stored = storeName === "tracks" ? { ...item, pictureUrl: null } : item;
+      tx.objectStore(storeName).put(stored);
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => reject(tx.error || new Error("Не удалось сохранить библиотеку"));
     });
   }
 
   deleteFromStore(storeName, key) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, "readwrite");
-      const store = tx.objectStore(storeName);
-      const req = store.delete(key);
-      req.onsuccess = () => resolve();
+      tx.objectStore(storeName).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => reject(tx.error || new Error("Не удалось сохранить библиотеку"));
+    });
+  }
+
+  getFromStore(storeName, key) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(storeName, "readonly");
+      const req = tx.objectStore(storeName).get(key);
+      req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
   }
+
+  async getAudioFile(track) {
+    if (this.audioBlobs.has(track.id)) return this.audioBlobs.get(track.id);
+    const saved = await this.getFromStore("files", track.id);
+    if (saved?.handle) return saved.handle.getFile();
+    return saved?.blob || null;
+  }
+
+  async probeDuration(file) { return ID3Parser.probeDuration(file); }
 
   // --- Track Management ---
 
@@ -291,85 +321,13 @@ export class Library {
   /**
    * Process a list of File objects (from directory picker or drag-and-drop)
    */
-  async processFiles(files, folderName = "Локальная музыка", progressCallback = null) {
-    const audioExtensions = [".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"];
-    const lrcFiles = new Map(); // basename -> File
-    const audioFiles = [];
-
-    // First pass: categorize audio and lyrics
-    for (const file of files) {
-      const ext = "." + file.name.split(".").pop().toLowerCase();
-      const baseName = file.name.substring(0, file.name.lastIndexOf(".")).toLowerCase();
-      if (audioExtensions.includes(ext)) {
-        audioFiles.push(file);
-      } else if (ext === ".lrc" || ext === ".txt") {
-        lrcFiles.set(baseName, file);
-      }
-    }
-
-    if (audioFiles.length === 0) return 0;
-
-    let importedCount = 0;
-    const total = audioFiles.length;
-
-    for (let i = 0; i < audioFiles.length; i++) {
-      const file = audioFiles[i];
-      try {
-        const metadata = await ID3Parser.parseFile(file);
-        const trackId = "trk_" + Math.random().toString(36).substring(2, 9) + "_" + Date.now();
-
-        // Check if there is an external .lrc file matching this audio file
-        const baseName = file.name.substring(0, file.name.lastIndexOf(".")).toLowerCase();
-        if (lrcFiles.has(baseName) && !metadata.lyrics) {
-          try {
-            metadata.lyrics = await lrcFiles.get(baseName).text();
-          } catch {}
-        }
-
-        const track = {
-          id: trackId,
-          title: metadata.title,
-          artist: metadata.artist,
-          album: metadata.album,
-          year: metadata.year,
-          trackNo: metadata.trackNo,
-          duration: metadata.duration,
-          pictureUrl: metadata.pictureUrl,
-          lyrics: metadata.lyrics,
-          fileName: file.name,
-          fileSize: file.size,
-          folderName,
-          dateAdded: Date.now(),
-          liked: false
-        };
-
-        // Cache file blob for instant playback
-        this.audioBlobs.set(trackId, file);
-        this.tracks.set(trackId, track);
-        await this.putInStore("tracks", track);
-        importedCount++;
-
-        if (progressCallback) {
-          progressCallback(importedCount, total, file.name);
-        }
-      } catch (err) {
-        console.warn("Failed to process file:", file.name, err);
-      }
-    }
-
-    // Register folder
-    const folderId = "fld_" + Date.now();
-    const folderObj = {
-      id: folderId,
-      name: folderName,
-      count: importedCount,
-      dateAdded: Date.now()
-    };
-    this.folders.push(folderObj);
-    await this.putInStore("folders", folderObj);
-
-    if (this.onLibraryChanged) this.onLibraryChanged();
-    return importedCount;
+  async processFiles(files, folderName = "Локальная музыка", progressCallback = null, source = null) {
+    // File objects must stay available until committed, including after a restart.
+    const folderSource = source || `web:${folderName}`;
+    const descriptors = files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified,
+      relativePath: file.relativePath || file.webkitRelativePath || file.name, file, handle: file.handle }));
+    const result = await this.syncFolderToPlaylist(folderName, folderSource, descriptors, false, progressCallback);
+    return result.addedCount;
   }
 
   /**
@@ -418,13 +376,17 @@ export class Library {
   async clearAll() {
     this.tracks.clear();
     this.audioBlobs.clear();
+    for (const url of this.coverUrls.values()) URL.revokeObjectURL(url);
+    this.coverUrls.clear();
     this.playlists.clear();
     this.folders = [];
 
-    const tx = this.db.transaction(["tracks", "playlists", "folders"], "readwrite");
+    const tx = this.db.transaction(["tracks", "playlists", "folders", "files"], "readwrite");
     tx.objectStore("tracks").clear();
     tx.objectStore("playlists").clear();
     tx.objectStore("folders").clear();
+    tx.objectStore("files").clear();
+    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = tx.onabort = () => reject(tx.error); });
 
     if (this.onLibraryChanged) this.onLibraryChanged();
   }
@@ -436,99 +398,98 @@ export class Library {
     return this.getPlaylists().find((p) => p.folderSource === source);
   }
 
-  async syncFolderToPlaylist(folderName, folderSource, files, isAndroid = false) {
-    let playlist = this.findPlaylistByFolderSource(folderSource);
-    let isNewPlaylist = false;
-
-    if (!playlist) {
-      isNewPlaylist = true;
-      const id = "pl_fld_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
-      playlist = {
-        id,
-        name: folderName || "Музыкальная папка",
-        description: `Авто-плейлист папки: ${folderName}`,
-        trackIds: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        coverUrl: null,
-        isFolderPlaylist: true,
-        folderSource: folderSource,
-        isAndroid: isAndroid
-      };
-      this.playlists.set(id, playlist);
-      await this.putInStore("playlists", playlist);
-    }
-
-    let addedCount = 0;
-    const existingTracks = this.getTracks();
-
-    for (const f of files) {
-      let track = existingTracks.find((t) => {
-        if (t.filePath && f.fullPath && t.filePath === f.fullPath) return true;
-        if (t.nativeUri && f.uri && t.nativeUri === f.uri) return true;
-        if (t.fileName === f.name && t.fileSize === f.size) return true;
-        return false;
-      });
-
-      if (!track) {
-        let rawName = f.name.replace(/\.[^/.]+$/, "");
-        let artist = "Неизвестный исполнитель";
-        let title = rawName;
-        if (rawName.includes(" - ")) {
-          const parts = rawName.split(" - ");
-          artist = parts[0].trim();
-          title = parts.slice(1).join(" - ").trim();
-        }
-
-        const trackId = "trk_fld_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8);
-        track = {
-          id: trackId,
-          title: title,
-          artist: artist,
-          album: folderName || "Локальный альбом",
-          year: "",
-          trackNo: "",
-          duration: 0,
-          pictureUrl: null,
-          lyrics: null,
-          fileName: f.name,
-          filePath: f.fullPath || null,
-          nativeUri: f.uri || null,
-          fileSize: f.size || 0,
-          folderName: folderName,
-          dateAdded: Date.now(),
-          liked: false
-        };
-
-        this.tracks.set(trackId, track);
-        await this.putInStore("tracks", track);
-        existingTracks.push(track);
-      }
-
-      if (!playlist.trackIds.includes(track.id)) {
-        playlist.trackIds.push(track.id);
-        addedCount++;
-      }
-    }
-
-    if (addedCount > 0 || isNewPlaylist) {
-      playlist.updatedAt = Date.now();
-      await this.putInStore("playlists", playlist);
-      if (this.onLibraryChanged) this.onLibraryChanged();
-    }
-
-    return { playlist, addedCount, isNewPlaylist };
+  syncFolderToPlaylist(...args) {
+    // Watcher events and manual imports cannot mutate the same playlist concurrently.
+    const result = this.importChain.catch(() => {}).then(() => this.importFolder(...args));
+    this.importChain = result;
+    return result;
   }
 
-  initFolderWatchers() {
-    for (const p of this.getPlaylists()) {
-      if (p.isFolderPlaylist && p.folderSource) {
-        if (window.electronAPI && window.electronAPI.watchFolder && !p.isAndroid) {
-          window.electronAPI.watchFolder(p.folderSource);
-        } else if (window.AndroidBridge && window.AndroidBridge.rescanFolder && p.isAndroid) {
-          window.AndroidBridge.rescanFolder(p.folderSource);
-        }
+  async importFolder(folderName, folderSource, files, isAndroid = false, progressCallback = null) {
+    const audio = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac)$/i.test(f.name));
+    const identity = f => f.fullPath || f.uri || `${folderSource}/${f.relativePath || f.name}`;
+    const lyricsKey = f => (f.relativePath || f.fullPath || f.uri || f.name).replace(/\.[^/.]+$/, "").toLowerCase();
+    const lyrics = new Map(files.filter(f => /\.lrc$/i.test(f.name)).map(f => [lyricsKey(f), f]));
+    let playlist = this.findPlaylistByFolderSource(folderSource);
+    const isNewPlaylist = !playlist;
+    if (!playlist) {
+      playlist = { id: `pl_fld_${crypto.randomUUID()}`, name: folderName, description: `Авто-плейлист папки: ${folderName}`,
+        trackIds: [], createdAt: Date.now(), updatedAt: Date.now(), coverUrl: null, isFolderPlaylist: true, folderSource, isAndroid };
+    }
+    const index = new Map(this.getTracks().map(t => [t.sourceKey || t.filePath || t.nativeUri, t]));
+    const ids = [];
+    let addedCount = 0;
+    let failedCount = 0;
+    for (let i = 0; i < audio.length; i++) {
+      const f = audio[i];
+      const key = identity(f);
+      let track = index.get(key);
+      const changed = !track || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
+      if (changed) {
+        const cleanName = f.name.replace(/\.[^/.]+$/, "");
+        const parts = cleanName.split(" - ");
+        let metadata = { title: parts.length > 1 ? parts.slice(1).join(" - ") : cleanName,
+          artist: parts.length > 1 ? parts[0] : "Неизвестный исполнитель", album: folderName, duration: 0 };
+        let parsed = true;
+        try {
+          if (f.file) metadata = { ...metadata, ...await ID3Parser.parseFile(f.file) };
+          else if (f.fullPath && window.electronAPI) {
+            const native = await window.electronAPI.getMetadata(f.fullPath);
+            for (const [k,v] of Object.entries(native)) if (v !== undefined && v !== null && v !== "") metadata[k] = v;
+            if (native.picture) metadata.pictureBlob = new Blob([native.picture.data], { type: native.picture.type });
+          } else if (f.metadata) {
+            for (const [k,v] of Object.entries(f.metadata)) if (v !== undefined && v !== null && v !== "") metadata[k] = v;
+            if (f.metadata.pictureBase64) {
+              const bytes = Uint8Array.from(atob(f.metadata.pictureBase64), c => c.charCodeAt(0));
+              metadata.pictureBlob = new Blob([bytes], { type: "image/jpeg" });
+            }
+          }
+          const lrc = lyrics.get(lyricsKey(f));
+          if (lrc) metadata.lyrics = lrc.file ? await lrc.file.text() : await window.electronAPI.readLyrics(lrc.fullPath);
+        } catch (error) { parsed = false; failedCount++; console.warn("Metadata import failed:", f.name, error); }
+        const id = track?.id || `trk_${crypto.randomUUID()}`;
+        const previous = track;
+        track = { ...metadata, id, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
+          sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
+          liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, unavailable: false };
+        delete track.picture; delete track.pictureBase64;
+        if (track.pictureBlob) track.pictureUrl = this.coverURL(id, track.pictureBlob);
+        else track.pictureUrl = null;
+        // Never store ephemeral object URLs produced by the parser.
+        if (metadata.pictureUrl) URL.revokeObjectURL(metadata.pictureUrl);
+        if (f.file) await this.putInStore("files", { id, ...(f.handle ? { handle: f.handle } : { blob: f.file }) });
+        await this.putInStore("tracks", track);
+        this.tracks.set(id, track); index.set(key, track);
+      } else if (track.unavailable) {
+        track.unavailable = false; await this.putInStore("tracks", track);
       }
+      if (!playlist.trackIds.includes(track.id)) addedCount++;
+      ids.push(track.id);
+      progressCallback?.(i + 1, audio.length, f.name);
+      if (i % 20 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    // Preserve IDs/likes/manual playlists, but remove disappeared files from the folder playlist.
+    for (const id of playlist.trackIds.filter(id => !ids.includes(id))) {
+      const t = this.tracks.get(id);
+      if (t) { t.unavailable = true; await this.putInStore("tracks", t); }
+    }
+    playlist.trackIds = [...new Set(ids)];
+    playlist.updatedAt = Date.now();
+    await this.putInStore("playlists", playlist);
+    this.playlists.set(playlist.id, playlist);
+    this.onLibraryChanged?.();
+    return { playlist, addedCount, failedCount, isNewPlaylist };
+  }
+
+  async initFolderWatchers() {
+    for (const p of this.getPlaylists()) {
+      if (!p.isFolderPlaylist || !p.folderSource) continue;
+      try {
+        if (window.electronAPI && !p.isAndroid && !p.folderSource.startsWith("web:")) {
+          const files = await window.electronAPI.watchFolder(p.folderSource);
+          await this.syncFolderToPlaylist(p.name, p.folderSource, files);
+        } else if (window.AndroidBridge && p.isAndroid) window.AndroidBridge.rescanFolder(p.folderSource);
+      } catch (error) { this.onAccessError?.(p, error); }
     }
   }
 }

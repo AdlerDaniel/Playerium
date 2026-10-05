@@ -3,13 +3,20 @@
  * Coordinates HTML5 Audio, Web Audio API, Equalizer, Queuing, Shuffle, and Repeat.
  */
 
+import { NativeEqualizer } from "./native-equalizer.js";
 import { Equalizer } from "./equalizer.js";
 
 export class AudioPlayer {
   constructor(library) {
     this.library = library;
     this.audio = new Audio();
-    this.audio.preload = "auto";
+    this.audio.preload = "metadata";
+    this.playRequest = 0;
+    this.sourceUrl = null;
+    this.nativePlayback = false;
+    this.onError = null;
+    this.failedTracks = new Set();
+    window.onNativePlayerState = state => this.applyNativeState(state);
 
     // Web Audio API context & nodes
     this.audioCtx = null;
@@ -48,6 +55,7 @@ export class AudioPlayer {
   }
 
   initWebAudio() {
+    if (window.AndroidBridge?.setEqualizer) { this.equalizer ||= new NativeEqualizer(); return; }
     if (this.isWebAudioInitialized) return;
     try {
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
@@ -56,6 +64,7 @@ export class AudioPlayer {
       this.gainNode.gain.value = this.volume;
 
       this.equalizer = new Equalizer(this.audioCtx);
+      this.audio.volume = 1;
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
 
       // Graph: source -> equalizer input -> equalizer output -> gainNode -> destination
@@ -95,11 +104,7 @@ export class AudioPlayer {
       this.handleTrackEnded();
     });
 
-    this.audio.addEventListener("error", (e) => {
-      console.error("Audio playback error:", e);
-      // Try next track if current fails
-      this.next();
-    });
+    this.audio.addEventListener("error", () => this.handlePlaybackError("Не удалось воспроизвести файл. Проверьте доступ к папке."));
   }
 
   notifyAndroidPlayback(isPlaying) {
@@ -129,7 +134,7 @@ export class AudioPlayer {
     navigator.mediaSession.setActionHandler("previoustrack", () => this.prev());
     navigator.mediaSession.setActionHandler("nexttrack", () => this.next());
     navigator.mediaSession.setActionHandler("seekto", (details) => {
-      if (details.seekTime) this.seekToTime(details.seekTime);
+      if (Number.isFinite(details.seekTime)) this.seekToTime(details.seekTime);
     });
   }
 
@@ -152,11 +157,18 @@ export class AudioPlayer {
 
   async playTrack(track, queueIndex = 0, newQueue = null, context = null) {
     if (!track) return;
+    const request = ++this.playRequest;
+    this.audio.pause();
+    this.audio.removeAttribute("src");
+    this.audio.load();
+    if (this.sourceUrl?.startsWith("blob:")) URL.revokeObjectURL(this.sourceUrl);
+    this.sourceUrl = null;
 
     // Ensure AudioContext is resumed on user gesture
     this.initWebAudio();
     if (this.audioCtx && this.audioCtx.state === "suspended") {
       await this.audioCtx.resume();
+      if (request !== this.playRequest) return;
     }
 
     if (newQueue) {
@@ -182,57 +194,87 @@ export class AudioPlayer {
 
     this.currentTrack = track;
 
-    // Get playable audio URL (either from memory blob or created object URL)
-    let audioBlob = this.library.audioBlobs.get(track.id);
-
-    // If not in memory, try loading from PC file path or Android URI
-    if (!audioBlob && track.filePath && window.electronAPI && window.electronAPI.readFile) {
-      try {
-        const buffer = await window.electronAPI.readFile(track.filePath);
-        if (buffer) {
-          audioBlob = new Blob([buffer]);
-          this.library.audioBlobs.set(track.id, audioBlob);
-        }
-      } catch (e) {
-        console.warn("Failed to load file from disk:", e);
-      }
+    this.nativePlayback = !!(track.nativeUri && window.AndroidBridge?.setPlaybackQueue && this.queue.every(t => t.nativeUri));
+    if (this.nativePlayback) {
+      this.syncNativeQueue(true);
+      this.equalizer?.sync?.();
+      this.onTrackChange?.(track);
+      this.onQueueChange?.(this.queue, this.queueIndex);
+      return;
     }
-    if (!audioBlob && track.nativeUri && window.AndroidBridge && window.AndroidBridge.readFileAsBase64) {
-      try {
-        const b64 = window.AndroidBridge.readFileAsBase64(track.nativeUri);
-        if (b64) {
-          const byteCharacters = atob(b64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          audioBlob = new Blob([byteArray], { type: "audio/mpeg" });
-          this.library.audioBlobs.set(track.id, audioBlob);
-        }
-      } catch (e) {
-        console.warn("Failed to load file from Android URI:", e);
-      }
-    }
-
-    if (!audioBlob) {
-      console.warn("Audio file data not loaded in session for track:", track.title);
-    } else {
-      const srcUrl = URL.createObjectURL(audioBlob);
-      this.audio.src = srcUrl;
-    }
-
+    window.AndroidBridge?.playbackCommand?.("stop", 0);
     try {
+      if (track.unavailable) throw new Error("Файл недоступен. Восстановите доступ к папке через «Добавить папку».");
+      let url;
+      if (track.filePath && window.electronAPI?.getAudioSource) url = await window.electronAPI.getAudioSource(track.filePath);
+      else {
+        const file = await this.library.getAudioFile(track);
+        if (request !== this.playRequest) return;
+        if (!file) throw new Error("Нет доступа к файлу. Добавьте папку заново, чтобы восстановить доступ.");
+        url = URL.createObjectURL(file);
+      }
+      if (request !== this.playRequest) { if (url?.startsWith("blob:")) URL.revokeObjectURL(url); return; }
+      this.sourceUrl = url;
+      this.audio.src = url;
       await this.audio.play();
-    } catch (e) {
-      console.warn("Playback could not start automatically:", e);
+      if (request !== this.playRequest) return;
+      this.failedTracks.clear();
+      this.updateMediaSessionMetadata(track);
+      this.onTrackChange?.(track);
+      this.onQueueChange?.(this.queue, this.queueIndex);
+    } catch (error) {
+      if (request !== this.playRequest) return;
+      this.audio.pause();
+      this.isPlaying = false;
+      this.onPlayStateChange?.(false);
+      this.onError?.(error.message || "Не удалось воспроизвести трек");
     }
+  }
 
-    this.updateMediaSessionMetadata(track);
-    this.notifyAndroidPlayback(true);
+  syncNativeQueue(play = false) {
+    if (!this.nativePlayback) return;
+    window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
+      title: t.title, artist: t.artist, album: t.album })), index: this.queueIndex, play,
+      repeat: this.repeatMode, volume: this.volume }));
+  }
 
-    if (this.onTrackChange) this.onTrackChange(track);
-    if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
+  applyNativeState(state) {
+    if (!state) return;
+    if (!this.nativePlayback && state.queue?.length && !this.currentTrack) {
+      this.queue = state.queue.map(id => this.library.getTrackById(id)).filter(Boolean);
+      if (this.queue.length) { this.originalQueue = [...this.queue]; this.nativePlayback = true; }
+    }
+    if (!this.nativePlayback) return;
+    const index = this.queue.findIndex(t => t.id === state.id);
+    if (index < 0) return;
+    if (this.currentTrack?.id !== state.id) {
+      this.queueIndex = index;
+      this.currentTrack = this.queue[index];
+      this.onTrackChange?.(this.currentTrack);
+      this.onQueueChange?.(this.queue, index);
+    }
+    if (this.isPlaying !== state.playing) {
+      this.isPlaying = state.playing;
+      this.onPlayStateChange?.(state.playing);
+    }
+    this.nativeTime = state.position / 1000;
+    this.nativeDuration = state.duration / 1000;
+    this.onTimeUpdate?.(this.nativeTime, this.nativeDuration);
+    if (state.error) this.onError?.(state.error);
+  }
+
+  getDuration() { return this.nativePlayback ? this.nativeDuration || this.currentTrack?.duration || 0 : this.audio.duration; }
+
+  handlePlaybackError(message) {
+    const id = this.currentTrack?.id;
+    if (!id || this.failedTracks.has(id)) { this.pause(); return; }
+    this.failedTracks.add(id);
+    this.onError?.(message);
+    if (this.failedTracks.size >= this.queue.length) { this.pause(); return; }
+    // Errors bypass repeat-one; never loop forever on broken tracks.
+    const next = this.queue.findIndex((t, i) => i > this.queueIndex && !this.failedTracks.has(t.id));
+    if (next >= 0) this.playTrack(this.queue[next], next);
+    else this.pause();
   }
 
   togglePlay() {
@@ -248,6 +290,7 @@ export class AudioPlayer {
   }
 
   play() {
+    if (this.nativePlayback) { window.AndroidBridge.playbackCommand("play", 0); return; }
     this.initWebAudio();
     if (this.audioCtx && this.audioCtx.state === "suspended") {
       this.audioCtx.resume();
@@ -256,17 +299,12 @@ export class AudioPlayer {
   }
 
   pause() {
+    if (this.nativePlayback) window.AndroidBridge.playbackCommand("pause", 0);
     this.audio.pause();
   }
 
   next() {
     if (this.queue.length === 0) return;
-
-    if (this.repeatMode === "one" && this.currentTrack) {
-      this.seek(0);
-      this.play();
-      return;
-    }
 
     let nextIndex = this.queueIndex + 1;
     if (nextIndex >= this.queue.length) {
@@ -287,7 +325,7 @@ export class AudioPlayer {
     if (this.queue.length === 0) return;
 
     // If more than 3 seconds in, restart current track
-    if (this.audio.currentTime > 3) {
+    if ((this.nativePlayback ? this.nativeTime : this.audio.currentTime) > 3) {
       this.seek(0);
       return;
     }
@@ -311,6 +349,7 @@ export class AudioPlayer {
   }
 
   seek(percent) {
+    if (this.nativePlayback) { this.seekToTime(this.getDuration() * percent / 100); return; }
     if (this.audio.duration) {
       const time = (percent / 100) * this.audio.duration;
       this.audio.currentTime = time;
@@ -318,6 +357,7 @@ export class AudioPlayer {
   }
 
   seekToTime(seconds) {
+    if (this.nativePlayback) { window.AndroidBridge.playbackCommand("seek", Math.max(0, seconds) * 1000); return; }
     if (this.audio.duration) {
       this.audio.currentTime = Math.max(0, Math.min(seconds, this.audio.duration));
     }
@@ -325,7 +365,8 @@ export class AudioPlayer {
 
   setVolume(val) {
     const v = Math.max(0, Math.min(1, parseFloat(val)));
-    this.volume = v;
+    this.volume = Number.isFinite(v) ? v : 0.8;
+    if (this.nativePlayback) window.AndroidBridge.playbackCommand("volume", this.volume);
     this.isMuted = v === 0;
 
     if (this.gainNode) {
@@ -362,6 +403,8 @@ export class AudioPlayer {
         : 0;
     }
 
+    this.syncNativeQueue();
+    this.savePreferences();
     if (this.onShuffleChange) this.onShuffleChange(this.isShuffle);
     if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
   }
@@ -393,6 +436,7 @@ export class AudioPlayer {
     } else {
       this.repeatMode = "off";
     }
+    if (this.nativePlayback) window.AndroidBridge.playbackCommand("repeat", ["off", "one", "all"].indexOf(this.repeatMode));
     if (this.onRepeatChange) this.onRepeatChange(this.repeatMode);
     this.savePreferences();
   }
@@ -402,6 +446,7 @@ export class AudioPlayer {
   addToQueue(track) {
     this.queue.push(track);
     this.originalQueue.push(track);
+    this.syncNativeQueue();
     if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
   }
 
@@ -409,22 +454,41 @@ export class AudioPlayer {
     const insertIdx = this.queueIndex + 1;
     this.queue.splice(insertIdx, 0, track);
     this.originalQueue.splice(insertIdx, 0, track);
+    this.syncNativeQueue();
     if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
   }
 
   removeFromQueue(index) {
-    if (index >= 0 && index < this.queue.length) {
-      this.queue.splice(index, 1);
-      if (index < this.queueIndex) {
-        this.queueIndex--;
-      }
-      if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
+    if (index < 0 || index >= this.queue.length) return;
+    const [removed] = this.queue.splice(index, 1);
+    const originalIndex = this.originalQueue.findIndex(t => t.id === removed.id);
+    if (originalIndex >= 0) this.originalQueue.splice(originalIndex, 1);
+    if (index < this.queueIndex) this.queueIndex--;
+    else if (index === this.queueIndex) {
+      if (this.queue.length) { this.queueIndex = Math.min(index, this.queue.length - 1); this.playTrack(this.queue[this.queueIndex], this.queueIndex); }
+      else this.stop();
     }
+    this.syncNativeQueue();
+    this.onQueueChange?.(this.queue, this.queueIndex);
   }
 
   clearUpcomingQueue() {
     this.queue = this.queue.slice(0, this.queueIndex + 1);
-    if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
+    const keep = new Set(this.queue.map(t => t.id));
+    this.originalQueue = this.originalQueue.filter(t => keep.has(t.id));
+    this.syncNativeQueue();
+    this.onQueueChange?.(this.queue, this.queueIndex);
+  }
+
+  stop() {
+    ++this.playRequest;
+    this.pause();
+    window.AndroidBridge?.playbackCommand?.("stop", 0);
+    this.audio.removeAttribute("src"); this.audio.load();
+    if (this.sourceUrl?.startsWith("blob:")) URL.revokeObjectURL(this.sourceUrl);
+    this.sourceUrl = null; this.nativePlayback = false; this.currentTrack = null;
+    this.queue = []; this.originalQueue = []; this.queueIndex = -1; this.isPlaying = false;
+    this.onPlayStateChange?.(false); this.onQueueChange?.([], -1);
   }
 
   // --- Preferences Persistence ---
@@ -444,10 +508,12 @@ export class AudioPlayer {
       const data = localStorage.getItem("sp_audio_prefs");
       if (data) {
         const parsed = JSON.parse(data);
-        if (typeof parsed.volume === "number") this.volume = parsed.volume;
-        if (parsed.repeatMode) this.repeatMode = parsed.repeatMode;
+        if (typeof parsed.volume === "number") this.volume = Math.max(0, Math.min(1, parsed.volume));
+        if (["off", "all", "one"].includes(parsed.repeatMode)) this.repeatMode = parsed.repeatMode;
         if (typeof parsed.isShuffle === "boolean") this.isShuffle = parsed.isShuffle;
       }
     } catch {}
+    this.audio.volume = this.volume;
+    this.isMuted = this.volume === 0;
   }
 }

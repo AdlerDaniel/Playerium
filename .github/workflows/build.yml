@@ -1,201 +1,125 @@
-name: Build Playerium (EXE and APK)
-
+name: Verify and build Playerium
 on:
+  pull_request:
   push:
-    branches: [ "main", "master" ]
-    tags: [ "v*" ]
+    branches: [main, master]
+    tags: ['v*']
   workflow_dispatch:
-
 permissions:
-  contents: write
-
+  contents: read
+concurrency:
+  group: playerium-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
-  build-windows-exe:
-    name: Build Windows EXE
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup Python for Icon Generation
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Generate App Icons
-        run: |
-          python -m pip install pillow
-          python scripts/generate_icons.py
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Build Windows Installer & Portable EXE
-        shell: pwsh
-        run: |
-          $maxRetries = 2
-          for ($i = 1; $i -le $maxRetries; $i++) {
-            Write-Host "Build attempt $i of $maxRetries..."
-            npm run build:win
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "Windows build succeeded!"
-              break
-            }
-            if ($i -eq $maxRetries) {
-              Write-Error "Windows build failed after $maxRetries attempts."
-              exit 1
-            }
-            Start-Sleep -Seconds 5
-          }
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows EXE Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Playerium-Windows-EXE
-          path: dist/*.exe
-
-  build-android-apk:
-    name: Build Android APK
+  verify:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          distribution: 'temurin'
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node -e "if (process.env.GITHUB_REF_NAME !== 'v' + require('./package.json').version) process.exit(1)"
+  windows:
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pillow==11.1.0
+      - run: python scripts/generate_icons.py
+      - run: npm ci
+      - run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Playerium-Windows
+          path: dist/*.exe
+          if-no-files-found: error
+  android:
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      PLAYERIUM_STORE_PASSWORD: ${{ secrets.PLAYERIUM_STORE_PASSWORD }}
+      PLAYERIUM_KEY_PASSWORD: ${{ secrets.PLAYERIUM_KEY_PASSWORD }}
+      PLAYERIUM_KEY_ALIAS: ${{ secrets.PLAYERIUM_KEY_ALIAS }}
+      PLAYERIUM_KEYSTORE_BASE64: ${{ secrets.PLAYERIUM_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
           java-version: '17'
-
-      - name: Setup Python for Icon Generation
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-
-      - name: Generate App Icons
-        run: |
-          python3 -m pip install pillow
-          python3 scripts/generate_icons.py
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+          python-version: '3.12'
+      - run: python -m pip install pillow==11.1.0
+      - run: python scripts/generate_icons.py
+      - run: npm run android:assets
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.4'
-
-      - name: Sync Web Assets to Android
+      - name: Verify debug build and Android lint
+        run: gradle -p android assembleDebug lintDebug --no-daemon
+      - name: Restore existing release key
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
-          mkdir -p android/app/src/main/assets
-          cp -r index.html css js assets android/app/src/main/assets/
-
-      - name: Setup Signing Keystore
+          test -n "$PLAYERIUM_KEYSTORE_BASE64" || { echo 'Existing signing secrets must be configured before release'; exit 1; }
+          printf '%s' "$PLAYERIUM_KEYSTORE_BASE64" | base64 --decode > android/app/playerium.keystore
+      - name: Build signed release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gradle -p android assembleRelease --no-daemon
+      - name: Name release APK
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
-          if [ -f "android/app/playerium.keystore.b64" ]; then
-            echo "Decoding existing permanent keystore..."
-            base64 -d android/app/playerium.keystore.b64 > android/app/playerium.keystore
-          elif [ -f "android/app/playerium.keystore" ]; then
-            echo "Keystore already present."
-          else
-            echo "Generating permanent release keystore..."
-            keytool -genkeypair -v \
-              -keystore android/app/playerium.keystore \
-              -alias playerium \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass playerium123 \
-              -keypass playerium123 \
-              -dname "CN=Playerium, OU=Music, O=Playerium, L=City, S=State, C=US"
-            
-            base64 -w 0 android/app/playerium.keystore > android/app/playerium.keystore.b64
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add android/app/playerium.keystore.b64
-            git commit -m "chore: persist permanent signing keystore [skip ci]" || true
-            git push origin HEAD:${{ github.ref_name }} || true
-          fi
-
-      - name: Build Android APK
-        run: |
-          cd android
-          gradle wrapper --gradle-version 8.4
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace || ./gradlew assembleDebug --no-daemon --stacktrace
-          mkdir -p ../apk-dist
-          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            cp app/build/outputs/apk/release/app-release.apk ../apk-dist/Playerium-1.0.5.apk
-          elif [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-            cp app/build/outputs/apk/debug/app-debug.apk ../apk-dist/Playerium-1.0.5.apk
-          fi
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+          mkdir -p apk-dist
+          cp android/app/build/outputs/apk/release/app-release.apk "apk-dist/Playerium-${GITHUB_REF_NAME#v}.apk"
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          name: Playerium-Android-APK
-          path: apk-dist/Playerium-1.0.5.apk
-
-  publish-release:
-    name: Publish GitHub Release
-    needs: [build-windows-exe, build-android-apk]
+          name: Playerium-Android
+          path: apk-dist/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        with:
+          name: Playerium-Android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+  release:
+    needs: [windows, android]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
-
+    permissions:
+      contents: write
     steps:
-      - name: Create release directory
-        run: mkdir -p release-assets
-
-      - name: Download Windows EXE Artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: Playerium-Windows-EXE
+          pattern: Playerium-*
+          merge-multiple: true
           path: release-assets
-
-      - name: Download Android APK Artifact
-        uses: actions/download-artifact@v4
+      - name: Calculate checksums
+        run: cd release-assets && sha256sum *.exe *.apk > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
         with:
-          name: Playerium-Android-APK
-          path: release-assets
-
-      - name: Display Release Files
-        run: ls -la release-assets
-
-      - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.5
-          name: "Playerium v1.0.5"
-          draft: false
-          prerelease: false
-          body: |
-            ## 🎵 Playerium v1.0.5 — Android Auto-Updater & Permanent Keystore Signing
-
-            Обновление с исправлением конфликта пакетов на Android, детальным отображением процентов загрузки и кнопкой установки в один клик.
-
-            ### 📦 Файлы для установки:
-            - 💻 **Windows Установщик (Setup)**: `Playerium Setup 1.0.5.exe`
-            - 🚀 **Windows Портативная версия (Portable)**: `Playerium 1.0.5.exe`
-            - 📱 **Android Приложение**: `Playerium-1.0.5.apk`
-
-            ### ✨ Что нового в v1.0.5:
-            - 🔑 **Постоянная цифровая подпись APK (Permanent Keystore)**:
-              - Устранена системная ошибка Android «Пакет конфликтует с существующим пакетом» (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Все последующие релизы подписываются единым постоянным сертификатом.
-              - *Важно для существующих пользователей:* Если ранее была установлена версия v1.0.4 или ниже, удалите её перед установкой v1.0.5 (так как предыдущие тестовые сборки имели временные случайные ключи). Начиная с v1.0.5 и далее, все обновления будут устанавливаться поверх без удаления данных!
-            - 📊 **Реальный индикатор прогресса в процентах**:
-              - Встроен опрос DownloadManager: полоса загрузки в реальном времени отображает точный процент (0% – 100%) и объем скачанных мегабайт (например, `14.2 МБ из 28.5 МБ`).
-            - 📲 **Интеллектуальная кнопка «Установить обновление»**:
-              - По завершении скачивания кнопка «Скачать» заменяется на акцентную зеленую кнопку «Установить обновление».
-              - Нажатие на кнопку запускает системный установщик APK.
-              - Добавлена автоматическая обработка разрешения на установку из неизвестных источников (`REQUEST_INSTALL_PACKAGES` / `canRequestPackageInstalls`) с перенаправлением в настройки при первом запуске.
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             release-assets/*.exe
             release-assets/*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            release-assets/SHA256SUMS.txt

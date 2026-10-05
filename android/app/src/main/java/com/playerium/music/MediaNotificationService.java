@@ -1,258 +1,160 @@
 package com.playerium.music;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.os.Build;
-import android.os.IBinder;
-import android.support.v4.media.MediaMetadataCompat;
-import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v4.media.session.PlaybackStateCompat;
-import android.util.Base64;
+import android.media.audiofx.Equalizer;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import androidx.annotation.Nullable;
-import androidx.core.app.NotificationCompat;
-import androidx.media.app.NotificationCompat.MediaStyle;
+import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.Player;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaSessionService;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.List;
 
-public class MediaNotificationService extends Service {
-    public static final String CHANNEL_ID = "playerium_media_channel";
-    public static final int NOTIFICATION_ID = 4040;
+/** Owns audio, queue, audio focus and lock-screen controls independently of Activity. */
+public class MediaNotificationService extends MediaSessionService {
+    private static volatile String stateSnapshot = "{}";
+    private ExoPlayer player;
+    private MediaSession session;
+    private Equalizer equalizer;
+    private String equalizerSettings;
+    private String error;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable publishState = new Runnable() {
+        @Override public void run() {
+            MainActivity activity = MainActivity.getInstance();
+            JSONObject data = state();
+            stateSnapshot = data.toString();
+            if (activity != null) activity.sendPlayerState(data);
+            error = null;
+            handler.postDelayed(this, 500);
+        }
+    };
 
-    public static final String ACTION_PLAY_PAUSE = "com.playerium.music.ACTION_PLAY_PAUSE";
-    public static final String ACTION_NEXT = "com.playerium.music.ACTION_NEXT";
-    public static final String ACTION_PREV = "com.playerium.music.ACTION_PREV";
-    public static final String ACTION_UPDATE_STATE = "com.playerium.music.ACTION_UPDATE_STATE";
-
-    public static final String EXTRA_TITLE = "extra_title";
-    public static final String EXTRA_ARTIST = "extra_artist";
-    public static final String EXTRA_ALBUM = "extra_album";
-    public static final String EXTRA_IS_PLAYING = "extra_is_playing";
-    public static final String EXTRA_ARTWORK_BASE64 = "extra_artwork_base64";
-
-    private MediaSessionCompat mediaSession;
-    private NotificationManager notificationManager;
-    private String currentTitle = "Playerium";
-    private String currentArtist = "Музыкальный плеер";
-    private String currentAlbum = "";
-    private boolean isPlaying = false;
-    private Bitmap currentCover = null;
-
-    @Override
-    public void onCreate() {
+    @Override public void onCreate() {
         super.onCreate();
-        notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        createNotificationChannel();
 
-        mediaSession = new MediaSessionCompat(this, "PlayeriumMediaSession");
-        mediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
-        mediaSession.setActive(true);
-
-        mediaSession.setCallback(new MediaSessionCompat.Callback() {
-            @Override
-            public void onPlay() {
-                handleMediaAction("playPause");
+        player = new ExoPlayer.Builder(this).build();
+        player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true);
+        player.setHandleAudioBecomingNoisy(true);
+        player.setWakeMode(C.WAKE_MODE_LOCAL);
+        player.addListener(new Player.Listener() {
+            @Override public void onPlayerError(PlaybackException exception) {
+                error = "Не удалось воспроизвести файл. Проверьте доступ к папке.";
+                player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
-
-            @Override
-            public void onPause() {
-                handleMediaAction("playPause");
-            }
-
-            @Override
-            public void onSkipToNext() {
-                handleMediaAction("next");
-            }
-
-            @Override
-            public void onSkipToPrevious() {
-                handleMediaAction("prev");
-            }
+            @Override public void onAudioSessionIdChanged(int id) { configureEqualizer(id); }
         });
+        session = new MediaSession.Builder(this, player).build();
+        handler.post(publishState);
     }
 
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "Воспроизведение музыки Playerium",
-                NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("Управление воспроизведением музыки в шторке уведомлений");
-            channel.setShowBadge(false);
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-            if (notificationManager != null) {
-                notificationManager.createNotificationChannel(channel);
+    @Nullable @Override public MediaSession onGetSession(MediaSession.ControllerInfo controller) { return session; }
+
+    @Override public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
+        int result = super.onStartCommand(intent, flags, startId);
+        if (intent != null) {
+            try {
+                if (intent.hasExtra("queue")) setQueue(new JSONObject(intent.getStringExtra("queue")));
+                if (intent.hasExtra("command")) command(intent.getStringExtra("command"), intent.getDoubleExtra("value", 0));
+                if (intent.hasExtra("equalizer")) { equalizerSettings = intent.getStringExtra("equalizer"); configureEqualizer(player.getAudioSessionId()); }
+            } catch (Exception e) { error = "Не удалось обновить очередь воспроизведения"; }
+        }
+        return result;
+    }
+
+    private void setQueue(JSONObject data) throws Exception {
+        JSONArray tracks = data.getJSONArray("tracks");
+        List<MediaItem> items = new ArrayList<>();
+        for (int i = 0; i < tracks.length(); i++) {
+            JSONObject t = tracks.getJSONObject(i);
+            Uri uri = Uri.parse(t.getString("uri"));
+            if (!MainActivity.hasMusicPermission(this, uri)) throw new SecurityException("Unauthorized URI");
+            MediaMetadata metadata = new MediaMetadata.Builder().setTitle(t.optString("title"))
+                .setArtist(t.optString("artist")).setAlbumTitle(t.optString("album")).build();
+            items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
+        }
+        if (items.isEmpty()) { player.stop(); player.clearMediaItems(); stopSelf(); return; }
+        boolean play = data.optBoolean("play");
+        String currentId = player.getCurrentMediaItem() == null ? "" : player.getCurrentMediaItem().mediaId;
+        int index = Math.max(0, Math.min(items.size() - 1, data.optInt("index")));
+        long position = 0;
+        if (!play) {
+            for (int i = 0; i < items.size(); i++) if (items.get(i).mediaId.equals(currentId)) { index = i; position = player.getCurrentPosition(); break; }
+        }
+        boolean wasPlaying = player.getPlayWhenReady();
+        player.setMediaItems(items, index, position);
+        player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
+        player.setVolume((float)data.optDouble("volume", 0.8));
+        player.prepare();
+        player.setPlayWhenReady(play || wasPlaying);
+    }
+
+    private void command(String command, double value) {
+        switch (command) {
+            case "play": player.play(); break;
+            case "pause": player.pause(); break;
+            case "stop": player.stop(); player.clearMediaItems(); stopSelf(); break;
+            case "seek": player.seekTo(Math.max(0, (long)value)); break;
+            case "volume": player.setVolume((float)Math.max(0, Math.min(1, value))); break;
+            case "repeat": player.setRepeatMode((int)value); break;
+        }
+    }
+
+    private void configureEqualizer(int sessionId) {
+        try {
+            if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId == 0) return;
+            if (equalizer != null) equalizer.release();
+            equalizer = new Equalizer(0, sessionId);
+            if (equalizerSettings == null) return;
+            JSONObject settings = new JSONObject(equalizerSettings);
+            JSONArray gains = settings.getJSONArray("gains");
+            int[] frequencies = {32,64,125,250,500,1000,2000,4000,8000,16000};
+            short[] range = equalizer.getBandLevelRange();
+            for (short band = 0; band < equalizer.getNumberOfBands(); band++) {
+                int hz = equalizer.getCenterFreq(band) / 1000;
+                int nearest = 0;
+                for (int i = 1; i < frequencies.length; i++) if (Math.abs(Math.log((double)hz / frequencies[i])) < Math.abs(Math.log((double)hz / frequencies[nearest]))) nearest = i;
+                int level = (int)(gains.optDouble(nearest, 0) * 100);
+                equalizer.setBandLevel(band, (short)Math.max(range[0], Math.min(range[1], level)));
             }
-        }
+            equalizer.setEnabled(settings.optBoolean("enabled", true));
+        } catch (Exception ignored) { /* Audio effects are optional on some devices. */ }
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null || intent.getAction() == null) {
-            return START_STICKY;
-        }
-
-        String action = intent.getAction();
-        switch (action) {
-            case ACTION_PLAY_PAUSE:
-                handleMediaAction("playPause");
-                break;
-            case ACTION_NEXT:
-                handleMediaAction("next");
-                break;
-            case ACTION_PREV:
-                handleMediaAction("prev");
-                break;
-            case ACTION_UPDATE_STATE:
-                currentTitle = intent.getStringExtra(EXTRA_TITLE);
-                if (currentTitle == null || currentTitle.trim().isEmpty()) {
-                    currentTitle = "Неизвестный трек";
-                }
-                currentArtist = intent.getStringExtra(EXTRA_ARTIST);
-                if (currentArtist == null || currentArtist.trim().isEmpty()) {
-                    currentArtist = "Неизвестный исполнитель";
-                }
-                currentAlbum = intent.getStringExtra(EXTRA_ALBUM);
-                isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, false);
-
-                String base64Art = intent.getStringExtra(EXTRA_ARTWORK_BASE64);
-                if (base64Art != null && !base64Art.isEmpty()) {
-                    try {
-                        String cleanBase64 = base64Art;
-                        if (cleanBase64.contains(",")) {
-                            cleanBase64 = cleanBase64.substring(cleanBase64.indexOf(",") + 1);
-                        }
-                        byte[] decodedBytes = Base64.decode(cleanBase64, Base64.DEFAULT);
-                        currentCover = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
-                    } catch (Exception e) {
-                        currentCover = null;
-                    }
-                } else {
-                    currentCover = null;
-                }
-
-                updateMediaSessionState();
-                buildAndPostNotification();
-                break;
-        }
-
-        return START_STICKY;
+    private JSONObject state() {
+        JSONObject data = new JSONObject();
+        try {
+            data.put("id", player.getCurrentMediaItem() == null ? "" : player.getCurrentMediaItem().mediaId);
+            JSONArray queue = new JSONArray();
+            for (int i = 0; i < player.getMediaItemCount(); i++) queue.put(player.getMediaItemAt(i).mediaId);
+            data.put("queue", queue);
+            data.put("repeat", player.getRepeatMode());
+            data.put("playing", player.isPlaying()); data.put("position", player.getCurrentPosition());
+            data.put("duration", Math.max(0, player.getDuration()));
+            if (error != null) data.put("error", error);
+        } catch (Exception ignored) {}
+        return data;
     }
 
-    private void updateMediaSessionState() {
-        if (mediaSession == null) return;
+    public static String currentState() { return stateSnapshot; }
 
-        int state = isPlaying ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
-        long actions = PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE |
-                       PlaybackStateCompat.ACTION_SKIP_TO_NEXT | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
-                       PlaybackStateCompat.ACTION_PLAY_PAUSE;
-
-        mediaSession.setPlaybackState(
-            new PlaybackStateCompat.Builder()
-                .setActions(actions)
-                .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
-                .build()
-        );
-
-        MediaMetadataCompat.Builder metaBuilder = new MediaMetadataCompat.Builder()
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
-            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
-            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, currentAlbum);
-
-        if (currentCover != null) {
-            metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, currentCover);
-        }
-
-        mediaSession.setMetadata(metaBuilder.build());
+    @Override public void onTaskRemoved(Intent rootIntent) {
+        if (!player.getPlayWhenReady() || player.getMediaItemCount() == 0) stopSelf();
     }
-
-    private void buildAndPostNotification() {
-        Intent openAppIntent = new Intent(this, MainActivity.class);
-        openAppIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pendingOpenApp = PendingIntent.getActivity(
-            this, 0, openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
-        );
-
-        PendingIntent pendingPrev = createActionPendingIntent(ACTION_PREV, 1);
-        PendingIntent pendingPlayPause = createActionPendingIntent(ACTION_PLAY_PAUSE, 2);
-        PendingIntent pendingNext = createActionPendingIntent(ACTION_NEXT, 3);
-
-        int playPauseIcon = isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play;
-        String playPauseTitle = isPlaying ? "Пауза" : "Воспроизвести";
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(currentTitle)
-            .setContentText(currentArtist)
-            .setSubText(currentAlbum)
-            .setContentIntent(pendingOpenApp)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(isPlaying)
-            .setAutoCancel(false)
-            .addAction(android.R.drawable.ic_media_previous, "Назад", pendingPrev)
-            .addAction(playPauseIcon, playPauseTitle, pendingPlayPause)
-            .addAction(android.R.drawable.ic_media_next, "Вперед", pendingNext)
-            .setStyle(
-                new MediaStyle()
-                    .setMediaSession(mediaSession.getSessionToken())
-                    .setShowActionsInCompactView(0, 1, 2)
-            );
-
-        if (currentCover != null) {
-            builder.setLargeIcon(currentCover);
-        }
-
-        Notification notification = builder.build();
-
-        if (isPlaying) {
-            startForeground(NOTIFICATION_ID, notification);
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_DETACH);
-            } else {
-                stopForeground(false);
-            }
-            if (notificationManager != null) {
-                notificationManager.notify(NOTIFICATION_ID, notification);
-            }
-        }
-    }
-
-    private PendingIntent createActionPendingIntent(String action, int requestCode) {
-        Intent intent = new Intent(this, MediaNotificationService.class);
-        intent.setAction(action);
-        return PendingIntent.getService(
-            this, requestCode, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0)
-        );
-    }
-
-    private void handleMediaAction(String command) {
-        MainActivity activity = MainActivity.getInstance();
-        if (activity != null) {
-            activity.sendMediaCommand(command);
-        }
-    }
-
-    @Override
-    public void onDestroy() {
-        if (mediaSession != null) {
-            mediaSession.setActive(false);
-            mediaSession.release();
-        }
-        stopForeground(true);
+    @Override public void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        if (equalizer != null) equalizer.release();
+        session.release(); player.release(); stateSnapshot = "{}";
         super.onDestroy();
-    }
-
-    @Nullable
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
     }
 }

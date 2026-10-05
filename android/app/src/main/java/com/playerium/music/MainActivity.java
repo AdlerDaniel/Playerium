@@ -17,6 +17,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.Base64;
+import android.media.MediaMetadataRetriever;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.content.UriPermission;
+import androidx.webkit.WebViewAssetLoader;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -56,7 +63,8 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
                 long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-                if (id != -1 && (activeDownloadId == -1 || id == activeDownloadId)) {
+                if (id > 0 && id == activeDownloadId) {
+                    if (!isSuccessfulDownload(id)) return;
                     activeDownloadId = id;
                     stopDownloadProgressMonitor();
                     if (!isDownloadNotified) {
@@ -85,29 +93,29 @@ public class MainActivity extends AppCompatActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
 
         // Add JavaScript Interface for Android Media Session, Folder Picker, and Updater
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
+        final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
         webView.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return loader.shouldInterceptRequest(request.getUrl());
+            }
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url != null && !url.startsWith("file:///android_asset/")) {
-                    try {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(intent);
-                        return true;
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                // Never load remote pages into a WebView with a native bridge.
+                if (url != null) {
+                    try { if (isWebUrl(url)) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+                    catch (Exception ignored) {}
                 }
-                return false;
+                return true;
             }
         });
 
@@ -154,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.loadUrl("file:///android_asset/index.html");
+        webView.loadUrl("https://appassets.androidplatform.net/assets/index.html");
 
         checkAndRequestPermissions();
     }
@@ -180,42 +188,56 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void sendMediaCommand(final String command) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (webView == null) return;
-                if ("playPause".equals(command)) {
-                    webView.evaluateJavascript("window.playerApp && window.playerApp.player && window.playerApp.player.togglePlay();", null);
-                } else if ("next".equals(command)) {
-                    webView.evaluateJavascript("window.playerApp && window.playerApp.player && window.playerApp.player.next();", null);
-                } else if ("prev".equals(command)) {
-                    webView.evaluateJavascript("window.playerApp && window.playerApp.player && window.playerApp.player.prev();", null);
-                }
-            }
+    public void sendPlayerState(final JSONObject state) {
+        runOnUiThread(() -> {
+            if (webView != null) webView.evaluateJavascript("window.onNativePlayerState && window.onNativePlayerState(" + state + ");", null);
         });
     }
 
-    public class AndroidBridge {
-        @JavascriptInterface
-        public void updatePlaybackState(String title, String artist, String album, boolean isPlaying, String artworkBase64) {
-            Intent serviceIntent = new Intent(MainActivity.this, MediaNotificationService.class);
-            serviceIntent.setAction(MediaNotificationService.ACTION_UPDATE_STATE);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_TITLE, title);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_ARTIST, artist);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_ALBUM, album);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_IS_PLAYING, isPlaying);
-            serviceIntent.putExtra(MediaNotificationService.EXTRA_ARTWORK_BASE64, artworkBase64);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isPlaying) {
-                startForegroundService(serviceIntent);
-            } else {
-                startService(serviceIntent);
-            }
+    static boolean hasMusicPermission(Context context, Uri uri) {
+        if (!"content".equals(uri.getScheme())) return false;
+        for (UriPermission permission : context.getContentResolver().getPersistedUriPermissions()) {
+            if (!permission.isReadPermission()) continue;
+            try {
+                if (android.provider.DocumentsContract.getTreeDocumentId(uri).equals(android.provider.DocumentsContract.getTreeDocumentId(permission.getUri()))
+                    && uri.getAuthority().equals(permission.getUri().getAuthority())) {
+                    String treeId = android.provider.DocumentsContract.getTreeDocumentId(uri);
+                    if (!android.provider.DocumentsContract.isDocumentUri(context, uri)) return true;
+                    String documentId = android.provider.DocumentsContract.getDocumentId(uri);
+                    if (documentId.equals(treeId) || documentId.startsWith(treeId + "/")) return true;
+                    if (Build.VERSION.SDK_INT >= 24 && android.provider.DocumentsContract.isChildDocument(context.getContentResolver(),
+                        android.provider.DocumentsContract.buildDocumentUriUsingTree(permission.getUri(), treeId), uri)) return true;
+                }
+            } catch (Exception ignored) {}
         }
+        return false;
+    }
+
+    private static boolean isWebUrl(String value) {
+        Uri uri = Uri.parse(value);
+        return ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) && uri.getHost() != null;
+    }
+
+    public class AndroidBridge {
+        @JavascriptInterface public void setPlaybackQueue(final String queue) {
+            runOnUiThread(() -> {
+                Intent intent = new Intent(MainActivity.this, MediaNotificationService.class).putExtra("queue", queue);
+                // Media3 starts foreground notification once playback is prepared.
+                startService(intent);
+            });
+        }
+        @JavascriptInterface public void playbackCommand(final String command, final double value) {
+            runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class)
+                .putExtra("command", command).putExtra("value", value)));
+        }
+        @JavascriptInterface public void setEqualizer(final String settings) {
+            runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class).putExtra("equalizer", settings)));
+        }
+        @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
 
         @JavascriptInterface
         public void openFolderPicker() {
+            runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             try {
@@ -223,6 +245,7 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+            });
         }
 
         @JavascriptInterface
@@ -232,6 +255,7 @@ public class MainActivity extends AppCompatActivity {
                 public void run() {
                     try {
                         Uri treeUri = Uri.parse(folderUriStr);
+                        if (!hasMusicPermission(MainActivity.this, treeUri)) throw new SecurityException("Unauthorized folder");
                         scanFolderAndSend(treeUri, false);
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -241,32 +265,14 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public String readFileAsBase64(String fileUriStr) {
-            try {
-                Uri fileUri = Uri.parse(fileUriStr);
-                InputStream is = getContentResolver().openInputStream(fileUri);
-                if (is == null) return null;
-                ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
-                byte[] buffer = new byte[8192];
-                int len;
-                while ((len = is.read(buffer)) != -1) {
-                    byteBuffer.write(buffer, 0, len);
-                }
-                is.close();
-                return Base64.encodeToString(byteBuffer.toByteArray(), Base64.NO_WRAP);
-            } catch (Exception e) {
-                e.printStackTrace();
-                return null;
-            }
-        }
-
-        @JavascriptInterface
         public void downloadUpdate(final String url, final String fileName) {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        String name = (fileName != null && !fileName.isEmpty()) ? fileName : "Playerium-update.apk";
+                        Uri updateUri = Uri.parse(url);
+                        if (!"https".equals(updateUri.getScheme()) || !"github.com".equals(updateUri.getHost()) || !updateUri.getPath().contains("/releases/download/")) throw new SecurityException("Invalid update URL");
+                        String name = (fileName != null && fileName.matches("[A-Za-z0-9._ -]+\\.apk")) ? fileName : "Playerium-update.apk";
                         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
                         request.setTitle("Playerium " + name);
                         request.setDescription("Загрузка обновления Playerium...");
@@ -284,7 +290,8 @@ public class MainActivity extends AppCompatActivity {
                     } catch (Exception e) {
                         e.printStackTrace();
                         try {
-                            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                            if (!isWebUrl(url)) return;
+                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                             browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             startActivity(browserIntent);
                             Toast.makeText(MainActivity.this, "Открытие загрузки в браузере...", Toast.LENGTH_SHORT).show();
@@ -302,7 +309,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     long id = (downloadId > 0) ? downloadId : activeDownloadId;
-                    triggerApkInstall(id);
+                    if (id == activeDownloadId && isSuccessfulDownload(id)) triggerApkInstall(id);
                 }
             });
         }
@@ -313,6 +320,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     try {
+                        if (!isWebUrl(url)) return;
                         Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                         browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         startActivity(browserIntent);
@@ -397,7 +405,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 if (webView != null) {
                     String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadProgress && window.playerApp.onUpdateDownloadProgress(%d, %d, %d);", percent, downloaded, total);
-                    webView.evaluateJavascript(script, null);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             }
         });
@@ -409,7 +417,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 if (webView != null) {
                     String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadComplete && window.playerApp.onUpdateDownloadComplete(%d);", downloadId);
-                    webView.evaluateJavascript(script, null);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             }
         });
@@ -420,15 +428,24 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (webView != null) {
-                    String safeReason = reason != null ? reason.replace("'", "\\'") : "Ошибка";
-                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadFailed && window.playerApp.onUpdateDownloadFailed('%s');", safeReason);
-                    webView.evaluateJavascript(script, null);
+                    String safeReason = JSONObject.quote(reason != null ? reason : "Ошибка");
+                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadFailed && window.playerApp.onUpdateDownloadFailed(%s);", safeReason);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             }
         });
     }
 
+    private boolean isSuccessfulDownload(long id) {
+        if (id <= 0) return false;
+        DownloadManager manager = (DownloadManager)getSystemService(DOWNLOAD_SERVICE);
+        try (Cursor cursor = manager.query(new DownloadManager.Query().setFilterById(id))) {
+            return cursor != null && cursor.moveToFirst() && cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL;
+        } catch (Exception e) { return false; }
+    }
+
     private void triggerApkInstall(final long downloadId) {
+        if (downloadId != activeDownloadId || !isSuccessfulDownload(downloadId)) return;
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!getPackageManager().canRequestPackageInstalls()) {
@@ -485,6 +502,8 @@ public class MainActivity extends AppCompatActivity {
                 fileObj.put("uri", df.getUri().toString());
                 fileObj.put("size", df.length());
                 fileObj.put("lastModified", df.lastModified());
+                fileObj.put("relativePath", android.provider.DocumentsContract.getDocumentId(df.getUri()));
+                fileObj.put("metadata", readMetadata(df));
                 filesArray.put(fileObj);
             }
             folderObj.put("files", filesArray);
@@ -493,12 +512,55 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    webView.evaluateJavascript(script, null);
+                    if (webView != null) webView.evaluateJavascript(script, null);
                 }
             });
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private JSONObject readMetadata(DocumentFile file) {
+        JSONObject data = new JSONObject();
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(this, file.getUri());
+            data.put("title", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE));
+            data.put("artist", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST));
+            data.put("album", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM));
+            data.put("year", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR));
+            data.put("trackNo", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER));
+            String duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            data.put("duration", duration == null ? 0 : Long.parseLong(duration) / 1000.0);
+            byte[] art = retriever.getEmbeddedPicture();
+            if (art != null && art.length <= 8 * 1024 * 1024) {
+                BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeByteArray(art, 0, art.length, bounds);
+                BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1;
+                while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 512) options.inSampleSize *= 2;
+                Bitmap image = BitmapFactory.decodeByteArray(art, 0, art.length, options);
+                if (image != null) {
+                    ByteArrayOutputStream output = new ByteArrayOutputStream(); image.compress(Bitmap.CompressFormat.JPEG, 80, output); image.recycle();
+                    data.put("pictureBase64", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP));
+                }
+            }
+        } catch (Exception ignored) {}
+        finally { try { retriever.release(); } catch (Exception ignored) {} }
+        try {
+            DocumentFile parent = file.getParentFile();
+            String base = file.getName().replaceFirst("\\.[^.]+$", "");
+            if (parent != null) for (DocumentFile sibling : parent.listFiles()) {
+                if (sibling.getName() != null && sibling.getName().equalsIgnoreCase(base + ".lrc") && sibling.length() <= 1024 * 1024) {
+                    try (InputStream input = getContentResolver().openInputStream(sibling.getUri()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                        byte[] bytes = new byte[8192]; int count;
+                        while ((count = input.read(bytes)) != -1 && output.size() < 1024 * 1024) output.write(bytes, 0, count);
+                        data.put("lyrics", output.toString("UTF-8"));
+                    }
+                    break;
+                }
+            }
+        } catch (Exception ignored) {}
+        return data;
     }
 
     private void findAudioFilesRecursively(DocumentFile dir, List<DocumentFile> results) {
@@ -566,6 +628,7 @@ public class MainActivity extends AppCompatActivity {
             unregisterReceiver(onDownloadCompleteReceiver);
         } catch (Exception ignored) {}
         instance = null;
+        if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); webView = null; }
         super.onDestroy();
     }
 }
