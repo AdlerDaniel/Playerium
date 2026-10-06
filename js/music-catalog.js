@@ -2,10 +2,10 @@ import {audioCandidate,mergeSongs,sameRecording,isVariant} from './music-match.j
 const searchProviders=['youtubeMusic','soundcloud','youtubeAudio'];
 const catalogProviders=['itunes','itunesUA','deezer','musicbrainz','audius','bandcamp'];
 function catalogTracks(provider,data) {
-  if(provider.startsWith('itunes'))return (data.results||[]).map(t=>({title:t.trackName,artist:t.artistName,album:t.collectionName,year:t.releaseDate?.slice(0,4),duration:t.trackTimeMillis/1000,trackNo:t.trackNumber,genre:t.primaryGenreName,pictureUrl:t.artworkUrl100?.replace('100x100bb','600x600bb'),official:true,catalog:true,sources:[]}));
-  if(provider==='deezer')return (data.data||[]).map(t=>({title:t.title,artist:t.artist?.name,album:t.album?.title,duration:t.duration,pictureUrl:t.album?.cover_big,isrc:t.isrc,official:true,catalog:true,sources:[]}));
+  if(provider.startsWith('itunes'))return (data.results||[]).map(t=>({title:t.trackName,artist:t.artistName,album:t.collectionName,year:t.releaseDate?.slice(0,4),duration:t.trackTimeMillis/1000,trackNo:t.trackNumber,genre:t.primaryGenreName,pictureUrl:t.artworkUrl100?.replace('100x100bb','600x600bb'),pictureUrls:[t.artworkUrl100?.replace('100x100bb','600x600bb'),t.artworkUrl100].filter(Boolean),official:true,catalog:true,sources:[]}));
+  if(provider==='deezer')return (data.data||[]).map(t=>({title:t.title,artist:t.artist?.name,album:t.album?.title,duration:t.duration,pictureUrl:t.album?.cover_big,pictureUrls:[t.album?.cover_big,t.album?.cover_medium,t.album?.cover].filter(Boolean),isrc:t.isrc,official:true,catalog:true,sources:[]}));
   if(provider==='musicbrainz')return (data.recordings||[]).filter(t=>t['artist-credit']?.length).map(t=>({title:t.title,artist:t['artist-credit'].map(a=>a.name+(a.joinphrase||'')).join(''),album:t.releases?.[0]?.title||'',year:t['first-release-date']?.slice(0,4)||'',duration:(t.length||0)/1000,isrc:t.isrcs?.[0]||'',official:true,catalog:true,sources:[]}));
-  if(provider==='audius')return (data.data||[]).map(t=>({title:t.title,artist:t.user?.name,album:'',duration:t.duration,genre:t.genre,pictureUrl:t.artwork?.['480x480'],official:!!t.user?.is_verified,catalog:true,sources:t.permalink?[{provider,url:`https://audius.co${t.permalink.startsWith('/')?'':'/'}${t.permalink}`,official:!!t.user?.is_verified}]:[]}));
+  if(provider==='audius')return (data.data||[]).map(t=>({title:t.title,artist:t.user?.name,album:'',duration:t.duration,genre:t.genre,pictureUrl:t.artwork?.['480x480'],pictureUrls:Object.values(t.artwork||{}).filter(url=>typeof url==='string'),official:!!t.user?.is_verified,catalog:true,sources:t.permalink?[{provider,url:`https://audius.co${t.permalink.startsWith('/')?'':'/'}${t.permalink}`,official:!!t.user?.is_verified}]:[]}));
   if(provider==='bandcamp') {
     const dom=new DOMParser().parseFromString(data,'text/html');
     return [...dom.querySelectorAll('.searchresult')].map(item=>{
@@ -48,6 +48,7 @@ export class MusicCatalog {
     }
     this.searchRequests.clear();
     clearTimeout(this.timer);const version=++this.searchVersion;
+    query=String(query||'').trim();
     const local=this.library.search(query);
     if(!query || query.length<2 || !this.available){onResults(local,false,null);return;}
     const cached=this.cache.get(query.toLocaleLowerCase());
@@ -73,26 +74,36 @@ export class MusicCatalog {
     const existing=this.library.getTracks().find(t=>sameRecording(t,track));if(existing)return existing;
     if(this.downloads.has(track.id))return this.downloads.get(track.id);
     const task=(async()=>{
-      let sources=[...(track.sources||[])];
+      let sources=[...(track.sources||[])],saved,lastError;
+      const attempted=new Set();
+      const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4};
       const folder=this.library.folders.findLast(f=>!f.source.startsWith('web:') && f.source!=='android-files');
-      const save=()=>this.request('download',{track:{...track,sources},folderSource:folder?.source||null});
-      let saved;
-      if(sources.length){try{saved=await save();}catch(error){if(/папк|доступ|места/i.test(error.message))throw error;}}
-      if(!saved) {
-        const results=await Promise.allSettled(searchProviders.map(async provider=>{
-          const data=await this.request('search',{provider,query:`${track.artist} ${track.title}`});
-          return (data.entries||[]).map(e=>audioCandidate(e,provider)).filter(t=>t&&!isVariant(t.rawTitle)&&sameRecording(track,t)).flatMap(t=>t.sources);
+      const save=async()=>{
+        sources=[...new Map(sources.filter(s=>!attempted.has(s.url)).map(s=>[s.url,s])).values()].sort((a,b)=>(priority[a.provider]??9)-(priority[b.provider]??9)||Number(b.official)-Number(a.official));
+        if(!sources.length)return;
+        try{saved=await this.request('download',{track:{...track,sources},folderSource:folder?.source||null});}
+        catch(error){lastError=error;if(/папк|доступ к папке|места|компонент|Android 7/i.test(error.message))throw error;}
+        finally{for(const source of sources)attempted.add(source.url);}
+      };
+      const resolve=async providers=>{
+        const results=await Promise.allSettled(providers.map(async provider=>{
+          const catalog=!searchProviders.includes(provider);
+          const data=await this.request(catalog?'catalog':'search',{provider,query:`${track.artist} ${track.title}`});
+          const candidates=catalog?catalogTracks(provider,data):(data.entries||[]).map(e=>audioCandidate(e,provider)).filter(Boolean);
+          return candidates.filter(t=>!isVariant(t.rawTitle||t.title)&&sameRecording(track,t)).flatMap(t=>t.sources);
         }));
         for(const r of results)if(r.status==='fulfilled')sources.push(...r.value);
-        sources=[...new Map(sources.map(s=>[s.url,s])).values()].sort((a,b)=>Number(b.official)-Number(a.official));
-        if(!sources.length)throw Error('Не удалось сохранить этот трек. Попробуйте позже.');
-        saved=await save();
-      }
+      };
+      // Prefer independent artist catalogs before waiting for restricted video services.
+      if(sources.some(s=>['audius','bandcamp'].includes(s.provider)))await save();
+      if(!saved){await resolve(['audius','bandcamp']);await save();}
+      if(!saved){await resolve(searchProviders);await save();}
+      if(!saved)throw lastError||Error('Полная версия этой записи недоступна. Проверьте сеть и настройки VPN или попробуйте позже.');
       const added=await this.library.addDownloaded(saved,track);
       this.cache.clear();this.ui.renderSidebar();return added;
     })();
     this.downloads.set(track.id,task);this.progress({id:track.id});
-    try{return await task;}finally{this.downloads.delete(track.id);for(const row of document.querySelectorAll('[data-track-id]'))if(row.dataset.trackId===track.id){delete row.dataset.downloading;const btn=row.querySelector('.track-download-btn');if(btn)btn.disabled=false;}}
+    try{return await task;}finally{this.downloads.delete(track.id);for(const row of document.querySelectorAll('[data-track-id]'))if(row.dataset.trackId===track.id){delete row.dataset.downloading;const btn=row.querySelector('.track-download-btn');if(btn)btn.disabled=false;btn?.setAttribute('aria-label',`Скачать ${track.title}`);}}
   }
   async restore(){if(!this.available)return;try{for(let file of await this.request('restore',{})){
     if(window.AndroidBridge && !this.library.getTracks().some(t=>t.sourceKey===file.uri))file=await this.request('describe',{downloadId:file.downloadId});

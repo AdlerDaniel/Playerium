@@ -1,3 +1,4 @@
+import {mountCover} from './artwork.js';
 import { saveIcon, icons } from "./design-icons.js";
 import { mountTrackRows } from "./virtual-list.js";
 import { playRow } from './playback-controls.js';
@@ -78,6 +79,7 @@ ${saveIcon}
         </div>
       `;
 
+      mountCover(row.querySelector('.track-mini-thumb'),track);
       // The entire row plays; only explicit action buttons intercept the click.
       row.addEventListener("click", (e) => {
         if (e.detail > 1 || e.target.closest('button')) return;
@@ -119,7 +121,8 @@ ${saveIcon}
         if (this.isMobile) {
           this.showMobileTrackOptionsSheet(track, index, tracks, playlistContext);
         } else {
-          this.showTrackContextMenu(e.clientX, e.clientY, track, playlistContext);
+          const rect=moreBtn.getBoundingClientRect();
+          this.showTrackContextMenu(e.clientX||rect.right, e.clientY||rect.bottom, track, playlistContext);
         }
       });
       row.addEventListener("contextmenu", (e) => {
@@ -127,7 +130,8 @@ ${saveIcon}
         if (this.isMobile) {
           this.showMobileTrackOptionsSheet(track, index, tracks, playlistContext);
         } else {
-          this.showTrackContextMenu(e.clientX, e.clientY, track, playlistContext);
+          const rect=moreBtn.getBoundingClientRect();
+          this.showTrackContextMenu(e.clientX||rect.right, e.clientY||rect.bottom, track, playlistContext);
         }
       });
 

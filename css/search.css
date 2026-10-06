@@ -1,0 +1,125 @@
+/* Search geometry and motion follow Spotify's public search interface. */
+.spotify-search { color:#fff; padding:24px; }
+.spotify-search h2 {font-size:24px;line-height:1.3;margin:20px 0 16px;font-weight:700;letter-spacing:-.5px}
+.search-active>.mobile-search-title {display:none}
+.search-input-line {display:none}
+.search-filter-tabs {display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:0 0 12px;position:sticky;top:0;background:#121212;z-index:8}
+.search-filter {flex-shrink:0;min-height:32px;padding:6px 14px;border:0;border-radius:999px;background:#ffffff12;color:#fff;font-size:14px;cursor:pointer;transition:background 160ms ease,transform 160ms ease}
+.search-filter:hover {background:#ffffff24}
+.search-filter.active {background:#fff;color:#121212}
+.song-search-status {color:#b3b3b3;font-size:13px;min-height:0;margin:4px 0}
+.song-search-status:empty {display:none}
+.search-main-results {display:grid;grid-template-columns:minmax(230px,1fr) minmax(300px,1.5fr);gap:24px}
+.search-top-card {position:relative;padding:20px;border-radius:8px;background:#181818;min-height:240px;transition:background 200ms ease}
+.search-top-card:hover {background:#282828}
+.search-top-cover {width:92px;height:92px;border-radius:4px;overflow:hidden;box-shadow:0 8px 24px #0005;background:#282828}
+.search-top-card h3 {font-size:32px;letter-spacing:-1px;line-height:1.2;margin:16px 0 8px;overflow-wrap:anywhere}
+.search-top-card p {font-size:14px;color:#b3b3b3}
+.search-top-card p span {margin:0 5px}
+.search-top-play {position:absolute;right:20px;bottom:20px;border:0;background:#1ed760;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;box-shadow:0 8px 16px #0005;cursor:pointer;opacity:0;transform:translateY(8px);transition:opacity 180ms ease,transform 180ms ease}
+.search-top-play svg {width:24px;height:24px;fill:#000}
+.search-top-card:hover .search-top-play,.search-top-card:focus-within .search-top-play {opacity:1;transform:translateY(0)}
+.search-compact-table .track-table-header,.search-compact-table .track-col-num,.search-compact-table .track-col-album,.search-compact-table .track-col-date {display:none}
+.search-compact-table .track-row {display:flex;align-items:center;gap:12px;min-height:60px;padding:8px;border-radius:4px}
+.search-compact-table .track-col-title {flex:1;min-width:0}
+.search-compact-table .track-col-duration {display:flex;align-items:center;gap:16px;flex-shrink:0}
+.search-compact-table .track-mini-thumb {width:40px;height:40px}
+.search-compact-table .track-name {font-size:16px}
+.search-compact-table .track-artist {font-size:14px}
+.search-card-section {margin-top:24px}
+.search-entity-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.search-entity-card {display:flex;flex-direction:column;gap:8px;min-width:0;text-align:left;padding:12px;border:0;border-radius:8px;background:transparent;color:#fff;cursor:pointer;transition:background 160ms ease}
+.search-entity-card:hover {background:#ffffff0c}
+.search-entity-cover {width:100%;aspect-ratio:1;overflow:hidden;background:#282828;border-radius:4px;box-shadow:0 8px 24px #0005}
+.search-entity-card.artists .search-entity-cover {border-radius:50%}
+.search-entity-card strong,.search-entity-card span {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-size:16px}
+.search-entity-card span {font-size:14px;color:#b3b3b3}
+.search-top-cover img,.search-entity-cover img,.sheet-track-cover img {width:100%;height:100%;object-fit:cover}
+.cover-placeholder {display:grid;place-items:center;background:#282828}
+.cover-placeholder svg {width:48%;height:48%;fill:#a7a7a7}
+.search-skeleton i {display:block;height:56px;margin:12px 0;border-radius:4px;background:linear-gradient(90deg,#ffffff06,#ffffff10,#ffffff06);background-size:200% 100%;animation:search-shimmer 1.4s ease infinite}
+@keyframes search-shimmer {to{background-position:-200% 0}}
+.search-empty {padding:48px 16px;text-align:center;color:#b3b3b3}
+.search-empty h2 {color:#fff}
+.search-empty button {border:0;border-radius:24px;padding:12px 24px;margin-top:20px;font-weight:700;cursor:pointer}
+.search-recent-row {display:flex;align-items:center;gap:12px;padding:8px 0}
+.search-recent-row button {border:0;background:none;color:#fff;cursor:pointer}
+.search-recent-query {display:flex;align-items:center;gap:14px;flex:1;text-align:left;min-height:48px;font-size:16px}
+.search-recent-query svg {width:48px;height:48px;fill:#b3b3b3;padding:12px;background:#282828;border-radius:4px}
+.search-history-remove {font-size:28px;min-width:44px;min-height:44px;color:#b3b3b3!important}
+.track-context-menu {width:252px;max-height:calc(100dvh - 16px);overflow:auto;padding:4px;background:#282828;border-radius:4px;box-shadow:0 16px 24px #0007;transform-origin:top left;animation:menu-enter 120ms ease-out}
+.track-context-menu .context-menu-item {display:flex;align-items:center;gap:12px;width:100%;min-height:40px;padding:10px 12px;border:0;border-radius:2px;color:#eee;background:transparent;text-align:left;font-size:14px;cursor:pointer}
+.track-context-menu .context-menu-item svg {width:16px;height:16px;fill:currentColor;flex-shrink:0}
+.track-context-menu .context-menu-item:hover,.track-context-menu .context-menu-item:focus-visible {background:#ffffff18;outline:none}
+.menu-chevron {margin-left:auto;font-size:22px}
+.menu-pane-title {padding:12px;font-size:16px}
+.track-credits {padding:12px;max-width:100%;overflow-wrap:anywhere}
+.track-credits dt {font-size:13px;color:#b3b3b3;margin-top:12px}
+.track-credits dd {margin:4px 0 12px;font-size:16px}
+.track-options-sheet .mobile-sheet-content {max-height:85dvh;overflow-y:auto;background:#282828;border-radius:12px 12px 0 0;gap:0;padding:12px 16px max(20px,env(safe-area-inset-bottom));transition:transform 240ms cubic-bezier(.2,.8,.2,1)}
+.track-options-sheet .mobile-sheet-overlay {background:#0009;backdrop-filter:none}
+.sheet-track-info {display:flex;gap:12px;align-items:center;padding:0 0 16px;margin-bottom:8px;border-bottom:1px solid #ffffff12}
+.sheet-track-cover {width:56px;height:56px;flex-shrink:0;border-radius:4px;overflow:hidden}
+.sheet-track-info>div:last-child {min-width:0}
+.sheet-track-info strong,.sheet-track-info span {display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:16px}
+.sheet-track-info span {font-size:14px;color:#b3b3b3;margin-top:4px}
+.track-options-sheet .mobile-sheet-handle {touch-action:none;width:40px;min-height:5px;margin-bottom:16px;cursor:grab}
+.track-options-sheet .mobile-sheet-item {border:0;min-height:52px;padding:12px 0;font-size:16px;gap:16px}
+.track-options-sheet .mobile-sheet-item svg {width:24px;height:24px;fill:currentColor}
+.track-options-sheet .mobile-sheet-item:hover {background:#ffffff08}
+.track-options-sheet .liked {color:#1ed760}
+.track-options-sheet .save-check,.track-context-menu .save-check {display:none}
+.track-options-sheet .liked .save-check,.track-context-menu .liked .save-check {display:block}
+.track-options-sheet .liked .save-plus,.track-context-menu .liked .save-plus {display:none}
+@keyframes menu-enter {from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+@media(max-width:768px){
+.spotify-search {padding:calc(16px + var(--sp-mobile-safe-top)) 0 0}
+.spotify-search h2 {font-size:22px;margin:20px 0 14px}
+.search-input-line {display:flex;gap:12px;align-items:center;position:sticky;top:0;background:#121212;z-index:10;padding:0 0 12px}
+.spotify-search .mobile-search-bar-box {display:flex;position:static;flex:1;min-width:0;height:48px;margin:0;background:#fff;color:#121212;border-radius:4px;padding:0 12px;gap:12px}
+.spotify-search .mobile-search-input {min-width:0;width:0;color:#121212;-webkit-text-fill-color:#121212;caret-color:#121212;font-size:16px;font-weight:600;background:transparent}
+.spotify-search .mobile-search-input::placeholder {color:#535353;-webkit-text-fill-color:#535353;font-weight:500;opacity:1}
+.spotify-search .mobile-search-input::-webkit-search-cancel-button {display:none}
+.spotify-search .mobile-search-bar-box svg {width:24px;height:24px;fill:none;color:#121212}
+.spotify-search .mobile-search-clear {color:#535353;font-size:28px;min-width:32px;min-height:44px;padding:0}
+.search-back {display:none;border:0;background:none;color:#fff;font-size:36px;width:32px;min-height:48px;cursor:pointer}
+.search-active .search-back {display:block}
+.search-active .mobile-search-bar-box {background:#242424;color:#fff;border-radius:4px}
+.search-active .mobile-search-input {color:#fff;-webkit-text-fill-color:#fff;caret-color:#fff}
+.search-active .mobile-search-input::placeholder {color:#b3b3b3;-webkit-text-fill-color:#b3b3b3}
+.search-active .mobile-search-bar-box svg,.search-active .mobile-search-clear {color:#b3b3b3}
+.search-filter-tabs {top:60px;padding:8px 0 12px;margin:0 -16px;padding-left:16px;padding-right:16px}
+.search-filter {min-height:34px;padding:7px 14px;font-size:14px}
+.search-main-results {display:block}
+.search-top-result {display:none}
+.search-song-section h2 {display:none}
+.search-compact-table .track-row {min-height:72px;padding:8px 0;gap:12px}
+.search-compact-table .track-mini-thumb {width:56px;height:56px;border-radius:4px}
+.search-compact-table .track-col-duration {gap:10px}
+.search-compact-table .track-col-duration>span,.search-compact-table .track-like-btn {display:none}
+.search-entity-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.search-entity-card {padding:8px}
+.search-entity-card strong {font-size:15px}
+.spotify-search .mobile-cat-card {text-align:left;border:0;cursor:pointer}
+.song-search-results {animation:menu-enter 150ms ease-out}
+}
+@media(prefers-reduced-motion:reduce){.spotify-search *,.track-options-sheet *,.track-context-menu,.song-search-results {animation:none!important;transition:none!important}}
+.search-show-all {display:block;margin:16px auto 0;border:1px solid #727272;border-radius:999px;background:transparent;color:#fff;padding:8px 24px;font-size:14px;font-weight:700;cursor:pointer}
+.search-show-all:hover {border-color:#fff;transform:scale(1.02)}
+.toast.error {background:#f15e6c;color:#121212}
+.track-row[data-downloading] .track-download-btn svg {visibility:hidden}
+.track-row[data-downloading] .track-download-btn {position:relative;opacity:1}
+.track-row[data-downloading] .track-download-btn::after {content:'';position:absolute;width:16px;height:16px;left:50%;top:50%;margin:-8px;border:2px solid #727272;border-top-color:#1ed760;border-radius:50%;animation:download-spin .8s linear infinite}
+@keyframes download-spin {to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.track-row[data-downloading] .track-download-btn::after{animation:none}}
+.track-context-menu .context-menu-item,.track-options-sheet .mobile-sheet-item {justify-content:flex-start}
+.track-options-sheet .mobile-sheet-handle {height:24px;min-height:24px;background:transparent;position:relative;margin:0 auto 4px}
+.track-options-sheet .mobile-sheet-handle::after {content:'';position:absolute;left:0;right:0;top:8px;height:5px;background:#ffffff40;border-radius:5px;pointer-events:none}
+@media(max-width:768px){
+.search-entity-grid {display:flex;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px;gap:8px}
+.search-entity-card {flex:0 0 148px;align-items:flex-start}
+.search-compact-table .track-col-duration {gap:10px!important}
+.search-compact-table .track-col-duration .track-like-btn {display:none!important}
+}
+.track-context-menu {width:max-content;min-width:252px;max-width:calc(100vw - 16px)}
+.track-context-menu .context-menu-item>span:first-of-type {white-space:nowrap}

@@ -1,3 +1,4 @@
+import {normalizeSearch} from './music-match.js';
 import { normalizeTrackTitle } from "./track-title.js";
 /**
  * Spotify Local Player - Library & Database Layer
@@ -337,11 +338,10 @@ export class Library {
 
   search(query) {
     if (!query || !query.trim()) return this.getTracks();
-    const q = query.trim().toLowerCase();
-    return this.getTracks().filter((t) => {
-      return (t.title && t.title.toLowerCase().includes(q)) ||
-             (t.artist && t.artist.toLowerCase().includes(q)) ||
-             (t.album && t.album.toLowerCase().includes(q));
+    const tokens=normalizeSearch(query).split(' ').filter(Boolean);
+    return this.getTracks().filter(t=>{
+      const text=normalizeSearch(`${t.title||''} ${t.artist||''} ${t.album||''}`);
+      return tokens.every(token=>text.includes(token));
     });
   }
 
