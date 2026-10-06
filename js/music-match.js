@@ -50,9 +50,11 @@ export function mergeSongs(groups, query, local=[]) {
     if(tokens.length && tokens.filter(t=>text.includes(t)).length/tokens.length<.65)continue;
     let existing=merged.find(t=>sameRecording(t,raw));
     if(existing) {
+      const completeArtist=existing.artist.length>=raw.artist.length?existing.artist:raw.artist;
       existing.sources=[...new Map([...(existing.sources||[]),...(raw.sources||[])].map(s=>[s.url,s])).values()];
       for(const field of ['album','year','trackNo','genre','isrc','pictureUrl','duration'])if(!existing[field]&&raw[field])existing[field]=raw[field];
       if((raw.metadataScore||0)>(existing.metadataScore||0)){for(const field of ['title','artist','album','year','trackNo','genre','isrc','pictureUrl','duration'])if(raw[field])existing[field]=raw[field];existing.metadataScore=raw.metadataScore;}
+      existing.artist=completeArtist;
       existing.official ||= raw.official;
     }else merged.push({...raw,sources:[...(raw.sources||[])]});
   }

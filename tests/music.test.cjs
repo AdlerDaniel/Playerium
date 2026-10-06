@@ -9,6 +9,8 @@ test('one original recording combines providers, metadata and offline copy witho
   const clip={...official,rawTitle:'KLER - Повільне диско (Official Music Video)'};
   const rows=mergeSongs([[official,other,cover,clip],[metadata]],'KLER Повільне диско');
   assert.equal(rows.length,1);assert.equal(rows[0].sources.length,2);assert.equal(rows[0].album,metadata.album);assert.equal(rows[0].pictureUrl,metadata.pictureUrl);
+  assert.match(rows[0].artist,/OTOY/);
+  assert.match(mergeSongs([[official,{...metadata,artist:'KLER'}]],'KLER Повільне диско')[0].artist,/OTOY/);
   const local={id:'saved',title:'Повільне диско',artist:'KLER x OTOY',duration:253};
   const saved=mergeSongs([[official,metadata]],'KLER Повільне диско',[local]);assert.equal(saved.length,1);assert.equal(saved[0].id,'saved');assert.equal(saved[0].catalog,false);
 });
