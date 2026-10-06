@@ -13,6 +13,13 @@ Exact download URLs and SHA-256 checksums are recorded in
 and corresponding build sources remain available from the linked upstream
 projects; redistribution must preserve the applicable notices and source access.
 
+Android WebP/sharpyuv dependencies are rebuilt from unmodified libwebp 1.5.0
+source with 16 KB ELF page alignment. The exact source archive, checksum and
+complete build commands are in `scripts/align_android_webp.py`.
+[Corresponding source](https://github.com/webmproject/libwebp/tree/v1.5.0).
+The Android yt-dlp zip uses the pinned 2026.08.19 extractors and bundled EJS solver;
+the runtime distribution's older extractors are replaced during preparation.
+
 Unmodified license texts are included in `assets/music-licenses/` in both builds,
 including the packaged Windows FFmpeg license and yt-dlp's third-party notices.
 Source retrieval/build instructions for the Android executables:

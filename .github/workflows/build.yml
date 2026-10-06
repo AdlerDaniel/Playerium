@@ -75,6 +75,7 @@ jobs:
       - run: python scripts/generate_icons.py
       - run: npm run android:assets
       - run: python scripts/prepare_music_runtime.py --android
+      - run: python scripts/align_android_webp.py
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.4'
@@ -102,6 +103,14 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: gradle -p android connectedDebugAndroidTest --no-daemon
+      - name: Upload native music verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-music-runtime-report
+          path: |
+            android/app/build/reports/androidTests/
+            android/app/build/outputs/androidTest-results/
       - name: Restore existing release key
         if: startsWith(github.ref, 'refs/tags/')
         run: |

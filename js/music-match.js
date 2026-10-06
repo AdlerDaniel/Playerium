@@ -35,7 +35,7 @@ export function audioCandidate(entry, provider) {
   const url=entry.webpage_url || (provider.startsWith('youtube') && /^[\w-]{11}$/.test(entry.id || '') ? `https://www.youtube.com/watch?v=${entry.id}` : entry.url);
   if(!url || !/^https:\/\//.test(url))return null;
   const official=!!credited || !!entry.channel_is_verified || /- Topic$/i.test(entry.uploader || entry.channel || '') || provider==='youtubeMusic' || provider==='bandcamp' || (provider==='soundcloud' && artistKey(artist)===artistKey(entry.uploader));
-  if(provider==='youtubeAudio' && !official)return null;
+  if(provider==='youtubeAudio' && (!official || (!/- Topic$/i.test(entry.uploader || entry.channel || '') && !/official audio|audio only|visuali[sz]er|lyrics?/i.test(entry.title||''))))return null;
   return {title:cleanTitle(title),artist,album:entry.album || '',duration:Number(entry.duration)||0,
     year:entry.release_year || (entry.release_timestamp?new Date(entry.release_timestamp*1000).getUTCFullYear():''),trackNo:entry.track_number || 0,genre:entry.genre || entry.genres?.[0] || '',isrc:entry.isrc || '',
     pictureUrl:entry.thumbnail || entry.thumbnails?.at(-1)?.url || null,

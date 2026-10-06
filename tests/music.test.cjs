@@ -31,6 +31,9 @@ test('removed song and playlist references stay removed after watcher events and
   await lib.removeTrack(track.id);await lib.syncFolderToPlaylist('Music','content://music/tree',[file],true);
   assert.equal(lib.getTracks().length,0);assert.deepEqual(lib.getPlaylistTracks(playlist.id),[]);
   const reopened=new Library();await reopened.init();await reopened.syncFolderToPlaylist('Music','content://music/tree',[file],true);assert.equal(reopened.getTracks().length,0);
+  await reopened.addDownloaded({...file,downloadId:'song_a123',folderName:'Music',folderSource:'content://music/tree'},null);
+  assert.equal(reopened.getTracks().length,1);assert.equal(reopened.getTracks()[0].downloadId,'song_a123');
+  assert.deepEqual(reopened.getPlaylistTracks(playlist.id),[]);
 });
 test('native requests cannot turn a catalog search into arbitrary file/network access',()=>{
   const {sourceURL,catalogURL}=require('../desktop-music');

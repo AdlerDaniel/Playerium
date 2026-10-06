@@ -45,12 +45,13 @@ python scripts/prepare_music_runtime.py --windows
 npm run build:win
 ```
 
-Android: JDK 17, Android SDK 34 и Gradle 8.4.
+Android: JDK 17, Android SDK 34, Android NDK и Gradle 8.4.
 
 ```sh
 npm run android:assets
 python scripts/generate_icons.py
 python scripts/prepare_music_runtime.py --android
+python scripts/align_android_webp.py
 gradle -p android assembleDebug lintDebug
 ```
 

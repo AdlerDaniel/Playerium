@@ -22,7 +22,7 @@ function catalogURL(provider,query) {
 }
 class DesktopMusic {
   constructor({app,fetcher=fetch,authorize,onRoot=async()=>{},onProgress=()=>{}}) {
-    Object.assign(this,{app,fetcher,authorize,onRoot,onProgress});this.active=new Map();this.pending=new Map();
+    Object.assign(this,{app,fetcher,authorize,onRoot,onProgress});this.active=new Map();this.pending=new Map();this.requests=new Map();
     this.tools=app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools');
     this.manifestFile=path.join(app.getPath('userData'),'music-downloads.json');this.manifest=null;this.storeChain=Promise.resolve();
   }
@@ -40,7 +40,7 @@ class DesktopMusic {
       child.on('close',code=>{done();if(code===0 || (args.includes('--ignore-errors')&&out.trim()))resolve(out.trim());else reject(Error(error || 'Не удалось получить запись'));});
     });
   }
-  cancel(id){const child=this.active.get(id);if(!child)return;
+  cancel(id){this.requests.get(id)?.abort();const child=this.active.get(id);if(!child)return;
     if(process.platform==='win32')spawn(path.join(process.env.SystemRoot||'C:\\Windows','System32/taskkill.exe'),['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
     else child.kill();
   }
@@ -48,10 +48,13 @@ class DesktopMusic {
     if(!/^[\w-]{1,100}$/.test(id))throw Error('Недопустимый запрос');
     if(operation==='catalog') {
       const query=String(payload.query||'').trim().slice(0,200);if(query.length<2)return null;
-      const response=await this.fetcher(catalogURL(payload.provider,query),{signal:AbortSignal.timeout(15000),headers:{'User-Agent':'Playerium/1.5.0 (https://github.com/AdlerDaniel/Playerium)'}});
-      if(!response.ok)throw Error('Не удалось получить результаты');
-      const text=await response.text();if(text.length>4*1024*1024)throw Error('Некорректный ответ');
-      return payload.provider==='bandcamp'?text:JSON.parse(text);
+      const controller=new AbortController();this.requests.set(id,controller);const timer=setTimeout(()=>controller.abort(),15000);
+      try {
+        const response=await this.fetcher(catalogURL(payload.provider,query),{signal:controller.signal,headers:{'User-Agent':'Playerium/1.5.0 (https://github.com/AdlerDaniel/Playerium)'}});
+        if(!response.ok)throw Error('Не удалось получить результаты');
+        const text=await response.text();if(text.length>4*1024*1024)throw Error('Некорректный ответ');
+        return payload.provider==='bandcamp'?text:JSON.parse(text);
+      }finally{clearTimeout(timer);this.requests.delete(id);}
     }
     if(operation==='search') {
       if(!PROVIDERS.has(payload.provider))throw Error('Недопустимый запрос');

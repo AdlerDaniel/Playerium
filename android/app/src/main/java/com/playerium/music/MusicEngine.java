@@ -114,8 +114,8 @@ final class MusicEngine {
         try {
             long deadline=System.currentTimeMillis()+timeout;
             while(true){try{process.exitValue();break;}catch(IllegalThreadStateException running){if(System.currentTimeMillis()>deadline){process.destroy();throw new IOException("Timed out");}Thread.sleep(100);}}
-            String output=new String(stdout.get(5,TimeUnit.SECONDS),StandardCharsets.UTF_8).trim();stderr.get(5,TimeUnit.SECONDS);
-            if(process.exitValue()!=0&&!(args.contains("--ignore-errors")&&!output.isEmpty()))throw new IOException("Recording unavailable");return output;
+            String output=new String(stdout.get(5,TimeUnit.SECONDS),StandardCharsets.UTF_8).trim();String diagnostic=new String(stderr.get(5,TimeUnit.SECONDS),StandardCharsets.UTF_8);
+            if(process.exitValue()!=0&&!(args.contains("--ignore-errors")&&!output.isEmpty()))throw new IOException("Recording unavailable: "+diagnostic.substring(0,Math.min(2000,diagnostic.length())));return output;
         }finally{processes.remove(id);process.destroy();}
     }
     private synchronized JSONObject records() throws Exception {
