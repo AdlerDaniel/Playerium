@@ -1,5 +1,5 @@
 """Bundle separately executed, pinned audio tools; never include Android wrapper classes."""
-import hashlib, io, pathlib, sys, urllib.request, zipfile
+import hashlib, io, json, pathlib, posixpath, stat, sys, urllib.request, zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / 'build' / 'music-cache'
 CACHE.mkdir(parents=True, exist_ok=True)
@@ -13,6 +13,19 @@ def download(url, digest):
     return target.read_bytes()
 def write(target, data):
     target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+def native_archive(data):
+    # Java's ZipInputStream does not preserve Unix symlinks. Record them explicitly
+    # so the on-device loader sees ELF libraries rather than tiny link text files.
+    output=io.BytesIO();links={}
+    with zipfile.ZipFile(io.BytesIO(data)) as source,zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as result:
+        for entry in source.infolist():
+            if stat.S_ISLNK(entry.external_attr>>16):
+                target=source.read(entry).decode();resolved=posixpath.normpath(posixpath.join(posixpath.dirname(entry.filename),target))
+                if target.startswith('/') or resolved.startswith('../') or resolved not in source.namelist():raise RuntimeError('Invalid runtime link')
+                links[entry.filename]=target
+            else:result.writestr(entry,source.read(entry))
+        result.writestr('playerium-links.json',json.dumps(links))
+    return output.getvalue()
 if '--windows' in sys.argv:
     target = ROOT / 'build' / 'music-tools'
     write(target / 'yt-dlp.exe', download('https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe', '66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a'))
@@ -28,7 +41,8 @@ elif '--android' in sys.argv:
         archive=zipfile.ZipFile(io.BytesIO(download(url,digest)))
         for name in archive.namelist():
             if name.startswith('jni/') and name.endswith('.so'):
-                write(ROOT / 'android/app/src/main/jniLibs' / name.removeprefix('jni/'), archive.read(name))
+                data=archive.read(name)
+                write(ROOT / 'android/app/src/main/jniLibs' / name.removeprefix('jni/'),native_archive(data) if name.endswith('.zip.so') else data)
             elif name=='res/raw/ytdlp':
                 bundled_python = archive.read(name)
     # Retain Android-compatible dependencies and use current, pinned extractors.

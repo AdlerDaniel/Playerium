@@ -93,9 +93,15 @@ final class MusicEngine {
     }
     private static void unzip(File zip,File root) throws Exception {
         root.mkdirs();String prefix=root.getCanonicalPath()+File.separator;
+        JSONObject links=new JSONObject();
         try(ZipInputStream input=new ZipInputStream(new FileInputStream(zip))) {
-            ZipEntry entry;while((entry=input.getNextEntry())!=null){File target=new File(root,entry.getName());if(!target.getCanonicalPath().startsWith(prefix))throw new SecurityException("Invalid runtime archive");
+            ZipEntry entry;while((entry=input.getNextEntry())!=null){if(entry.getName().equals("playerium-links.json")){links=new JSONObject(new String(read(input,1024*1024),StandardCharsets.UTF_8));continue;}File target=new File(root,entry.getName());if(!target.getCanonicalPath().startsWith(prefix))throw new SecurityException("Invalid runtime archive");
                 if(entry.isDirectory())target.mkdirs();else {target.getParentFile().mkdirs();try(OutputStream out=new FileOutputStream(target)){copy(input,out);}}}
+        }
+        Iterator<String> names=links.keys();while(names.hasNext()){
+            String name=names.next(),destination=links.getString(name);File link=new File(root,name),target=new File(link.getParentFile(),destination);
+            if(destination.startsWith("/")||!link.getCanonicalPath().startsWith(prefix)||!target.getCanonicalPath().startsWith(prefix))throw new SecurityException("Invalid runtime link");
+            link.getParentFile().mkdirs();link.delete();android.system.Os.symlink(destination,link.getAbsolutePath());
         }
     }
     private static void copy(InputStream in,OutputStream out) throws IOException {byte[] bytes=new byte[65536];int n;while((n=in.read(bytes))!=-1)out.write(bytes,0,n);}
