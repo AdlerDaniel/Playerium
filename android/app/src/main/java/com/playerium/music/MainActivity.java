@@ -443,7 +443,9 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     getContentResolver().takePersistableUriPermission(
                         treeUri,
-                        data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                        (data.getFlags() & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0
+                            ? Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            : Intent.FLAG_GRANT_READ_URI_PERMISSION
                     );
                 } catch (Exception e) {
                     e.printStackTrace();
