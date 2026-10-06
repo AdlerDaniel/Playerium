@@ -49,3 +49,8 @@ test('ignored release stays hidden on startup but manual checks can show it',asy
     u.ignoreVersion('9.0.0');await u.checkForUpdates();assert.equal(shown,0);await u.checkForUpdates(true);assert.equal(shown,1);
   }finally{global.fetch=previous;}
 });
+
+test('release dialog shows changes without release metadata and setup instructions',async()=>{
+  const {releaseChanges}=await import('../js/update-controller.js');
+  assert.deepEqual(releaseChanges('## Изменения\n- Новое обновление\n- Исправление\n\nДля перехода установите версию вручную.\nПроверено: 26 тестов'),['Новое обновление','Исправление']);
+});

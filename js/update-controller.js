@@ -1,6 +1,7 @@
 export function releaseChanges(notes) {
   const lines=String(notes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-  return lines.filter(s=>!/^#{1,6}\s|^\*\*Full Changelog|^https?:\/\/|^Проверено:|^Прошли |^Android проверен|^<!--/.test(s))
+  const bullets=lines.filter(s=>/^[-*+]\s+|^\d+[.)]\s+/.test(s));
+  return (bullets.length?bullets:lines).filter(s=>!/^#{1,6}\s|^\*\*Full Changelog|^https?:\/\/|^Проверено:|^Прошли |^Android проверен|^<!--/.test(s))
     .map(s=>s.replace(/^[-*+]\s+|^\d+[.)]\s+/,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/\*\*|`/g,''))
     .filter(Boolean).slice(0,30);
 }
@@ -43,7 +44,7 @@ export function bindUpdateController() {
     localStorage.setItem('playerium_pending_update',JSON.stringify(info));
     this.onUpdateState({state:'downloading',percent:0});
     try {
-      const request={latestVersion:info.latestVersion,repo:this.ui.updater.repo};
+      const request={latestVersion:info.latestVersion,repo:info.repo||this.ui.updater.repo};
       if(window.electronAPI?.installUpdate)await window.electronAPI.installUpdate(request);
       else if(window.AndroidBridge?.installUpdate)window.AndroidBridge.installUpdate(JSON.stringify(request));
       else throw Error('Обновление доступно в приложении Playerium для Windows и Android.');
