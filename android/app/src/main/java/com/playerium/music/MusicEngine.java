@@ -38,16 +38,25 @@ final class MusicEngine {
         Future<?> task=(operation.equals("download")||operation.equals("delete")?downloader:workers).submit(()->{
             JSONObject result=new JSONObject();
             try {result.put("id",id).put("data",execute(operation,new JSONObject(json),id));}
-            catch(Exception e){try{result.put("id",id).put("error",e instanceof SecurityException?e.getMessage():"Не удалось завершить действие. Попробуйте снова.");}catch(Exception ignored){}}
+            catch(Exception e){try{result.put("id",id).put("error",e instanceof SecurityException?e.getMessage():downloadError(e));}catch(Exception ignored){}}
             MainActivity current=MainActivity.getInstance();if(current!=null)current.sendMusicResponse(result);
             tasks.remove(id);
         });
         tasks.put(id,task);if(task.isDone())tasks.remove(id);
     }
+    private static String downloadError(Exception error) {
+        String message=error==null?"":String.valueOf(error.getMessage());
+        if(message.startsWith("Не удалось")||message.startsWith("Полная версия")||message.startsWith("Аудиосервис")||message.startsWith("Недостаточно"))return message;
+        String text=message.toLowerCase(Locale.ROOT);
+        if(text.matches("(?s).*(no space|enospc).*$"))return "Недостаточно места для сохранения трека.";
+        if(text.matches("(?s).*(403|429|451|geo.?restrict|sign in|captcha|blocked).*$"))return "Аудиосервис ограничил доступ к этой записи. Попробуйте другую сеть или VPN.";
+        if(text.matches("(?s).*(timeout|timed out|network|connection|resolve|certificate|tunnel|ssl).*$"))return "Не удалось соединиться с аудиосервисом. Проверьте сеть и настройки VPN.";
+        return "Полная версия этой записи недоступна для скачивания. Попробуйте позже.";
+    }
     private String get(String url) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
         connection.setConnectTimeout(15000);connection.setReadTimeout(20000);
-        connection.setRequestProperty("User-Agent","Playerium/1.5.0 (https://github.com/AdlerDaniel/Playerium)");
+        connection.setRequestProperty("User-Agent","Playerium/1.6.0 (https://github.com/AdlerDaniel/Playerium)");
         try(InputStream in=connection.getInputStream()){return new String(read(in,4*1024*1024),StandardCharsets.UTF_8);}finally{connection.disconnect();}
     }
     private static byte[] read(InputStream input,int limit) throws IOException {
@@ -158,13 +167,13 @@ final class MusicEngine {
         JSONObject track=payload.getJSONObject("track");String key=track.getString("id");if(!key.matches("song_[0-9a-f]+"))throw new SecurityException("Недопустимая запись");
         JSONObject existing=records().optJSONObject(key);if(existing!=null&&exists(existing))return withCover(existing);
         File staging=new File(context.getCacheDir(),"song-"+UUID.randomUUID());staging.mkdirs();
-        JSONObject committed=null;
+        JSONObject committed=null;Exception lastError=null;
         try {
             JSONArray sources=track.getJSONArray("sources");
             for(int i=0;i<Math.min(8,sources.length());i++) {
                 try {
                     clear(staging);staging.mkdirs();
-                    JSONObject info=new JSONObject(run(Arrays.asList("--dump-single-json","--skip-download","-f","bestaudio[ext=m4a]/bestaudio","--",source(sources.getJSONObject(i).getString("url"))),requestId,60000));
+                    JSONObject info=new JSONObject(run(Arrays.asList("--dump-single-json","--skip-download","-f","bestaudio[ext=m4a]/bestaudio/best","--",source(sources.getJSONObject(i).getString("url"))),requestId,60000));
                     if(!matches(track,info))continue;
                     for(String field:new String[]{"title","artist","album","genre","isrc"})if(!track.optString(field).isEmpty()){info.put(field,track.getString(field));info.put("meta_"+field,track.getString(field));}
                     if(track.has("artist"))info.put("artists",new JSONArray().put(track.getString("artist")));
@@ -172,15 +181,21 @@ final class MusicEngine {
                     String picture=track.optString("pictureUrl");if(picture.matches("https://(?:[^/]+\\.)?(?:mzstatic\\.com|dzcdn\\.net|ytimg\\.com|ggpht\\.com|googleusercontent\\.com|bcbits\\.com|audius\\.co|sndcdn\\.com)/.*")){info.put("thumbnail",picture);info.put("thumbnails",new JSONArray().put(new JSONObject().put("url",picture).put("id","cover")));}
                     File meta=new File(staging,"recording.json");try(OutputStream out=new FileOutputStream(meta)){out.write(info.toString().getBytes(StandardCharsets.UTF_8));}
                     String audioFormat=Arrays.asList("wav","aac").contains(info.optString("ext"))?"m4a":"best";
-                    String result=run(Arrays.asList("--load-info-json",meta.getAbsolutePath(),"--no-playlist","--quiet","--no-progress","--max-filesize","256M","-f","bestaudio[ext=m4a]/bestaudio","-x","--audio-format",audioFormat,"--audio-quality","0","--embed-metadata","--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail","-o",new File(staging,"audio.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"),requestId,600000);
+                    List<String> downloadArgs=new ArrayList<>(Arrays.asList("--load-info-json",meta.getAbsolutePath(),"--no-playlist","--quiet","--no-progress","--max-filesize","256M","-f","bestaudio[ext=m4a]/bestaudio/best","-x","--audio-format",audioFormat,"--audio-quality","0","--embed-metadata","--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail","-o",new File(staging,"audio.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"));
+                    String result;
+                    try{result=run(downloadArgs,requestId,600000);}catch(Exception e){
+                        if(!String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT).matches("(?s).*(thumbnail|image|cover|convert.*jpg).*"))throw e;
+                        downloadArgs.removeAll(Arrays.asList("--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail"));
+                        result=run(downloadArgs,requestId,600000);
+                    }
                     String[] lines=result.split("\\r?\\n");File audio=new File(lines[lines.length-1]);if(!audio.getCanonicalPath().startsWith(staging.getCanonicalPath()+File.separator)||!audio.getName().matches("audio\\.(m4a|mp3|opus|ogg|flac|aac|wav)"))throw new IOException("Invalid audio");
                     JSONObject metadata=new JSONObject();for(String field:new String[]{"title","artist","album","genre","isrc","duration"})metadata.put(field,info.opt(field));metadata.put("year",info.opt("release_year"));metadata.put("trackNo",info.opt("track_number"));
                     File cover=null;for(File file:staging.listFiles())if(file.getName().endsWith(".jpg")){cover=file;break;}
                     committed=publish(audio,cover,metadata,payload.optString("folderSource"),key);
                     synchronized(this){records().put(key,committed);saveRecords();}return withCover(committed);
-                }catch(SecurityException e){throw e;}catch(Exception e){if(committed!=null)throw e;}
+                }catch(SecurityException e){throw e;}catch(Exception e){if(committed!=null)throw e;lastError=e;}
             }
-            throw new IOException("Recording unavailable");
+            throw new IOException(downloadError(lastError));
         }catch(Exception e){if(committed!=null)deleteOwned(committed);throw e;}
         finally{clear(staging);}
     }

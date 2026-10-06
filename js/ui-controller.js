@@ -1,6 +1,8 @@
+import {showTrackMenu} from './track-menu.js';
+import {renderSearchView} from './search-view.js';
 import { bindSlider, syncPlaybackControls } from './playback-controls.js';
 import { saveIcon } from "./design-icons.js";
-import { renderSidebar, renderAllTracksView, renderHomeView, renderSearchView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, renderAlbumView, createActionBar } from "./library-views.js";
+import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, renderAlbumView, createActionBar } from "./library-views.js";
 import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
 import { renderRightQueue } from "./queue-view.js";
@@ -83,7 +85,7 @@ export class UIController {
     const searchInput = document.getElementById("mainSearchInput");
     const searchClear = document.getElementById("searchClearBtn");
     searchInput.addEventListener("input", (e) => {
-      this.searchQuery = e.target.value.trim();
+      this.searchQuery = e.target.value;
       searchClear.classList.toggle("visible", !!this.searchQuery);
       if(this.currentView.type !== "search") this.navigateTo({type:"search",title:"Поиск"});
       else this.refreshCurrentView();
@@ -175,7 +177,7 @@ export class UIController {
 
 
     // Close context menu on any document click
-    document.addEventListener("click", () => this.closeContextMenu());
+    document.addEventListener("click", e => {if(!e.target.closest("#appContextMenu"))this.closeContextMenu();});
     document.addEventListener("contextmenu", (e) => {
       if (!e.target.closest(".track-row") && !e.target.closest(".sidebar-item")) {
         this.closeContextMenu();
@@ -690,100 +692,7 @@ export class UIController {
   // --- Context Menus ---
 
   showTrackContextMenu(x, y, track, playlistContext = null) {
-    const menu = document.getElementById("appContextMenu");
-    const playlists = this.library.getPlaylists();
-
-    const playlistSubmenuHtml = playlists.length > 0
-      ? playlists.map((p) => `<div class="context-menu-item add-to-pl" data-pl-id="${p.id}"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>${this.escapeHTML(p.name)}</div>`).join("")
-      : `<div class="context-menu-item" style="opacity: 0.5;">Нет созданных плейлистов</div>`;
-
-    menu.innerHTML = `
-      <div class="context-menu-item" id="ctxPlayNow">
-        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Воспроизвести сейчас
-      </div>
-      <div class="context-menu-item" id="ctxPlayNext">
-        <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg> Включить следующим
-      </div>
-      <div class="context-menu-item" id="ctxAddToQueue">
-        <svg viewBox="0 0 24 24"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"/></svg> Добавить в очередь
-      </div>
-      <div class="context-divider"></div>
-      <div class="context-menu-item" id="ctxToggleLike">
-        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> ${track.liked ? "Удалить из любимых" : "Добавить в Любимые"}
-      </div>
-      <div class="context-divider"></div>
-      <div style="padding: 4px 12px; font-size: 11px; color: var(--sp-text-subdued); text-transform: uppercase;">Добавить в плейлист</div>
-      ${playlistSubmenuHtml}
-      ${playlistContext ? `
-        <div class="context-divider"></div>
-        <div class="context-menu-item" id="ctxRemoveFromPl" style="color: var(--sp-red);">
-          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Удалить из этого плейлиста
-        </div>
-      ` : ""}
-      <div class="context-divider"></div>
-      <button class="context-menu-item" id="ctxSaveOrRemove">${track.catalog ? 'Скачать' : 'Удалить трек'}</button>
-    `;
-
-    // Position menu within viewport
-    menu.style.display = "block";
-    const w = menu.offsetWidth || 220;
-    const h = menu.offsetHeight || 260;
-    menu.style.left = Math.min(x, window.innerWidth - w - 10) + "px";
-    menu.style.top = Math.min(y, window.innerHeight - h - 10) + "px";
-    menu.classList.add("active");
-
-    // Bind item clicks
-    menu.querySelector("#ctxPlayNow").addEventListener("click", () => {
-      this.player.playTrack(track, 0, [track]);
-      this.closeContextMenu();
-    });
-
-    menu.querySelector("#ctxPlayNext").addEventListener("click", async () => {
-      this.closeContextMenu();
-      try{this.player.playNext(await this.music.ensureTrack(track));this.showToast("Будет воспроизведено следующим");}catch(error){this.showToast(error.message,'error');}
-    });
-
-    menu.querySelector("#ctxAddToQueue").addEventListener("click", async () => {
-      this.closeContextMenu();
-      try{this.player.addToQueue(await this.music.ensureTrack(track));this.showToast("Добавлено в очередь");}catch(error){this.showToast(error.message,'error');}
-    });
-
-    menu.querySelector("#ctxToggleLike").addEventListener("click", async () => {
-      this.closeContextMenu();try {
-      const saved=track.catalog?await this.music.ensureTrack(track):track;
-      const liked = await this.library.toggleLike(saved.id);
-      this.updateLikeButtons(track.id, liked);
-      this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
-      }catch(error){this.showToast(error.message,'error');}
-    });
-
-    menu.querySelector('#ctxSaveOrRemove').addEventListener('click',async()=>{
-      this.closeContextMenu();
-      try {
-        if(track.catalog){await this.music.ensureTrack(track);this.refreshCurrentView();this.showToast('Трек сохранён','success');}
-        else if(confirm(`Удалить трек «${track.title}»?`)){await this.music.removeTrack(track);this.showToast('Трек удалён');}
-      }catch(error){this.showToast(error.message,'error');}
-    });
-
-    menu.querySelectorAll(".add-to-pl").forEach((el) => {
-      el.addEventListener("click", async () => {
-        this.closeContextMenu();try {
-        const plId = el.dataset.plId;
-        const saved=track.catalog?await this.music.ensureTrack(track):track;
-        await this.library.addTrackToPlaylist(plId, saved.id);
-        const pl = this.library.getPlaylistById(plId);
-        this.showToast(`Добавлено в «${pl.name}»`);
-        }catch(error){this.showToast(error.message,'error');}
-      });
-    });
-
-    if (playlistContext && menu.querySelector("#ctxRemoveFromPl")) {
-      menu.querySelector("#ctxRemoveFromPl").addEventListener("click", async () => {
-        await this.library.removeTrackFromPlaylist(playlistContext.id, track.id);
-        this.showToast("Трек удален из плейлиста");
-        this.closeContextMenu();
-      });
-    }
+    return showTrackMenu(this,track,{x,y,playlistContext});
   }
 
   showPlaylistContextMenu(x, y, playlist) {
@@ -944,6 +853,7 @@ export class UIController {
     const container = document.getElementById("toastContainer");
     const toast = document.createElement("div");
     toast.className = `toast ${type}`;
+    toast.setAttribute("role",type==="error"?"alert":"status");
     toast.textContent = message;
     container.appendChild(toast);
 
@@ -952,7 +862,7 @@ export class UIController {
       toast.style.transform = "translateY(10px)";
       toast.style.transition = "all 0.3s ease";
       setTimeout(() => toast.remove(), 300);
-    }, 2800);
+    }, type === "error" ? 8000 : 2800);
   }
 
   formatTime(seconds) {

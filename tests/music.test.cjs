@@ -44,3 +44,40 @@ test('native requests cannot turn a catalog search into arbitrary file/network a
   assert.throws(()=>catalogURL('https://evil.test','song'));
   assert.ok(sourceURL('https://artist.bandcamp.com/track/song'));
 });
+
+test('catalog-only songs download through Audius when video services are unavailable, with duplicate clicks coalesced',async()=>{
+  global.window={};global.document={querySelectorAll:()=>[]};global.DOMParser=class {parseFromString(){return {querySelectorAll:()=>[]};}};
+  const calls=[];window.electronAPI={musicRequest:async(operation,payload)=>{
+    calls.push({operation,payload});
+    if(operation==='catalog'&&payload.provider==='audius')return {data:[{title:'Tenke',user:{name:'747'},duration:452,permalink:'/rchan747/tenke-355245'},{title:'Tenke',user:{name:'Repost'},duration:452,permalink:'/repost/tenke'}]};
+    if(operation==='catalog')return '';
+    if(operation==='search')throw Error('HTTP 403');
+    if(operation==='download'){await new Promise(r=>setTimeout(r,20));return {name:'Tenke.mp3'};}
+  }};
+  const {MusicCatalog}=await import('../js/music-catalog.js');
+  const song={id:'song_ab12',title:'Tenke',artist:'747',duration:452,catalog:true,sources:[]};let writes=0;
+  const lib={getTracks:()=>[],folders:[],addDownloaded:async()=>{writes++;return {...song,catalog:false};}};
+  const catalog=new MusicCatalog(lib,{renderSidebar:()=>{}});
+  const [a,b]=await Promise.all([catalog.ensureTrack(song),catalog.ensureTrack(song)]);
+  assert.equal(a,b);assert.equal(writes,1);assert.equal(calls.filter(c=>c.operation==='download').length,1);
+  assert.equal(calls.filter(c=>c.operation==='search').length,0);
+  assert.deepEqual(calls.find(c=>c.operation==='download').payload.track.sources.map(s=>s.url),['https://audius.co/rchan747/tenke-355245']);
+});
+test('unreachable sources are not retried after discovery and storage errors stop fallback',async()=>{
+  global.window={};global.document={querySelectorAll:()=>[]};global.DOMParser=class {parseFromString(){return {querySelectorAll:()=>[]};}};
+  const {MusicCatalog}=await import('../js/music-catalog.js');
+  const lib={getTracks:()=>[],folders:[],addDownloaded:async()=>assert.fail('failed download must not enter library')};
+  const song={id:'song_ab13',title:'Tenke',artist:'747',duration:452,catalog:true,sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/watch?v=abcdefghijk'}]};
+  let attempts=0;window.electronAPI={musicRequest:async(op,p)=>{if(op==='catalog')return p.provider==='bandcamp'?'':{};if(op==='search')return {entries:[{title:'Tenke',artist:'747',duration:452,webpage_url:song.sources[0].url}]};attempts++;throw Error('Аудиосервис ограничил доступ к этой записи.');}};
+  const catalog=new MusicCatalog(lib,{renderSidebar:()=>{}});await assert.rejects(catalog.ensureTrack(song),/ограничил доступ/);assert.equal(attempts,1);assert.equal(catalog.downloads.size,0);
+  window.electronAPI.musicRequest=async(op)=>{assert.equal(op,'download');throw Error('Недостаточно места для сохранения трека.');};
+  await assert.rejects(catalog.ensureTrack({...song,sources:[{provider:'audius',url:'https://audius.co/artist/tenke'}]}),/места/);
+});
+test('download diagnostics distinguish access restrictions, networking and storage without leaking URLs',()=>{
+  const {downloadError}=require('../desktop-music');
+  assert.match(downloadError(Error('HTTP Error 403 https://secret.invalid/token')),/ограничил доступ/);
+  assert.match(downloadError(Error('Timed out')),/соединиться/);
+  assert.match(downloadError(Error('ENOSPC')),/места/);
+  assert.match(downloadError(Error('EACCES')),/папке/);
+  assert.ok(!downloadError(Error('HTTP Error 403 https://secret.invalid/token')).includes('https://'));
+});
