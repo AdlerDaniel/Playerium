@@ -1,5 +1,9 @@
 // Recording identity is independent of the platform that supplies its audio.
 export const normalize = value => String(value || '').normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase().replace(/[’'`]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+// Search accepts Cyrillic spelling of artist names stored in Latin script.
+// Recording identity stays strict: spelling similarity alone cannot replace audio.
+const cyrillic={а:'a',б:'b',в:'v',г:'g',ґ:'g',д:'d',е:'e',ё:'e',є:'ye',ж:'zh',з:'z',и:'i',і:'i',ї:'yi',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'kh',ц:'ts',ч:'ch',ш:'sh',щ:'shch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
+export const normalizeSearch=value=>normalize(String(value||'').toLocaleLowerCase().replace(/[а-яёіїєґ]/gu,c=>cyrillic[c]));
 const presentation = /\s*[\[(]?(?:official\s+(?:audio|lyric(?:s)?(?:\s+video)?)|audio\s+only|visuali[sz]er|lyrics?|provided to youtube)[\])]?\s*/gi;
 const unwanted = /\b(?:cover|karaoke|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts|behind the scenes)\b|[\[(]\s*live\b|\blive\s+(?:at|from|in|on|version|performance|session)\b|\blive\s*[\])]|кавер|концерт|ремикс|караоке|наживо|кліп|клип/i;
 export const cleanTitle = title => String(title || '').replace(presentation,' ').replace(/\s+/g,' ').trim();
@@ -42,11 +46,11 @@ export function audioCandidate(entry, provider) {
     rawTitle:entry.title || title,official,metadataScore:1,sources:[{provider,url,official}],catalog:true};
 }
 export function mergeSongs(groups, query, local=[]) {
-  const tokens=normalize(query).split(' ').filter(Boolean),merged=[];
+  const tokens=normalizeSearch(query).split(' ').filter(Boolean),merged=[];
   for(const raw of groups.flat()) {
     if(!raw?.title||!raw.artist||isVariant(raw.rawTitle||raw.title,query))continue;
     if(raw.duration && (raw.duration<30||raw.duration>1800))continue;
-    const text=normalize(`${raw.title} ${raw.artist}`);
+    const text=normalizeSearch(`${raw.title} ${raw.artist}`);
     if(tokens.length && tokens.filter(t=>text.includes(t)).length/tokens.length<.65)continue;
     let existing=merged.find(t=>sameRecording(t,raw));
     if(existing) {
@@ -69,6 +73,6 @@ export function mergeSongs(groups, query, local=[]) {
     }
   }
   const result=[...local.filter(t=>!merged.some(m=>m.id===t.id)),...merged];
-  const score=t => tokens.reduce((v,k)=>v+(normalize(t.title).includes(k)?3:0)+(normalize(t.artist).includes(k)?4:0),0)+(t.official?2:0)+(t.catalog?0:1);
+  const score=t => tokens.reduce((v,k)=>v+(normalizeSearch(t.title).includes(k)?3:0)+(normalizeSearch(t.artist).includes(k)?4:0),0)+(t.official?2:0)+(t.catalog?0:1);
   return result.sort((a,b)=>score(b)-score(a)).slice(0,60);
 }

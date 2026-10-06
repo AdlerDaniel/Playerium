@@ -81,3 +81,11 @@ test('download diagnostics distinguish access restrictions, networking and stora
   assert.match(downloadError(Error('EACCES')),/папке/);
   assert.ok(!downloadError(Error('HTTP Error 403 https://secret.invalid/token')).includes('https://'));
 });
+test('Cyrillic artist searches retain original Latin-script catalog recordings and find saved artist/title queries',async()=>{
+  const {mergeSongs}=await import('../js/music-match.js');
+  const original={title:'747',artist:'DOROFEEVA',duration:173.963,pictureUrl:'https://cover.example/747.jpg',sources:[],catalog:true};
+  const other={...original,artist:'Eddie Rabbitt'};
+  const rows=mergeSongs([[original,other]],'Дорофеева 747');assert.equal(rows.length,1);assert.equal(rows[0].artist,'DOROFEEVA');assert.equal(rows[0].pictureUrl,original.pictureUrl);
+  const nirvana={title:'Smells Like Teen Spirit',artist:'Nirvana',duration:301,sources:[],catalog:true};assert.equal(mergeSongs([[nirvana]],'Нирвана Smells Like Teen Spirit').length,1);
+  const {Library}=await import('../js/library.js');const lib=new Library();lib.tracks.set('saved',{...original,id:'saved'});assert.deepEqual(lib.search('Дорофеева 747').map(t=>t.id),['saved']);
+});

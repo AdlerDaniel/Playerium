@@ -64,3 +64,9 @@ test('failed downloads show a readable alert, leave no saved track and restore t
   await page.evaluate(()=>window.failDownload=true);await page.locator('.track-download-btn').click();await expect(page.getByRole('alert')).toContainText('ограничил доступ');
   await expect(page.locator('.track-download-btn')).toBeEnabled();expect(await page.evaluate(()=>window.playerApp.library.getTracks().length)).toBe(0);
 });
+test('Дорофеева 747 shows its catalog cover before a song has been downloaded',async({page})=>{
+  await setup(page,true);
+  await page.evaluate(()=>{const original=window.electronAPI.musicRequest;window.electronAPI.musicRequest=async(op,p)=>op==='catalog'&&p.provider==='itunes'?{results:[{trackName:'747',artistName:'DOROFEEVA',trackTimeMillis:173963,artworkUrl100:'https://covers.example.test/747.jpg'}]}:original(op,p);});
+  await page.locator('.mobile-search-input').fill('Дорофеева 747');await expect(page.locator('.song-search-results .track-row')).toHaveCount(1);await expect(page.locator('.track-name')).toHaveText('747');await expect(page.locator('.track-artist')).toHaveText('DOROFEEVA');
+  await expect.poll(()=>page.locator('.track-mini-thumb img').evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);expect(await page.evaluate(()=>window.musicCalls.some(c=>c.op==='download'))).toBe(false);
+});
