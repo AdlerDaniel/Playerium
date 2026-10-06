@@ -26,7 +26,7 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     const tracks=await win.evaluate(()=>window.playerApp.library.getTracks().map(t=>({title:t.title,duration:t.duration,lyrics:t.lyrics,fileName:t.fileName})));
     assert.equal(tracks.length,1, `Expected one audio track, got ${tracks.length}; errors: ${errors.join("; ")}`);
     const track=tracks[0];
-    assert.equal(track.title,'Song');assert.equal(track.duration,3);assert.match(track.lyrics,/desktop lyrics/);
+    assert.equal(track.title,'Song');assert.equal(track.duration,3);assert.equal(track.lyrics,undefined);
     await win.evaluate(()=>window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))));
     await win.waitForFunction(()=>window.playerApp.player.isPlaying && window.playerApp.player.audio.duration>0);
     assert.match(await win.evaluate(()=>window.playerApp.player.audio.src),/^playerium-audio:/);

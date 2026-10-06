@@ -42,6 +42,7 @@ test('native queue edits preserve playing or paused state', async () => {
   p.addToQueue({id:'b',nativeUri:'content://music/b'});
   p.toggleShuffle();p.clearUpcomingQueue();
   assert.ok(messages.every(m=>m.play===true));
+  assert.ok(messages.every(m=>m.reset===false));
   p.isPlaying=false;p.addToQueue({id:'c',nativeUri:'content://music/c'});
   assert.equal(messages.at(-1).play,false);
 });
@@ -66,13 +67,13 @@ test('starting a new collection clears the previous playback context',async()=>{
   await p.playTrack(track,0,[track]);
   assert.equal(p.playbackContext,null);
 });
-test('folder import parses metadata, attaches lyrics, skips .lrc and preserves likes/IDs', async () => {
+test('folder import parses metadata, ignores .lrc and preserves likes/IDs', async () => {
   const lib = await library();
   window.electronAPI = { getMetadata: async () => ({title:'Tagged song',artist:'Tagged artist',duration:42}), readLyrics: async () => '[00:01]hello' };
   const files = [descriptor('song.mp3','/music/song.mp3'), {name:'song.lrc',fullPath:'/music/song.lrc',size:10}];
   const first = await lib.syncFolderToPlaylist('Music','/music', files);
   assert.equal(first.addedCount,1); const track = lib.getTracks()[0];
-  assert.equal(track.title,'Tagged song'); assert.equal(track.lyrics,'[00:01]hello');
+  assert.equal(track.title,'Tagged song'); assert.equal(track.lyrics,undefined);
   await lib.toggleLike(track.id);
   const again = await lib.syncFolderToPlaylist('Music','/music',files);
   assert.equal(again.addedCount,0); assert.equal(lib.getTracks()[0].liked,true);
@@ -133,12 +134,13 @@ test('native playback sends URI queue without reading audio into JavaScript',asy
   const p=await player({getAudioFile:()=>{throw Error('must not read native files');}});
   await p.playTrack({id:'native',nativeUri:'content://music/1',title:'Native'});
   assert.equal(queue.tracks[0].uri,'content://music/1'); assert.equal(p.audio.src,'');
+  assert.equal(queue.reset,true);
   p.applyNativeState({id:'native',playing:true,position:2000,duration:42000});assert.equal(p.getDuration(),42);assert.equal(p.isPlaying,true);
 });
 test('async directory scan handles nested audio/LRC and never traverses symlinks',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'playerium-'));
   try { await fs.mkdir(path.join(root,'nested'));await fs.writeFile(path.join(root,'nested/song.mp3'),'a');await fs.writeFile(path.join(root,'nested/song.lrc'),'b');await fs.writeFile(path.join(root,'ignore.txt'),'c');
-    await fs.symlink(os.tmpdir(),path.join(root,'link')); const files=await scanDirectory(root);assert.equal(files.length,2);assert.equal(files[0].relativePath.startsWith('nested/'),true);
+    await fs.symlink(os.tmpdir(),path.join(root,'link')); const files=await scanDirectory(root);assert.equal(files.length,1);assert.equal(files[0].relativePath.startsWith('nested/'),true);
     assert.equal(isInside(root,`${root}-outside/file`),false);assert.equal(isInside(root,path.join(root,'nested/song.mp3')),true);
   } finally { await fs.rm(root,{recursive:true,force:true}); }
 });
@@ -148,13 +150,13 @@ test('legacy Android library and preferences migrate before switching to secure 
   const lib=new Library();await lib.init();assert.equal(lib.getTrackById('legacy').liked,true);
   assert.equal(lib.getPlaylistTracks('old-playlist')[0].id,'legacy');assert.equal(completed,true);assert.equal(JSON.parse(localStorage.getItem('sp_audio_prefs')).volume,0.3);
 });
-test('changing only lyrics refreshes text without changing the track ID',async()=>{
-  const lib=await library();let text='[00:01]old';
-  window.electronAPI={getMetadata:async()=>({title:'Song'}),readLyrics:async()=>text};
+test('changing ignored LRC files does not reparse audio metadata',async()=>{
+  const lib=await library();let calls=0;
+  window.electronAPI={getMetadata:async()=>{calls++;return {title:'Song',lyrics:'obsolete'};},readLyrics:()=>{throw Error('LRC must not be read');}};
   const files=[descriptor('song.mp3','/music/song.mp3'),{name:'song.lrc',fullPath:'/music/song.lrc',lastModified:1}];
   await lib.syncFolderToPlaylist('Music','/music',files);const id=lib.getTracks()[0].id;
-  text='[00:01]new';files[1].lastModified=2;await lib.syncFolderToPlaylist('Music','/music',files);
-  assert.equal(lib.getTrackById(id).lyrics,text);
+  files[1].lastModified=2;await lib.syncFolderToPlaylist('Music','/music',files);
+  assert.equal(lib.getTrackById(id).lyrics,undefined);assert.equal(calls,1);
 });
 test('version comparison honors prerelease ordering and rejects malformed tags',async()=>{
   const {AutoUpdater}=await import('../js/updater.js');const updater=new AutoUpdater();

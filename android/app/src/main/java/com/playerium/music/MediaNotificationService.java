@@ -99,17 +99,25 @@ public class MediaNotificationService extends MediaSessionService {
         boolean play = data.optBoolean("play");
         String currentId = player.getCurrentMediaItem() == null ? "" : player.getCurrentMediaItem().mediaId;
         int index = Math.max(0, Math.min(items.size() - 1, data.optInt("index")));
-        long position = 0;
-        if (!play && items.get(index).mediaId.equals(currentId)) position = player.getCurrentPosition();
-        else if (!play) {
-            for (int i = 0; i < items.size(); i++) if (items.get(i).mediaId.equals(currentId)) { index = i; position = player.getCurrentPosition(); break; }
+        MediaItem current = player.getCurrentMediaItem();
+        boolean preserve = !data.optBoolean("reset") && current != null
+            && items.get(index).mediaId.equals(currentId)
+            && java.util.Objects.equals(items.get(index).localConfiguration, current.localConfiguration);
+        if (preserve) {
+            // Keep the active media source and its position; edit only its neighbours.
+            int oldIndex = player.getCurrentMediaItemIndex();
+            player.removeMediaItems(oldIndex + 1, player.getMediaItemCount());
+            player.removeMediaItems(0, oldIndex);
+            player.addMediaItems(0, items.subList(0, index));
+            player.addMediaItems(items.subList(index + 1, items.size()));
+            player.replaceMediaItem(index, items.get(index));
+        } else {
+            player.setMediaItems(items, index, 0);
+            player.prepare();
+            player.setPlayWhenReady(play);
         }
-        boolean wasPlaying = player.getPlayWhenReady();
-        player.setMediaItems(items, index, position);
         player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
         player.setVolume((float)data.optDouble("volume", 0.8));
-        player.prepare();
-        player.setPlayWhenReady(play || wasPlaying);
     }
 
     private void command(String command, double value) {

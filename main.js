@@ -107,13 +107,7 @@ app.whenReady().then(async () => {
     const { common, format } = await parseFile(real);
     const picture = common.picture?.[0];
     return { title: common.title, artist: common.artist, album: common.album, year: common.year, trackNo: common.track?.no, duration: format.duration || 0,
-      lyrics: common.lyrics?.map(l => typeof l === 'string' ? l : l.text || '').join('\n') || null,
       picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null };
-  });
-  handle('file:text', async file => {
-    const real = await authorize(file);
-    if (path.extname(real).toLowerCase() !== '.lrc' || (await fsp.stat(real)).size > 1024 * 1024) throw new Error('Invalid lyrics file');
-    return fsp.readFile(real, 'utf8');
   });
   handle('shell:openExternal', openExternal);
   createWindow();

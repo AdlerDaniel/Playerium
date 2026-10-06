@@ -125,7 +125,6 @@ export function renderSettingsView(container) {
           <div class="shortcut-card"><span class="shortcut-action">Отключение звука</span><span class="kbd">M</span></div>
           <div class="shortcut-card"><span class="shortcut-action">Фокус поиска</span><span class="kbd">Ctrl + L</span></div>
           <div class="shortcut-card"><span class="shortcut-action">Очередь воспроизведения</span><span class="kbd">Q</span></div>
-          <div class="shortcut-card"><span class="shortcut-action">Текст песни (Lyrics)</span><span class="kbd">K</span></div>
         </div>
       </div>
 

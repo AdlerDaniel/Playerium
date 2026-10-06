@@ -122,7 +122,7 @@ body {
   scroll-behavior: auto;
 }
 
-/* Right Panel (Now Playing / Queue / Lyrics) */
+/* Right Panel (Now Playing / Queue) */
 .right-panel {
   width: var(--sp-right-width);
   background-color: var(--sp-dark-900);

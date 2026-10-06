@@ -14,7 +14,7 @@ async function scanDirectory(root) {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) await visit(fullPath);
-      else if (entry.isFile() && (AUDIO_EXTS.has(path.extname(entry.name).toLowerCase()) || /\.lrc$/i.test(entry.name))) {
+      else if (entry.isFile() && (AUDIO_EXTS.has(path.extname(entry.name).toLowerCase()))) {
         const stat = await fs.stat(fullPath);
         files.push({ name: entry.name, fullPath, relativePath: path.relative(root, fullPath).replaceAll('\\', '/'), size: stat.size, lastModified: stat.mtimeMs });
       }

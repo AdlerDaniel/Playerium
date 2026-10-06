@@ -116,12 +116,6 @@ export function bindMobileEvents() {
       });
     }
 
-    // Lyrics Card tap on fullscreen player
-    document.getElementById("mobileFsLyricsCard")?.addEventListener("click", () => {
-      fsPlayer?.classList.remove("active");
-      this.navigateTo({ type: "lyrics", title: "Текст песни" });
-    });
-
     // Fullscreen Equalizer & Queue
     document.getElementById("btnMobileFsEq")?.addEventListener("click", () => {
       fsPlayer?.classList.remove("active");
@@ -187,10 +181,6 @@ export function showMobileTrackOptionsSheet(track, index, tracks, playlistContex
           <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
           <span>Перейти к исполнителю: ${this.escapeHTML(track.artist)}</span>
         </button>
-        <button class="mobile-sheet-item" id="sheetOptLyrics">
-          <svg viewBox="0 0 16 16" width="20" height="20"><path d="M13.426 2.574a2.831 2.831 0 0 0-4.797 1.55l3.247 3.247a2.831 2.831 0 0 0 1.55-4.797zM10.5 8.693l-3.247-3.247L1.879 10.82a.75.75 0 0 0-.22.53v2.899c0 .414.336.75.75.75h2.899a.75.75 0 0 0 .53-.22L10.5 8.693z"/></svg>
-          <span>Показать текст песни</span>
-        </button>
         <button class="mobile-sheet-cancel" id="sheetOptCancel">Закрыть</button>
       </div>
     `;
@@ -231,12 +221,6 @@ export function showMobileTrackOptionsSheet(track, index, tracks, playlistContex
       this.navigateTo({ type: "artist", id: track.artist, title: track.artist });
     });
 
-    sheet.querySelector("#sheetOptLyrics").addEventListener("click", async () => {
-      closeSheet();
-      document.getElementById("mobileFullscreenPlayer")?.classList.remove("active");
-      if (this.player.currentTrack?.id !== track.id) await this.player.playTrack(track, index, tracks, { ...this.currentView });
-      this.navigateTo({ type: "lyrics", title: "Текст песни" });
-    });
 }
 
 export function showMobileAddSheet() {

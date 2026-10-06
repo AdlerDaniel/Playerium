@@ -1,3 +1,4 @@
+import { normalizeTrackTitle } from "./track-title.js";
 /**
  * Spotify Local Player - Library & Database Layer
  * IndexedDB persistence for tracks, playlists, folders, and likes.
@@ -75,10 +76,24 @@ export class Library {
 
   async loadAll() {
     const tracks = await this.getAllFromStore("tracks");
-    tracks.forEach((t) => {
+    const corrected = [];
+    for (const t of tracks) {
+      const title = normalizeTrackTitle(t.title);
+      if (title !== t.title || "lyrics" in t || "lyricsModified" in t) {
+        t.title = title; delete t.lyrics; delete t.lyricsModified;
+        corrected.push({ ...t, pictureUrl: null });
+      }
       t.pictureUrl = t.pictureBlob ? this.coverURL(t.id, t.pictureBlob) : null;
       this.tracks.set(t.id, t);
-    });
+    }
+    if (corrected.length) {
+      const tx = this.db.transaction("tracks", "readwrite");
+      const complete = new Promise((resolve, reject) => {
+        tx.oncomplete = resolve; tx.onerror = tx.onabort = () => reject(tx.error);
+      });
+      for (const t of corrected) tx.objectStore("tracks").put(t);
+      await complete;
+    }
 
     const playlists = await this.getAllFromStore("playlists");
     playlists.forEach((p) => this.playlists.set(p.id, p));
@@ -439,8 +454,6 @@ export class Library {
     if (this.blockedSources.has(folderSource)) return { ignored: true };
     const audio = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac)$/i.test(f.name));
     const identity = f => f.fullPath || f.uri || `${folderSource}/${f.relativePath || f.name}`;
-    const lyricsKey = f => (f.relativePath || f.fullPath || f.uri || f.name).replace(/\.[^/.]+$/, "").toLowerCase();
-    const lyrics = new Map(files.filter(f => /\.lrc$/i.test(f.name)).map(f => [lyricsKey(f), f]));
     let playlist = this.findPlaylistByFolderSource(folderSource);
     const isNewPlaylist = !playlist;
     if (!playlist) {
@@ -468,9 +481,7 @@ export class Library {
           track = candidates[0]; restoredLegacy.add(track.id);
         }
       }
-      const lyricsFile = lyrics.get(lyricsKey(f));
-      const lyricsModified = lyricsFile?.lastModified || lyricsFile?.file?.lastModified || f.metadata?.lyricsModified || 0;
-      const changed = !track || track.lyricsModified !== lyricsModified || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
+      const changed = !track || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
       if (changed) {
         const cleanName = f.name.replace(/\.[^/.]+$/, "");
         const parts = cleanName.split(" - ");
@@ -490,14 +501,14 @@ export class Library {
               metadata.pictureBlob = new Blob([bytes], { type: "image/jpeg" });
             }
           }
-          const lrc = lyrics.get(lyricsKey(f));
-          if (lrc) metadata.lyrics = lrc.file ? await lrc.file.text() : await window.electronAPI.readLyrics(lrc.fullPath);
         } catch (error) { parsed = false; failedCount++; console.warn("Metadata import failed:", f.name, error); }
         const id = track?.id || `trk_${crypto.randomUUID()}`;
         const previous = track;
         track = { ...metadata, id, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
-          sourceKey: key, folderSource, folderName, lyricsModified, filePath: f.fullPath || null, nativeUri: f.uri || null,
+          sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
           liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, unavailable: false };
+        track.title = normalizeTrackTitle(track.title);
+        delete track.lyrics; delete track.lyricsModified;
         delete track.picture; delete track.pictureBase64;
         if (track.pictureBlob) { track.pictureBlob = await resizeArtwork(track.pictureBlob); track.pictureUrl = this.coverURL(id, track.pictureBlob); }
         else {

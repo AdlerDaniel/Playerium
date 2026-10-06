@@ -1,8 +1,10 @@
 /**
  * Spotify Local Player - ID3 & Audio Metadata Parser
  * Pure JavaScript parser for ID3v2, ID3v1, and FLAC/Vorbis comments
- * Extracts: Title, Artist, Album, Year, Track Number, Embedded Album Art, Lyrics.
+ * Extracts: Title, Artist, Album, Year, Track Number, Embedded Album Art.
  */
+
+import { normalizeTrackTitle } from "./track-title.js";
 
 export class ID3Parser {
   /**
@@ -23,7 +25,6 @@ export class ID3Parser {
       trackNo: "",
       duration: 0,
       pictureUrl: null,
-      lyrics: null,
       fileName: filename,
       fileSize: file.size,
       lastModified: file.lastModified
@@ -86,6 +87,7 @@ export class ID3Parser {
       }
     }
 
+    metadata.title = normalizeTrackTitle(metadata.title);
     return metadata;
   }
 
@@ -193,7 +195,7 @@ export class ID3Parser {
   static decodeFrame(frameId, data, result) {
     try {
       if (["TIT2", "TT2"].includes(frameId)) {
-        result.title = this.decodeText(data).trim() || result.title;
+        result.title = normalizeTrackTitle(this.decodeText(data)) || result.title;
       } else if (["TPE1", "TP1"].includes(frameId)) {
         result.artist = this.decodeText(data).trim() || result.artist;
       } else if (["TALB", "TAL"].includes(frameId)) {
@@ -202,8 +204,6 @@ export class ID3Parser {
         result.year = this.decodeText(data).trim();
       } else if (["TRCK", "TRK"].includes(frameId)) {
         result.trackNo = this.decodeText(data).trim();
-      } else if (["USLT", "ULT"].includes(frameId)) {
-        result.lyrics = this.decodeLyrics(data);
       } else if (["APIC", "PIC"].includes(frameId) && !result.pictureBlob) {
         result.pictureBlob = this.decodePicture(data);
       }
@@ -236,22 +236,6 @@ export class ID3Parser {
       return new TextDecoder("utf-8").decode(payload).replace(/\0+$/, "");
     }
     return "";
-  }
-
-  static decodeLyrics(bytes) {
-    if (!bytes || bytes.length < 5) return null;
-    const encoding = bytes[0];
-    // Next 3 bytes are language code (e.g. 'eng')
-    let offset = 4;
-    // Skip content descriptor until null terminator
-    while (offset < bytes.length && bytes[offset] !== 0) {
-      offset++;
-    }
-    offset++; // Skip null byte
-    if (encoding === 1 || encoding === 2) offset++; // 16-bit null
-
-    if (offset >= bytes.length) return null;
-    return this.decodeText(bytes.subarray(offset - 1));
   }
 
   static decodePicture(bytes) {

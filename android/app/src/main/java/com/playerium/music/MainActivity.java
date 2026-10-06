@@ -54,7 +54,6 @@ public class MainActivity extends AppCompatActivity {
     private final static int PERMISSION_REQUEST_CODE = 2001;
 
     private final java.util.Map<String, JSONObject> metadataCache = new java.util.LinkedHashMap<>(128, 0.75f, true);
-    private final java.util.Map<String, DocumentFile> lyricFiles = new java.util.HashMap<>();
 
     private long activeDownloadId = -1;
     private Handler progressHandler;
@@ -512,7 +511,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         List<DocumentFile> audioFiles = new ArrayList<>();
-        lyricFiles.clear();
         findAudioFilesRecursively(rootDir, audioFiles);
 
         sendNativeFiles(folderName, treeUri.toString(), audioFiles, isInitial);
@@ -520,7 +518,6 @@ public class MainActivity extends AppCompatActivity {
 
     private synchronized void scanSelectedFiles(boolean isInitial) {
         List<DocumentFile> files = new ArrayList<>();
-        lyricFiles.clear();
         for (String value : getSharedPreferences("playerium", MODE_PRIVATE).getStringSet("selected_music_files", java.util.Collections.emptySet())) {
             Uri uri = Uri.parse(value);
             if (!hasMusicPermission(this, uri)) continue;
@@ -545,8 +542,7 @@ public class MainActivity extends AppCompatActivity {
                 fileObj.put("size", df.length());
                 fileObj.put("lastModified", df.lastModified());
                 fileObj.put("relativePath", android.provider.DocumentsContract.getDocumentId(df.getUri()));
-                DocumentFile lrc = lyricFiles.get(df.getUri().toString());
-                String cacheKey = df.getUri().toString() + ":" + df.length() + ":" + df.lastModified() + ":" + (lrc == null ? 0 : lrc.lastModified());
+                String cacheKey = df.getUri().toString() + ":" + df.length() + ":" + df.lastModified();
                 JSONObject metadata = metadataCache.get(cacheKey);
                 if (metadata == null) { metadata = readMetadata(df); metadataCache.put(cacheKey, metadata);
                     if (metadataCache.size() > 128) metadataCache.remove(metadataCache.keySet().iterator().next());
@@ -595,27 +591,12 @@ public class MainActivity extends AppCompatActivity {
             }
         } catch (Exception ignored) {}
         finally { try { retriever.release(); } catch (Exception ignored) {} }
-        try {
-            DocumentFile sibling = lyricFiles.get(file.getUri().toString());
-            if (sibling != null && sibling.length() <= 1024 * 1024) {
-                try (InputStream input = getContentResolver().openInputStream(sibling.getUri()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-                    byte[] bytes = new byte[8192]; int count;
-                    while ((count = input.read(bytes)) != -1 && output.size() < 1024 * 1024) output.write(bytes, 0, count);
-                    data.put("lyrics", output.toString("UTF-8"));
-                    data.put("lyricsModified", sibling.lastModified());
-                }
-            }
-        } catch (Exception ignored) {}
         return data;
     }
 
     private void findAudioFilesRecursively(DocumentFile dir, List<DocumentFile> results) {
         DocumentFile[] files = dir.listFiles();
         if (files == null) return;
-        java.util.Map<String, DocumentFile> lyrics = new java.util.HashMap<>();
-        for (DocumentFile f : files) if (f.getName() != null && f.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".lrc"))
-            lyrics.put(f.getName().toLowerCase(java.util.Locale.ROOT).replaceFirst("\\.lrc$", ""), f);
-
         for (DocumentFile file : files) {
             if (file.isDirectory()) {
                 findAudioFilesRecursively(file, results);
@@ -626,8 +607,6 @@ public class MainActivity extends AppCompatActivity {
                     if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
                         lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac")) {
                         results.add(file);
-                        DocumentFile lrc = lyrics.get(lower.replaceFirst("\\.[^.]+$", ""));
-                        if (lrc != null) lyricFiles.put(file.getUri().toString(), lrc);
                     }
                 }
             }

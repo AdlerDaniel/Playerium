@@ -7,7 +7,45 @@ function wav(seconds = 3) {
   for (let i = 0; i < samples; i++) data.writeInt16LE(Math.round(Math.sin(i * Math.PI * 2 * 440 / rate) * 1000),44 + i * 2);
   return data;
 }
-test('import, playback and restart preserve files, lyrics, likes and covers', async ({page}) => {
+for (const mobile of [false,true]) test(`shuffle keeps playback position and lyrics controls are absent (${mobile?'mobile':'desktop'})`,async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  if(mobile)await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.locator('#hiddenAudioFilesPicker').setInputFiles([
+    {name:'Nirvana - Smells Like Teen Spirit - Smells Like Teen Spirit.wav',mimeType:'audio/wav',buffer:wav(60)},
+    {name:'Artist - Another Song.wav',mimeType:'audio/wav',buffer:wav(60)}
+  ]);
+  await page.waitForFunction(()=>window.playerApp.library.getTracks().length===2);
+  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));
+  await page.locator('.track-name').filter({hasText:'Smells Like Teen Spirit'}).click();
+  await page.waitForFunction(()=>window.playerApp.player.isPlaying);
+  await expect(page.locator('#nowPlayingTitle')).toHaveText('Smells Like Teen Spirit');
+  if(mobile)await page.locator('#mobileMiniPlayer').click();
+  await page.evaluate(()=>{
+    const p=window.playerApp.player;window.testSource=p.audio.src;window.testLoads=0;
+    p.audio.addEventListener('loadstart',()=>window.testLoads++);p.seekToTime(15);
+  });
+  await page.waitForFunction(()=>window.playerApp.player.getCurrentTime()>=15);
+  const button=page.locator(mobile?'#btnMobileFsShuffle':'#btnShuffle');
+  await button.click();
+  await page.waitForFunction(()=>window.playerApp.player.isShuffle);
+  expect(await page.evaluate(()=>window.playerApp.player.getCurrentTime())).toBeGreaterThanOrEqual(15);
+  expect(await page.evaluate(()=>window.playerApp.player.audio.src===window.testSource&&window.testLoads===0&&window.playerApp.player.isPlaying)).toBe(true);
+  await button.click();await page.waitForFunction(()=>!window.playerApp.player.isShuffle);
+  await page.evaluate(()=>window.playerApp.player.pause());
+  await button.click();
+  expect(await page.evaluate(()=>window.playerApp.player.audio.src===window.testSource&&window.testLoads===0&&!window.playerApp.player.isPlaying&&window.playerApp.player.getCurrentTime()>=15)).toBe(true);
+  await expect(page.locator('#btnToggleLyrics,#mobileFsLyricsCard,#sheetOptLyrics')).toHaveCount(0);
+  await page.keyboard.press('k');
+  if(mobile){
+    await page.locator('#btnMobileFsOptions').click();
+    await expect(page.locator('.mobile-bottom-sheet')).toBeVisible();
+    await expect(page.getByText('Показать текст песни',{exact:true})).toHaveCount(0);
+  }
+  expect(errors).toEqual([]);
+});
+test('import, playback and restart preserve files, likes and covers and ignore LRC', async ({page}) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(() => localStorage.setItem('playerium_auto_update_check','false'));
   await page.goto('/'); await page.waitForFunction(() => window.playerApp?.library.db);
@@ -29,7 +67,7 @@ test('import, playback and restart preserve files, lyrics, likes and covers', as
   await page.reload(); await page.waitForFunction(() => window.playerApp?.library.db);
   await page.evaluate(() => window.playerApp.ui.navigateTo({type:'allTracks',title:'Все треки'}));
   expect(await page.evaluate(id => window.playerApp.library.getTrackById(id).liked,id)).toBe(true);
-  expect(await page.evaluate(id => window.playerApp.library.getTrackById(id).lyrics,id)).toContain('hello');
+  expect(await page.evaluate(id => window.playerApp.library.getTrackById(id).lyrics,id)).toBeUndefined();
   await page.locator('.track-row').first().dblclick();
   await page.waitForFunction(() => window.playerApp.player.isPlaying);
   await expect(page.locator('.track-mini-thumb img').first()).toBeVisible();

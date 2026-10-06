@@ -268,7 +268,7 @@
   }
 }
 
-/* Right Section (Lyrics, Queue, Volume, Fullscreen) */
+/* Right Section (Queue, Volume, Fullscreen) */
 .player-right {
   display: flex;
   align-items: center;

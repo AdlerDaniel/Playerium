@@ -195,7 +195,7 @@ export class AudioPlayer {
 
     this.nativePlayback = !!(track.nativeUri && window.AndroidBridge?.setPlaybackQueue && this.queue.every(t => t.nativeUri));
     if (this.nativePlayback) {
-      this.syncNativeQueue(true);
+      this.syncNativeQueue(true, true);
       this.equalizer?.sync?.();
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
@@ -230,10 +230,10 @@ export class AudioPlayer {
     }
   }
 
-  syncNativeQueue(play = this.isPlaying) {
+  syncNativeQueue(play = this.isPlaying, reset = false) {
     if (!this.nativePlayback) return;
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
-      title: t.title, artist: t.artist, album: t.album })), index: this.queueIndex, play,
+      title: t.title, artist: t.artist, album: t.album })), index: this.queueIndex, play, reset,
       repeat: this.repeatMode, volume: this.volume }));
   }
 

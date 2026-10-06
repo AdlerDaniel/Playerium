@@ -9,14 +9,12 @@ import { createTrackTable } from "./track-table.js";
  * Playerium - UI Controller & DOM Coordinator
  */
 
-import { LyricsEngine } from "./lyrics.js";
 import { AutoUpdater } from "./updater.js";
 
 export class UIController {
   constructor(library, player) {
     this.library = library;
     this.player = player;
-    this.lyricsEngine = new LyricsEngine();
     this.updater = new AutoUpdater();
     this.updater.onUpdateFound = (info) => this.showUpdateModal(info);
 
@@ -161,7 +159,6 @@ export class UIController {
     });
 
     // Right Panel buttons
-    document.getElementById("btnToggleLyrics").addEventListener("click", () => this.toggleLyricsView());
     document.getElementById("btnToggleQueue").addEventListener("click", () => this.toggleRightPanel("queue"));
     document.getElementById("btnCloseRightPanel").addEventListener("click", () => this.closeRightPanel());
 
@@ -326,8 +323,6 @@ export class UIController {
         document.getElementById('nowPlayingTitle').textContent = 'Выберите трек';
         document.getElementById('nowPlayingArtist').textContent = '';
         document.getElementById('nowPlayingCover').innerHTML = '';
-        this.lyricsEngine.loadLyrics('');
-        if (this.currentView.type === 'lyrics') this.renderLyricsView();
         if (this.activeRightTab === 'nowPlaying') this.renderRightNowPlaying(null);
         this.player.onTimeUpdate?.(0, 0);
         syncPlaybackControls(this.player);
@@ -374,22 +369,6 @@ export class UIController {
 
       this.updateLikeButtons(track.id, track.liked);
 
-      // Update lyrics engine
-      this.lyricsEngine.loadLyrics(track.lyrics);
-      if (this.currentView.type === "lyrics") {
-        this.renderLyricsView();
-      }
-
-      // Update lyrics snippet on mobile fullscreen player card
-      const snippetEl = document.getElementById("mobileFsLyricsSnippet");
-      if (snippetEl) {
-        if (this.lyricsEngine.hasLyrics()) {
-          snippetEl.textContent = this.lyricsEngine.lines[0]?.text || "Текст доступен для воспроизведения";
-        } else {
-          snippetEl.textContent = "Для этого трека текст не найден";
-        }
-      }
-
       // Update Right Panel Now Playing tab
       if (this.activeRightTab === 'nowPlaying') this.renderRightNowPlaying(track);
       else if (this.isRightPanelOpen) this.renderRightQueue();
@@ -429,19 +408,6 @@ export class UIController {
       if (fsCurrent && !fsSlider?.dataset.dragging) fsCurrent.textContent = this.formatTime(currentTime);
       if (fsTotal) fsTotal.textContent = this.formatTime(duration);
 
-      // Sync Lyrics if active
-      if (this.lyricsEngine.isSynced) {
-        const activeIdx = this.lyricsEngine.updateTime(currentTime);
-        if (activeIdx !== -1) {
-          if (this.currentView.type === "lyrics") {
-            this.highlightLyricsLine(activeIdx);
-          }
-          const snippetEl = document.getElementById("mobileFsLyricsSnippet");
-          if (snippetEl && this.lyricsEngine.lines[activeIdx]) {
-            snippetEl.textContent = this.lyricsEngine.lines[activeIdx].text;
-          }
-        }
-      }
     };
 
     this.player.onQueueChange = (queue, queueIndex) => {
@@ -595,9 +561,6 @@ export class UIController {
       case "album":
         this.renderAlbumView(container, view.id, view.extra);
         break;
-      case "lyrics":
-        this.renderLyricsView(container);
-        break;
       case "settings":
         this.renderSettingsView(container);
         break;
@@ -633,93 +596,6 @@ export class UIController {
   renderAlbumView(...args) { return renderAlbumView.apply(this, args); }
 
   renderSettingsView(...args) { return renderSettingsView.apply(this, args); }
-
-  renderLyricsView(container) {
-    if (!container) container = document.getElementById("mainViewContent");
-    container.innerHTML = "";
-
-    const track = this.player.currentTrack;
-    if (!track) {
-      container.innerHTML = `
-        <div class="lyrics-view-container">
-          <div class="lyrics-empty">
-            <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-            <h3>Сейчас ничего не играет</h3>
-            <p>Включите любой трек, чтобы посмотреть текст песни.</p>
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    const lyricsContainer = document.createElement("div");
-    lyricsContainer.className = "lyrics-view-container";
-
-    const header = document.createElement("div");
-    header.className = "lyrics-header";
-    header.innerHTML = `
-      <div class="lyrics-header-thumb">
-        ${track.pictureUrl ? `<img src="${track.pictureUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" />` : `<svg viewBox="0 0 24 24" width="32" height="32" fill="var(--sp-text-subdued)"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`}
-      </div>
-      <div class="lyrics-header-meta">
-        <span class="lyrics-song-title">${this.escapeHTML(track.title)}</span>
-        <span class="lyrics-song-artist">${this.escapeHTML(track.artist)}</span>
-      </div>
-    `;
-    lyricsContainer.appendChild(header);
-
-    if (!this.lyricsEngine.hasLyrics()) {
-      const empty = document.createElement("div");
-      empty.className = "lyrics-empty";
-      empty.innerHTML = `
-        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-        <h3>Текст песни не найден</h3>
-        <p>Для отображения текста поместите файл <code>${this.escapeHTML(track.fileName.replace(/\.[^/.]+$/, ""))}.lrc</code> рядом с аудиофайлом или добавьте его в теги трека.</p>
-      `;
-      lyricsContainer.appendChild(empty);
-    } else {
-      const content = document.createElement("div");
-      content.className = "lyrics-content";
-
-      this.lyricsEngine.lines.forEach((lineObj, idx) => {
-        const lineEl = document.createElement("div");
-        lineEl.className = "lyrics-line" + (idx === this.lyricsEngine.activeLineIndex ? " active" : "");
-        lineEl.id = `lyricsLine_${idx}`;
-        lineEl.textContent = lineObj.text;
-
-        if (this.lyricsEngine.isSynced && lineObj.time !== null) {
-          lineEl.addEventListener("click", () => {
-            this.player.seekToTime(lineObj.time);
-          });
-        }
-        content.appendChild(lineEl);
-      });
-      lyricsContainer.appendChild(content);
-    }
-
-    container.appendChild(lyricsContainer);
-  }
-
-  highlightLyricsLine(activeIdx) {
-    document.querySelectorAll(".lyrics-line").forEach((el, idx) => {
-      if (idx === activeIdx) {
-        el.className = "lyrics-line active";
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      } else if (idx < activeIdx) {
-        el.className = "lyrics-line past";
-      } else {
-        el.className = "lyrics-line";
-      }
-    });
-  }
-
-  toggleLyricsView() {
-    if (this.currentView.type === "lyrics") {
-      this.navigateBack();
-    } else {
-      this.navigateTo({ type: "lyrics", title: "Текст песни" });
-    }
-  }
 
   // --- Right Panel (Now Playing / Queue) ---
 

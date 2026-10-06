@@ -5,7 +5,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   unwatchFolder: path => ipcRenderer.invoke('folder:unwatch', path),
   getAudioSource: path => ipcRenderer.invoke('file:source', path),
   getMetadata: path => ipcRenderer.invoke('file:metadata', path),
-  readLyrics: path => ipcRenderer.invoke('file:text', path),
   openExternal: url => ipcRenderer.invoke('shell:openExternal', url),
   onFolderUpdated: callback => {
     const listener = (_event, data) => callback(data);

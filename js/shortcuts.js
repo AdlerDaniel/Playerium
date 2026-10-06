@@ -88,10 +88,6 @@ export class ShortcutsManager {
           this.ui.toggleRightPanel("queue");
           break;
 
-        case "KeyK":
-          this.ui.toggleLyricsView();
-          break;
-
         default:
           break;
       }
