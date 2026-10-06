@@ -160,6 +160,13 @@ jobs:
           pattern: Playerium-*
           merge-multiple: true
           path: release-assets
+      - name: Match published installer filenames
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for source in Path('release-assets').glob('*.exe'):
+              source.rename(source.with_name(source.name.replace(' ', '.')))
+          PY
       - name: Calculate checksums
         run: cd release-assets && sha256sum *.exe *.apk > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
