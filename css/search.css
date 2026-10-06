@@ -121,3 +121,5 @@
 .search-compact-table .track-col-duration {gap:10px!important}
 .search-compact-table .track-col-duration .track-like-btn {display:none!important}
 }
+.track-context-menu {width:max-content;min-width:252px;max-width:calc(100vw - 16px)}
+.track-context-menu .context-menu-item>span:first-of-type {white-space:nowrap}
