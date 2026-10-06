@@ -16,7 +16,8 @@ async function verifyHelper() {
     const bytes=await fs.readFile(source),digest=createHash('sha256').update(bytes).digest('hex');
     // Wait for a real parent process, atomically replace a launcher and restart it.
     const parent=spawn(process.execPath,['-e','setTimeout(()=>{},500)'],{windowsHide:true,stdio:'ignore'});
-    await fs.writeFile(target,'previous portable launcher');
+    // Use a valid previous launcher so the recovery branch can also restart it.
+    await fs.copyFile(source,target);
     const script=helperScript({parentId:parent.pid,source,target,portable:true,result,digest});
     await run(powershell,['-NoProfile','-NonInteractive','-WindowStyle','Hidden','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')]);
     assert.equal(JSON.parse((await fs.readFile(result,'utf8')).replace(/^\uFEFF/,'' )).state,'complete');
@@ -30,6 +31,9 @@ async function verifyHelper() {
     const args=await fs.readFile(marker,'utf8');assert.ok(args.startsWith('/S|--updated|--force-run|/D='));assert.ok(args.endsWith(folder));
     assert.equal(JSON.parse((await fs.readFile(result,'utf8')).replace(/^\uFEFF/,'' )).state,'complete');
     console.log('Windows update helper: verified replacement, silent installer handoff and restart');
+  }catch(error){
+    const status=await fs.readFile(result,'utf8').catch(()=> 'No helper status was written');
+    throw new Error(`${error.message}\nUpdate helper status: ${status}`,{cause:error});
   }finally{await fs.rm(folder,{recursive:true,force:true});}
 }
 module.exports=verifyHelper;
