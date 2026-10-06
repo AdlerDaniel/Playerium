@@ -108,10 +108,11 @@ class DesktopMusic {
           // Metadata chosen from the recording catalog is embedded into the audio.
           for(const key of ['title','artist','album','genre','isrc'])if(track[key]){info[key]=String(track[key]).slice(0,500);info['meta_'+key]=info[key];}
           if(track.artist)info.artists=[info.artist];
-          info.track=info.title;if(track.year)info.release_year=track.year;if(track.trackNo)info.track_number=track.trackNo;
+          info.track=info.title;if(track.year){info.release_year=track.year;info.meta_date=String(track.year);info.release_date=String(track.year)+'0101';}if(track.trackNo)info.track_number=track.trackNo;
           if(track.pictureUrl && /^https:\/\/(?:[^/]+\.)?(?:mzstatic\.com|dzcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|bcbits\.com|audius\.co|sndcdn\.com)\//i.test(track.pictureUrl)){info.thumbnail=track.pictureUrl;info.thumbnails=[{url:track.pictureUrl,id:'cover'}];}
           const meta=path.join(staging,'recording.json');await fs.writeFile(meta,JSON.stringify(info));
-          const output=await this.run(['--load-info-json',meta,'--no-playlist','--quiet','--no-progress','--max-filesize','256M','-f','bestaudio[ext=m4a]/bestaudio','-x','--audio-format','best','--embed-metadata','--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail','-o',path.join(staging,'audio.%(ext)s'),'--print','after_move:filepath'],id,600000);
+          const audioFormat=['wav','aac'].includes(info.ext)?'m4a':'best';
+          const output=await this.run(['--load-info-json',meta,'--no-playlist','--quiet','--no-progress','--max-filesize','256M','-f','bestaudio[ext=m4a]/bestaudio','-x','--audio-format',audioFormat,'--audio-quality','0','--embed-metadata','--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail','-o',path.join(staging,'audio.%(ext)s'),'--print','after_move:filepath'],id,600000);
           const audio=output.split(/\r?\n/).at(-1);if(!isInside(staging,audio)||!/^audio\.(m4a|mp3|opus|ogg|flac|aac|wav)$/i.test(path.basename(audio)))throw Error('Некорректный файл');
           const name=`${track.artist} - ${track.title}`.replace(/[<>:"/\\|?*\x00-\x1f]/g,'').slice(0,120).trim();
           const fullPath=path.join(root,`${name} [${track.id.slice(5)}]${path.extname(audio)}`);
