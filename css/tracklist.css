@@ -339,7 +339,6 @@
 @media (hover: hover) and (pointer: fine) {
   .track-artist:hover {
     color: var(--sp-text-primary);
-    text-decoration: underline;
   }
 }
 
@@ -357,7 +356,6 @@
 @media (hover: hover) and (pointer: fine) {
   .track-col-album:hover {
     color: var(--sp-text-primary);
-    text-decoration: underline;
   }
 }
 

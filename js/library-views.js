@@ -1,3 +1,4 @@
+import { bindCollectionPlay } from './playback-controls.js';
 import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
 export function renderSidebar() {
@@ -25,9 +26,17 @@ export function renderSidebar() {
       list.appendChild(likedItem);
     }
 
+    if (this.sidebarFilter === "all" || this.sidebarFilter === "playlists") {
+      const added = document.createElement('div');
+      added.className = 'sidebar-item' + (this.currentView.type === 'allTracks' ? ' active' : '');
+      added.innerHTML = `<div class="item-thumb local-art">${icons.music}</div><div class="item-info"><span class="item-title">Добавленные</span><span class="item-subtitle">${this.library.getTracks().length} треков</span></div>`;
+      added.addEventListener('click', () => this.navigateTo({ type: 'allTracks', title: 'Добавленные' }));
+      list.append(added);
+    }
+
     // 2. Playlists
     if (this.sidebarFilter === "all" || this.sidebarFilter === "playlists") {
-      const playlists = this.library.getPlaylists();
+      const playlists = this.library.getPlaylists().filter(p => !p.isFolderPlaylist);
       playlists.forEach((pl) => {
         const cover = this.library.getPlaylistTracks(pl.id).find(t => t.pictureUrl)?.pictureUrl;
         const item = document.createElement("div");
@@ -57,7 +66,7 @@ export function renderSidebar() {
     }
 
     // 3. Artists
-    if (this.sidebarFilter === "all" || this.sidebarFilter === "artists") {
+    if (this.sidebarFilter === "artists") {
       const artists = this.library.getArtists();
       artists.forEach((art) => {
         const item = document.createElement("div");
@@ -82,7 +91,7 @@ export function renderSidebar() {
     }
 
     // 4. Albums
-    if (this.sidebarFilter === "all" || this.sidebarFilter === "albums") {
+    if (this.sidebarFilter === "albums") {
       const albums = this.library.getAlbums();
       albums.forEach((alb) => {
         const item = document.createElement("div");
@@ -133,7 +142,7 @@ export function renderAllTracksView(container) {
       </div>
       <div class="view-header-details">
         <span class="view-type-badge">ЛОКАЛЬНАЯ МЕДИАТЕКА</span>
-        <h1 class="view-title">${this.searchQuery ? `Поиск: "${this.escapeHTML(this.searchQuery)}"` : "Все треки"}</h1>
+        <h1 class="view-title">${this.searchQuery ? `Поиск: "${this.escapeHTML(this.searchQuery)}"` : "Добавленные"}</h1>
         <div class="view-metadata">
           <strong>Ваш компьютер</strong>
           <span class="dot">•</span>
@@ -216,7 +225,7 @@ export function renderSearchView(container) {
           <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
         </div>
         <div class="mobile-cat-card cat-pink" data-action="all">
-          <span>Все треки</span>
+          <span>Добавленные</span>
           <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
         </div>
       `;
@@ -226,7 +235,7 @@ export function renderSearchView(container) {
       catGrid.querySelector('[data-action="albums"]').addEventListener("click", () => this.navigateTo({ type: "library", title: "Моя медиатека", tab: "albums" }));
       catGrid.querySelector('[data-action="playlists"]').addEventListener("click", () => this.navigateTo({ type: "library", title: "Моя медиатека", tab: "playlists" }));
       catGrid.querySelector('[data-action="import"]').addEventListener("click", () => this.triggerMobileFileImport());
-      catGrid.querySelector('[data-action="all"]').addEventListener("click", () => this.navigateTo({ type: "allTracks", title: "Все треки" }));
+      catGrid.querySelector('[data-action="all"]').addEventListener("click", () => this.navigateTo({ type: "allTracks", title: "Добавленные" }));
 
       catGrid.querySelectorAll(".mobile-cat-card").forEach(card => {
         card.tabIndex = 0; card.setAttribute("role", "button");
@@ -286,10 +295,10 @@ export function renderLibraryView(container) {
     const renderItems = (filter) => {
       listContainer.innerHTML = "";
 
-      if (filter === "all") {
+      if (filter === "all" || filter === "playlists") {
         const all = document.createElement("div");all.className="mobile-lib-row";
-        all.innerHTML=`<div class="mobile-lib-thumb local-art">${icons.music}</div><div class="mobile-lib-meta"><span class="mobile-lib-name">Все треки</span><span class="mobile-lib-sub">${this.library.getTracks().length} треков</span></div>`;
-        all.addEventListener("click",()=>this.navigateTo({type:"allTracks",title:"Все треки"}));listContainer.append(all);
+        all.innerHTML=`<div class="mobile-lib-thumb local-art">${icons.music}</div><div class="mobile-lib-meta"><span class="mobile-lib-name">Добавленные</span><span class="mobile-lib-sub">${this.library.getTracks().length} треков</span></div>`;
+        all.addEventListener("click",()=>this.navigateTo({type:"allTracks",title:"Добавленные"}));listContainer.append(all);
       }
       // 1. Liked songs
       if (filter === "all" || filter === "playlists") {
@@ -311,7 +320,7 @@ export function renderLibraryView(container) {
 
       // 2. Playlists
       if (filter === "all" || filter === "playlists") {
-        const playlists = this.library.getPlaylists();
+        const playlists = this.library.getPlaylists().filter(p => !p.isFolderPlaylist);
         playlists.forEach((pl) => {
           const row = document.createElement("div");
           row.className = "mobile-lib-row";
@@ -330,7 +339,7 @@ export function renderLibraryView(container) {
       }
 
       // 3. Artists
-      if (filter === "all" || filter === "artists") {
+      if (filter === "artists") {
         const artists = this.library.getArtists();
         artists.forEach((art) => {
           const row = document.createElement("div");
@@ -351,7 +360,7 @@ export function renderLibraryView(container) {
       }
 
       // 4. Albums
-      if (filter === "all" || filter === "albums") {
+      if (filter === "albums") {
         const albums = this.library.getAlbums();
         albums.forEach((alb) => {
           const row = document.createElement("div");
@@ -374,10 +383,12 @@ export function renderLibraryView(container) {
 
     header.querySelectorAll(".mobile-lib-pill").forEach((pill) => {
       pill.classList.toggle("active", pill.dataset.filter === activeFilter);
+      pill.setAttribute("aria-pressed", String(pill.dataset.filter === activeFilter));
       pill.addEventListener("click", () => {
         header.querySelectorAll(".mobile-lib-pill").forEach((p) => p.classList.remove("active"));
         pill.classList.add("active");
         activeFilter = pill.dataset.filter;
+        header.querySelectorAll(".mobile-lib-pill").forEach(p => p.setAttribute("aria-pressed", String(p === pill)));
         this.currentView.tab = activeFilter;
         renderItems(activeFilter);
       });
@@ -565,12 +576,7 @@ export function createActionBar(tracks, playlist = null) {
       </div>
     `;
 
-    // Hero Play click
-    bar.querySelector("#btnHeroPlay").addEventListener("click", () => {
-      if (tracks.length > 0) {
-        this.player.playTrack(tracks[0], 0, tracks);
-      }
-    });
+    bindCollectionPlay(this, bar.querySelector("#btnHeroPlay"), tracks, { ...this.currentView });
 
     // Delete playlist button
     if (playlist) {
@@ -578,7 +584,7 @@ export function createActionBar(tracks, playlist = null) {
         if (confirm(`Удалить плейлист «${playlist.name}»?`)) {
           await this.library.deletePlaylist(playlist.id);
           this.showToast("Плейлист удален");
-          this.navigateTo({ type: "allTracks", title: "Все треки" });
+          this.navigateTo({ type: "allTracks", title: "Добавленные" });
         }
       });
     }

@@ -31,6 +31,41 @@ async function library() {
 function descriptor(name, filePath, title = name) {
   return { name, fullPath: filePath, size: 100, lastModified: 1, metadata: { title, artist: 'Artist', duration: 42 } };
 }
+test('native queue edits preserve playing or paused state', async () => {
+  const { AudioPlayer } = await modules();
+  const messages=[];
+  window.AndroidBridge={setPlaybackQueue:json=>messages.push(JSON.parse(json))};
+  const p=new AudioPlayer({});
+  p.nativePlayback=true;p.isPlaying=true;
+  p.currentTrack={id:'a',nativeUri:'content://music/a'};
+  p.queue=[p.currentTrack];p.originalQueue=[p.currentTrack];p.queueIndex=0;
+  p.addToQueue({id:'b',nativeUri:'content://music/b'});
+  p.toggleShuffle();p.clearUpcomingQueue();
+  assert.ok(messages.every(m=>m.play===true));
+  p.isPlaying=false;p.addToQueue({id:'c',nativeUri:'content://music/c'});
+  assert.equal(messages.at(-1).play,false);
+});
+test('row activation preserves shuffle and resumes current track without reloading',async()=>{
+  const {playRow}=await import('../js/playback-controls.js');
+  const a={id:'a'},b={id:'b'},c={id:'c'},context={type:'playlist',id:'pl'};
+  const calls=[];
+  const player={currentTrack:a,isPlaying:true,playbackContext:context,queue:[a,c,b],
+    playTrack:(...args)=>calls.push(args),play:()=>calls.push('resume'),pause:()=>calls.push('pause')};
+  const ui={player};
+  playRow(ui,a,[a,b,c],context);assert.deepEqual(calls,[]);
+  playRow(ui,b,[a,b,c],context);assert.deepEqual(calls.pop(),[b,2]);
+  playRow(ui,a,[a,b,c],context,true);assert.equal(calls.pop(),'pause');
+  player.isPlaying=false;playRow(ui,a,[a,b,c],context);assert.equal(calls.pop(),'resume');
+});
+test('starting a new collection clears the previous playback context',async()=>{
+  const {AudioPlayer}=await modules();
+  const p=new AudioPlayer({getAudioFile:async()=>new Blob(['audio'])});
+  p.initWebAudio=()=>{};
+  const track={id:'a'};
+  await p.playTrack(track,0,[track],{type:'playlist',id:'old'});
+  await p.playTrack(track,0,[track]);
+  assert.equal(p.playbackContext,null);
+});
 test('folder import parses metadata, attaches lyrics, skips .lrc and preserves likes/IDs', async () => {
   const lib = await library();
   window.electronAPI = { getMetadata: async () => ({title:'Tagged song',artist:'Tagged artist',duration:42}), readLyrics: async () => '[00:01]hello' };

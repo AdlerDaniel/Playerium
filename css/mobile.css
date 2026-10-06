@@ -493,7 +493,7 @@
     height: 4px;
     -webkit-appearance: none;
     appearance: none;
-    background: rgba(255, 255, 255, 0.2);
+    background: linear-gradient(to right, #fff var(--seek-progress, 0%), rgba(255,255,255,.2) var(--seek-progress, 0%));
     border-radius: 4px;
     outline: none;
     cursor: pointer;

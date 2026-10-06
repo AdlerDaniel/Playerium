@@ -98,11 +98,7 @@ class App {
     const res = await this.library.syncFolderToPlaylist(folderName, folderSource, files, isAndroid);
     if (res.ignored) return;
     if (res.failedCount) this.ui.showToast(`Не удалось прочитать метаданные ${res.failedCount} файлов. Повторите импорт.`, "error");
-    if (res.isNewPlaylist) {
-      this.ui.showToast(`Создан плейлист «${res.playlist.name}» (${res.addedCount} треков)`, "success");
-    } else if (res.addedCount > 0) {
-      this.ui.showToast(`В плейлист «${res.playlist.name}» добавлено ${res.addedCount} новых треков`, "success");
-    }
+    if (res.addedCount > 0) this.ui.showToast(`В «Добавленные» добавлено ${res.addedCount} треков`, "success");
 
     this.ui.renderSidebar();
     this.ui.refreshCurrentView();

@@ -20,6 +20,10 @@ export class ShortcutsManager {
 
       // Escape always closes modals/context menus
       if (e.key === "Escape") {
+        const sheet = document.querySelector('.mobile-bottom-sheet');
+        if (sheet) { sheet.remove(); return; }
+        const fullscreen = document.getElementById('mobileFullscreenPlayer');
+        if (fullscreen?.classList.contains('active')) { fullscreen.classList.remove('active'); return; }
         this.ui.closeModals();
         this.ui.closeContextMenu();
         return;

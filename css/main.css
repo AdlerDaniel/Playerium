@@ -62,23 +62,9 @@ body {
   line-height: 1.5;
 }
 
-/* Custom Spotify Scrollbars */
-::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.25);
-  border-radius: 6px;
-  border: 3px solid transparent;
-  background-clip: padding-box;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.45);
-}
+/* Scrolling remains available by touch, wheel and keyboard without visible bars. */
+* { scrollbar-width: none !important; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
 
 /* App Container */
 #app {
@@ -133,7 +119,7 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 /* Right Panel (Now Playing / Queue / Lyrics) */

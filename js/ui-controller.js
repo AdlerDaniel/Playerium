@@ -1,3 +1,4 @@
+import { bindSlider, syncPlaybackControls } from './playback-controls.js';
 import { saveIcon } from "./design-icons.js";
 import { renderSidebar, renderAllTracksView, renderHomeView, renderSearchView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, renderAlbumView, createActionBar } from "./library-views.js";
 import { renderSettingsView } from "./settings-view.js";
@@ -134,75 +135,29 @@ export class UIController {
     const progressFill = document.getElementById("progressSliderFill");
     const progressTooltip = document.getElementById("timeHoverTooltip");
 
-    let isSeeking = false;
-    const updateSeekFromEvent = (e) => {
+    bindSlider(progressContainer, {
+      label: 'Позиция воспроизведения',
+      getValue: () => this.player.getDuration() > 0 ? this.player.getCurrentTime() / this.player.getDuration() * 100 : 0,
+      enabled: () => Number.isFinite(this.player.getDuration()) && this.player.getDuration() > 0,
+      preview: percent => {
+        progressFill.style.width = percent + '%';
+        document.getElementById('currentTimeLabel').textContent = this.formatTime(percent / 100 * this.player.getDuration());
+      },
+      commit: percent => this.player.seek(percent),
+      step: () => 500 / this.player.getDuration(),
+    });
+    progressContainer.addEventListener('pointermove', e => {
       const rect = progressContainer.getBoundingClientRect();
-      const percent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-      progressFill.style.width = percent + "%";
-      return percent;
-    };
-
-    progressContainer.addEventListener("mousemove", (e) => {
-      if (this.player.getDuration()) {
-        const rect = progressContainer.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const previewSec = ratio * this.player.getDuration();
-        progressTooltip.textContent = this.formatTime(previewSec);
-        progressTooltip.style.left = (ratio * 100) + "%";
-      }
-    });
-
-    progressContainer.addEventListener("mousedown", (e) => {
-      isSeeking = true;
-      const pct = updateSeekFromEvent(e);
-      this.player.seek(pct);
-
-      const onMouseMove = (moveEvent) => {
-        if (isSeeking) {
-          const p = updateSeekFromEvent(moveEvent);
-          this.player.seek(p);
-        }
-      };
-
-      const onMouseUp = () => {
-        isSeeking = false;
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-      };
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-    });
-
-    // Volume controls
-    const volumeContainer = document.getElementById("volumeSliderContainer");
-    const volumeFill = document.getElementById("volumeSliderFill");
-    const volumeBtn = document.getElementById("btnVolumeIcon");
-
-    volumeBtn.addEventListener("click", () => this.player.toggleMute());
-
-    let isVolDragging = false;
-    const updateVolFromEvent = (e) => {
-      const rect = volumeContainer.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      this.player.setVolume(ratio);
-    };
-
-    volumeContainer.addEventListener("mousedown", (e) => {
-      isVolDragging = true;
-      updateVolFromEvent(e);
-
-      const onVolMove = (ev) => {
-        if (isVolDragging) updateVolFromEvent(ev);
-      };
-      const onVolUp = () => {
-        isVolDragging = false;
-        window.removeEventListener("mousemove", onVolMove);
-        window.removeEventListener("mouseup", onVolUp);
-      };
-
-      window.addEventListener("mousemove", onVolMove);
-      window.addEventListener("mouseup", onVolUp);
+      progressTooltip.textContent = this.formatTime(ratio * this.player.getDuration());
+      progressTooltip.style.left = ratio * 100 + '%';
+    });
+    const volumeContainer = document.getElementById('volumeSliderContainer');
+    document.getElementById('btnVolumeIcon').addEventListener('click', () => this.player.toggleMute());
+    bindSlider(volumeContainer, {
+      label: 'Громкость', getValue: () => this.player.volume * 100,
+      preview: percent => this.player.setVolume(percent / 100),
+      commit: percent => this.player.setVolume(percent / 100), step: 5,
     });
 
     // Right Panel buttons
@@ -349,6 +304,11 @@ export class UIController {
         fsPauseIcon.style.display = isPlaying ? "block" : "none";
       }
 
+      for (const id of ['btnPlayPause', 'mobileMiniPlayPause', 'btnMobileFsPlayPause']) {
+        const button = document.getElementById(id);
+        if (button) { button.title = isPlaying ? 'Пауза' : 'Воспроизвести'; button.setAttribute('aria-label', button.title); }
+      }
+      syncPlaybackControls(this.player);
       // Update table play states
       document.querySelectorAll(".track-row").forEach((row) => {
         if (row.dataset.trackId === this.player.currentTrack?.id) {
@@ -360,6 +320,19 @@ export class UIController {
     };
 
     this.player.onTrackChange = (track) => {
+      if (!track) {
+        document.getElementById('mobileMiniPlayer').classList.add('hidden');
+        document.getElementById('mobileFullscreenPlayer').classList.remove('active');
+        document.getElementById('nowPlayingTitle').textContent = 'Выберите трек';
+        document.getElementById('nowPlayingArtist').textContent = '';
+        document.getElementById('nowPlayingCover').innerHTML = '';
+        this.lyricsEngine.loadLyrics('');
+        if (this.currentView.type === 'lyrics') this.renderLyricsView();
+        if (this.activeRightTab === 'nowPlaying') this.renderRightNowPlaying(null);
+        this.player.onTimeUpdate?.(0, 0);
+        syncPlaybackControls(this.player);
+        return;
+      }
       this.updateArtworkTheme(track.pictureUrl);
       // Update bottom player
       document.getElementById("nowPlayingTitle").textContent = track.title || "Неизвестный трек";
@@ -397,7 +370,7 @@ export class UIController {
       }
       document.getElementById("mobileFsTitle").textContent = track.title || "Неизвестный трек";
       document.getElementById("mobileFsArtist").textContent = track.artist || "Неизвестный исполнитель";
-      document.getElementById("mobileFsContextTitle").textContent = this.currentView.title || "Все треки";
+      document.getElementById("mobileFsContextTitle").textContent = this.player.playbackContext?.title || "Добавленные";
 
       this.updateLikeButtons(track.id, track.liked);
 
@@ -418,8 +391,10 @@ export class UIController {
       }
 
       // Update Right Panel Now Playing tab
-      this.renderRightNowPlaying(track);
+      if (this.activeRightTab === 'nowPlaying') this.renderRightNowPlaying(track);
+      else if (this.isRightPanelOpen) this.renderRightQueue();
 
+      syncPlaybackControls(this.player);
       // Highlight playing row in current table
       document.querySelectorAll(".track-row").forEach((row) => {
         const isCurrent = row.dataset.trackId === track.id;
@@ -429,11 +404,15 @@ export class UIController {
     };
 
     this.player.onTimeUpdate = (currentTime, duration) => {
-      document.getElementById("currentTimeLabel").textContent = this.formatTime(currentTime);
+      const seeking = document.getElementById("progressSliderContainer").dataset.dragging;
+      if (!seeking) document.getElementById("currentTimeLabel").textContent = this.formatTime(currentTime);
       document.getElementById("totalTimeLabel").textContent = this.formatTime(duration);
 
       const percent = duration > 0 ? (currentTime / duration) * 100 : 0;
-      document.getElementById("progressSliderFill").style.width = percent + "%";
+      if (!seeking) {
+        document.getElementById("progressSliderFill").style.width = percent + "%";
+        document.getElementById("progressSliderContainer").setAttribute('aria-valuenow', String(Math.round(percent)));
+      }
 
       // Mobile mini-player progress
       const miniFill = document.getElementById("mobileMiniProgressFill");
@@ -441,12 +420,13 @@ export class UIController {
 
       // Mobile fullscreen scrubber & times
       const fsSlider = document.getElementById("mobileFsSlider");
-      if (fsSlider && !fsSlider.matches(":active")) {
+      if (fsSlider && !fsSlider.dataset.dragging) {
         fsSlider.value = percent;
+        fsSlider.style.setProperty('--seek-progress', percent + '%');
       }
       const fsCurrent = document.getElementById("mobileFsTimeCurrent");
       const fsTotal = document.getElementById("mobileFsTimeTotal");
-      if (fsCurrent) fsCurrent.textContent = this.formatTime(currentTime);
+      if (fsCurrent && !fsSlider?.dataset.dragging) fsCurrent.textContent = this.formatTime(currentTime);
       if (fsTotal) fsTotal.textContent = this.formatTime(duration);
 
       // Sync Lyrics if active
@@ -465,6 +445,7 @@ export class UIController {
     };
 
     this.player.onQueueChange = (queue, queueIndex) => {
+      syncPlaybackControls(this.player);
       if (this.activeRightTab === "queue" && this.isRightPanelOpen) {
         this.renderRightQueue();
       }
@@ -474,6 +455,9 @@ export class UIController {
       const volFill = document.getElementById("volumeSliderFill");
       const volIcon = document.getElementById("btnVolumeIcon");
       volFill.style.width = (isMuted ? 0 : volume * 100) + "%";
+      document.getElementById('volumeSliderContainer').setAttribute('aria-valuenow', String(Math.round(volume * 100)));
+      volIcon.title = isMuted ? 'Включить звук' : 'Выключить звук';
+      volIcon.setAttribute('aria-label', volIcon.title);
 
       // Spotify volume icons based on level
       if (isMuted || volume === 0) {
@@ -486,6 +470,7 @@ export class UIController {
     };
 
     this.player.onShuffleChange = (isShuffle) => {
+      for (const id of ['btnShuffle', 'btnMobileFsShuffle']) document.getElementById(id)?.setAttribute('aria-pressed', String(isShuffle));
       document.getElementById("btnShuffle").classList.toggle("active", isShuffle);
       document.getElementById("btnMobileFsShuffle")?.classList.toggle("active", isShuffle);
     };
@@ -495,6 +480,12 @@ export class UIController {
       const fsBtn = document.getElementById("btnMobileFsRepeat");
       btn.classList.toggle("active", repeatMode !== "off");
       fsBtn?.classList.toggle("active", repeatMode !== "off");
+      for (const button of [btn, fsBtn].filter(Boolean)) {
+        button.dataset.repeat = repeatMode;
+        button.setAttribute('aria-pressed', String(repeatMode !== 'off'));
+        button.title = repeatMode === 'one' ? 'Повтор одного трека' : repeatMode === 'all' ? 'Повтор всех треков' : 'Повтор выключен';
+        button.setAttribute('aria-label', button.title);
+      }
       if (repeatMode === "one") {
         btn.setAttribute("data-tooltip", "Повтор текущего трека");
       } else if (repeatMode === "all") {
@@ -504,6 +495,10 @@ export class UIController {
       }
     };
 
+    this.player.onVolumeChange(this.player.volume, this.player.isMuted);
+    this.player.onShuffleChange(this.player.isShuffle);
+    this.player.onRepeatChange(this.player.repeatMode);
+    this.player.onPlayStateChange(this.player.isPlaying);
     this.library.onLibraryChanged = () => {
       this.renderSidebar();
       this.refreshCurrentView();
@@ -517,12 +512,18 @@ export class UIController {
   // --- View Navigation ---
 
   navigateTo(view) {
+    if (this.historyIndex >= 0 && this.currentView.type === view.type && this.currentView.id === view.id && this.currentView.extra === view.extra && this.currentView.tab === view.tab) return;
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1);
     }
-    this.history.push(view);
+    if (this.currentView.type === 'search' && view.type !== 'search') {
+      this.searchQuery = '';
+      document.getElementById('mainSearchInput').value = '';
+      document.getElementById('searchClearBtn').classList.remove('visible');
+    }
+    this.history.push({ ...view });
     this.historyIndex = this.history.length - 1;
-    this.loadView(view);
+    this.loadView(this.history[this.historyIndex]);
     this.updateNavButtons();
   }
 
@@ -548,10 +549,13 @@ export class UIController {
   }
 
   refreshCurrentView() {
-    this.loadView(this.currentView);
+    this.loadView(this.currentView, true);
   }
 
-  loadView(view) {
+  loadView(view, preserveScroll = false) {
+    const scroll = document.getElementById('mainScrollContainer');
+    if (this.currentView) this.currentView.scrollTop = scroll.scrollTop;
+    const restoreScroll = preserveScroll ? scroll.scrollTop : view.scrollTop || 0;
     document.querySelector('#mainTopbar .home-filters')?.remove();
     this.currentView = view;
     document.body.dataset.view = view.type;
@@ -608,7 +612,8 @@ export class UIController {
     }
     this.renderSidebar();
     // Scroll to top
-    document.getElementById("mainScrollContainer").scrollTop = 0;
+    scroll.scrollTop = restoreScroll;
+    syncPlaybackControls(this.player);
   }
 
   // --- View Renderers ---

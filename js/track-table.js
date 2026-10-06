@@ -1,6 +1,8 @@
-import { saveIcon } from "./design-icons.js";
+import { saveIcon, icons } from "./design-icons.js";
 import { mountTrackRows } from "./virtual-list.js";
+import { playRow } from './playback-controls.js';
 export function createTrackTable(tracks, playlistContext = null, showAlbumCol = true) {
+    const playbackContext = { ...this.currentView };
     const table = document.createElement("div");
     table.className = "track-table";
 
@@ -43,9 +45,9 @@ export function createTrackTable(tracks, playlistContext = null, showAlbumCol = 
       row.innerHTML = `
         <div class="track-col-num">
           <span class="track-number">${index + 1}</span>
-          <span class="track-row-play">
+          <button class="track-row-play" title="Воспроизвести" aria-label="Воспроизвести">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          </span>
+          </button>
           <div class="equalizer-bars">
             <div class="eq-bar"></div>
             <div class="eq-bar"></div>
@@ -75,27 +77,20 @@ ${saveIcon}
         </div>
       `;
 
-      // Play on mobile single tap or desktop double-click
+      // The entire row plays; only explicit action buttons intercept the click.
       row.addEventListener("click", (e) => {
-        if (this.isMobile) {
-          if (!e.target.closest(".track-like-btn") && !e.target.closest(".track-menu-btn") && !e.target.closest(".track-artist") && !e.target.closest(".track-col-album")) {
-            this.player.playTrack(track, index, tracks, playlistContext);
-          }
-        }
-      });
-      row.addEventListener("dblclick", () => {
-        if (!this.isMobile) {
-          this.player.playTrack(track, index, tracks, playlistContext);
-        }
+        if (e.detail > 1 || e.target.closest('button')) return;
+        playRow(this, track, tracks, playbackContext);
       });
       row.querySelector(".track-row-play").addEventListener("click", (e) => {
         e.stopPropagation();
-        if (isCurrent && this.player.isPlaying) {
-          this.player.pause();
-        } else {
-          this.player.playTrack(track, index, tracks, playlistContext);
-        }
+        playRow(this, track, tracks, playbackContext, true);
       });
+
+      const playButton = row.querySelector('.track-row-play');
+      playButton.innerHTML = isCurrent && this.player.isPlaying ? icons.pause : icons.play;
+      playButton.title = isCurrent && this.player.isPlaying ? 'Пауза' : 'Воспроизвести';
+      playButton.setAttribute('aria-label', playButton.title);
 
       // Like button click
       const likeBtn = row.querySelector(".track-like-btn");
@@ -106,22 +101,6 @@ ${saveIcon}
         this.updateLikeButtons(track.id, liked);
         this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
       });
-
-      // Artist link
-      const artistEl = row.querySelector(".track-artist");
-      artistEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.navigateTo({ type: "artist", id: track.artist, title: track.artist });
-      });
-
-      // Album link
-      if (showAlbumCol) {
-        const albumEl = row.querySelector(".track-col-album");
-        albumEl.addEventListener("click", (e) => {
-          e.stopPropagation();
-          this.navigateTo({ type: "album", id: track.album, title: track.album, extra: track.artist });
-        });
-      }
 
       // Context menu
       const moreBtn = row.querySelector(".track-menu-btn");
@@ -146,7 +125,7 @@ ${saveIcon}
       row.setAttribute("aria-label", `${track.title}, ${track.artist}`);
       row.addEventListener("keydown", event => {
         if ((event.key === "Enter" || event.key === " ") && event.target === row) {
-          event.preventDefault(); this.player.playTrack(track, index, tracks, playlistContext);
+          event.preventDefault(); playRow(this, track, tracks, playbackContext);
         }
       });
       return row;

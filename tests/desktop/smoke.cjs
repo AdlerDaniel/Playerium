@@ -17,7 +17,7 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
   let app;
   try {
     console.log('Launching Electron runtime verification');
-    app=await electron.launch({timeout:20000,args:['.','--no-sandbox','--autoplay-policy=no-user-gesture-required']});
+    app=await electron.launch({timeout:20000,args:['.',`--user-data-dir=${path.join(folder,'profile')}`,'--no-sandbox','--autoplay-policy=no-user-gesture-required']});
     const win=await app.firstWindow();
     const errors=[];win.on('pageerror',e=>errors.push(e.message));
     await win.waitForFunction(()=>window.playerApp?.library.db);

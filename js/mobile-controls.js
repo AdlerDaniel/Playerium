@@ -90,7 +90,16 @@ export function bindMobileEvents() {
     // Fullscreen Scrubber slider
     const fsSlider = document.getElementById("mobileFsSlider");
     if (fsSlider) {
+      fsSlider.setAttribute('aria-label', 'Позиция воспроизведения');
+      fsSlider.addEventListener('pointerdown', () => { fsSlider.dataset.dragging = 'true'; });
+      fsSlider.addEventListener('keydown', e => { if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) fsSlider.dataset.dragging = 'true'; });
+      const finishSeek = () => { delete fsSlider.dataset.dragging; };
+      fsSlider.addEventListener('pointercancel', finishSeek);
+      fsSlider.addEventListener('blur', finishSeek);
+      fsSlider.addEventListener('pointerup', finishSeek);
+      fsSlider.addEventListener('keyup', finishSeek);
       fsSlider.addEventListener("input", (e) => {
+        fsSlider.style.setProperty('--seek-progress', e.target.value + '%');
         const dur = this.player.getDuration();
         if (dur > 0) {
           const seekTime = (parseFloat(e.target.value) / 100) * dur;
@@ -102,6 +111,7 @@ export function bindMobileEvents() {
         if (dur > 0) {
           const seekTime = (parseFloat(e.target.value) / 100) * dur;
           this.player.seekToTime(seekTime);
+          finishSeek();
         }
       });
     }
@@ -185,6 +195,7 @@ export function showMobileTrackOptionsSheet(track, index, tracks, playlistContex
       </div>
     `;
 
+    document.querySelectorAll('.mobile-bottom-sheet').forEach(s => s.remove());
     document.body.appendChild(sheet);
     requestAnimationFrame(() => sheet.classList.add("active"));
 
@@ -220,9 +231,10 @@ export function showMobileTrackOptionsSheet(track, index, tracks, playlistContex
       this.navigateTo({ type: "artist", id: track.artist, title: track.artist });
     });
 
-    sheet.querySelector("#sheetOptLyrics").addEventListener("click", () => {
+    sheet.querySelector("#sheetOptLyrics").addEventListener("click", async () => {
       closeSheet();
       document.getElementById("mobileFullscreenPlayer")?.classList.remove("active");
+      if (this.player.currentTrack?.id !== track.id) await this.player.playTrack(track, index, tracks, { ...this.currentView });
       this.navigateTo({ type: "lyrics", title: "Текст песни" });
     });
 }
@@ -251,6 +263,7 @@ export function showMobileAddSheet() {
       </div>
     `;
 
+    document.querySelectorAll('.mobile-bottom-sheet').forEach(s => s.remove());
     document.body.appendChild(sheet);
     requestAnimationFrame(() => sheet.classList.add("active"));
 

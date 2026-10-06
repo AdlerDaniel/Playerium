@@ -57,9 +57,15 @@ export function renderRightQueue() {
     container.innerHTML = html;
 
     // Bind queue click events
-    container.querySelectorAll(".queue-item:not(.current)").forEach((item) => {
+    container.querySelectorAll(".queue-item").forEach((item) => {
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      item.addEventListener('keydown', e => {
+        if (e.target === item && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); item.click(); }
+      });
       item.addEventListener("click", (e) => {
         if (e.target.closest(".queue-item-remove")) return;
+        if (item.classList.contains('current')) { if (!this.player.isPlaying) this.player.play(); return; }
         const qIdx = parseInt(item.dataset.queueIdx, 10);
         this.player.queueIndex = qIdx;
         this.player.playTrack(this.player.queue[qIdx], qIdx);

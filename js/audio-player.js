@@ -189,9 +189,7 @@ export class AudioPlayer {
       this.queueIndex = queueIndex;
     }
 
-    if (context) {
-      this.playbackContext = context;
-    }
+    if (newQueue) this.playbackContext = context ? { ...context } : null;
 
     this.currentTrack = track;
 
@@ -232,7 +230,7 @@ export class AudioPlayer {
     }
   }
 
-  syncNativeQueue(play = false) {
+  syncNativeQueue(play = this.isPlaying) {
     if (!this.nativePlayback) return;
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
       title: t.title, artist: t.artist, album: t.album })), index: this.queueIndex, play,
@@ -294,11 +292,12 @@ export class AudioPlayer {
 
   play() {
     if (this.nativePlayback) { window.AndroidBridge.playbackCommand("play", 0); return; }
+    if (!this.currentTrack || !this.sourceUrl) return;
     this.initWebAudio();
     if (this.audioCtx && this.audioCtx.state === "suspended") {
       this.audioCtx.resume();
     }
-    this.audio.play().catch((e) => console.warn(e));
+    this.audio.play().catch(() => this.onError?.("Не удалось продолжить воспроизведение"));
   }
 
   pause() {
@@ -370,7 +369,8 @@ export class AudioPlayer {
     const v = Math.max(0, Math.min(1, parseFloat(val)));
     this.volume = Number.isFinite(v) ? v : 0.8;
     if (this.nativePlayback) window.AndroidBridge.playbackCommand("volume", this.volume);
-    this.isMuted = v === 0;
+    this.isMuted = this.volume === 0;
+    if (this.volume > 0) this.previousVolume = this.volume;
 
     if (this.gainNode) {
       this.gainNode.gain.value = this.volume;
@@ -491,6 +491,8 @@ export class AudioPlayer {
     if (this.sourceUrl?.startsWith("blob:")) URL.revokeObjectURL(this.sourceUrl);
     this.sourceUrl = null; this.nativePlayback = false; this.currentTrack = null;
     this.queue = []; this.originalQueue = []; this.queueIndex = -1; this.isPlaying = false;
+    this.playbackContext = null;
+    this.onTrackChange?.(null);
     this.onPlayStateChange?.(false); this.onQueueChange?.([], -1);
   }
 
