@@ -7,12 +7,15 @@ import { Library } from "./library.js";
 import { AudioPlayer } from "./audio-player.js";
 import { UIController } from "./ui-controller.js";
 import { ShortcutsManager } from "./shortcuts.js";
+import { MusicCatalog } from './music-catalog.js';
 
 class App {
   constructor() {
     this.library = new Library();
     this.player = new AudioPlayer(this.library);
     this.ui = new UIController(this.library, this.player);
+    this.music = new MusicCatalog(this.library, this.ui);
+    this.ui.music = this.music;
     this.shortcuts = new ShortcutsManager(this.player, this.ui);
     this.player.onError = message => this.ui.showToast(message, "error");
     this.library.onAccessError = p => this.ui.showToast(`Нет доступа к папке «${p.name}». Нажмите «Добавить папку», чтобы восстановить доступ.`, "error");
@@ -26,6 +29,7 @@ class App {
       await this.library.init();
       this.player.loadSavedPreferences();
       this.ui.init();
+      this.music.restore();
       if (window.AndroidBridge?.getPlaybackState) {
         try { this.player.applyNativeState(JSON.parse(window.AndroidBridge.getPlaybackState())); } catch {}
       }

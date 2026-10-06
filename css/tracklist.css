@@ -519,3 +519,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Search actions share the same rows and keyboard behavior as the library. */
+.song-search-status { color:var(--sp-text-subdued); min-height:24px; margin:8px 0 16px; }
+.track-download-btn { width:44px; height:44px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; background:none; border:0; color:var(--sp-text-subdued); cursor:pointer; border-radius:50%; }
+.track-download-btn svg { width:20px; height:20px; fill:currentColor; }
+.track-download-btn:hover,.track-download-btn:focus-visible { color:var(--sp-green,#1ed760); background:rgba(255,255,255,.08); }
+.track-row[data-downloading] .track-download-btn { opacity:.5; cursor:wait; }
+.song-search-results .track-col-duration { gap:4px; }
+.song-search-results .track-col-date,.song-search-results .th-date { display:none!important; }
+.song-search-results .track-row,.song-search-results .track-table-header { grid-template-columns:32px minmax(0,4fr) minmax(0,2fr) 156px!important; }
+.song-search-results .track-col-duration { padding-right:0; }
+.context-menu-item:is(button) { width:100%; min-height:44px; border:0; background:none; text-align:left; color:inherit; font:inherit; cursor:pointer; }
+.context-menu-item:is(button):hover { background:rgba(255,255,255,.08); }
+@media(max-width:768px) { .song-search-results .track-col-duration { gap:0; } .song-search-results .track-col-duration>span,.song-search-results .track-like-btn { display:none!important; } .song-search-results .track-menu-btn { width:44px!important; height:44px!important; } }

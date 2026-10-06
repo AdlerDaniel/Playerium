@@ -720,6 +720,8 @@ export class UIController {
           <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Удалить из этого плейлиста
         </div>
       ` : ""}
+      <div class="context-divider"></div>
+      <button class="context-menu-item" id="ctxSaveOrRemove">${track.catalog ? 'Скачать' : 'Удалить трек'}</button>
     `;
 
     // Position menu within viewport
@@ -736,32 +738,42 @@ export class UIController {
       this.closeContextMenu();
     });
 
-    menu.querySelector("#ctxPlayNext").addEventListener("click", () => {
-      this.player.playNext(track);
-      this.showToast("Будет воспроизведено следующим");
+    menu.querySelector("#ctxPlayNext").addEventListener("click", async () => {
       this.closeContextMenu();
+      try{this.player.playNext(await this.music.ensureTrack(track));this.showToast("Будет воспроизведено следующим");}catch(error){this.showToast(error.message,'error');}
     });
 
-    menu.querySelector("#ctxAddToQueue").addEventListener("click", () => {
-      this.player.addToQueue(track);
-      this.showToast("Добавлено в очередь");
+    menu.querySelector("#ctxAddToQueue").addEventListener("click", async () => {
       this.closeContextMenu();
+      try{this.player.addToQueue(await this.music.ensureTrack(track));this.showToast("Добавлено в очередь");}catch(error){this.showToast(error.message,'error');}
     });
 
     menu.querySelector("#ctxToggleLike").addEventListener("click", async () => {
-      const liked = await this.library.toggleLike(track.id);
+      this.closeContextMenu();try {
+      const saved=track.catalog?await this.music.ensureTrack(track):track;
+      const liked = await this.library.toggleLike(saved.id);
       this.updateLikeButtons(track.id, liked);
       this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
+      }catch(error){this.showToast(error.message,'error');}
+    });
+
+    menu.querySelector('#ctxSaveOrRemove').addEventListener('click',async()=>{
       this.closeContextMenu();
+      try {
+        if(track.catalog){await this.music.ensureTrack(track);this.refreshCurrentView();this.showToast('Трек сохранён','success');}
+        else if(confirm(`Удалить трек «${track.title}»?`)){await this.music.removeTrack(track);this.showToast('Трек удалён');}
+      }catch(error){this.showToast(error.message,'error');}
     });
 
     menu.querySelectorAll(".add-to-pl").forEach((el) => {
       el.addEventListener("click", async () => {
+        this.closeContextMenu();try {
         const plId = el.dataset.plId;
-        await this.library.addTrackToPlaylist(plId, track.id);
+        const saved=track.catalog?await this.music.ensureTrack(track):track;
+        await this.library.addTrackToPlaylist(plId, saved.id);
         const pl = this.library.getPlaylistById(plId);
         this.showToast(`Добавлено в «${pl.name}»`);
-        this.closeContextMenu();
+        }catch(error){this.showToast(error.message,'error');}
       });
     });
 

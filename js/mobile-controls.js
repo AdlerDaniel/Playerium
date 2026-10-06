@@ -181,6 +181,7 @@ export function showMobileTrackOptionsSheet(track, index, tracks, playlistContex
           <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
           <span>Перейти к исполнителю: ${this.escapeHTML(track.artist)}</span>
         </button>
+        <button class="mobile-sheet-item" id="sheetOptSaveOrRemove"><svg viewBox="0 0 24 24"><path d="M6 7h12v13H6V7zm-1-4h14v2H5V3z"/></svg><span>${track.catalog?'Скачать':'Удалить трек'}</span></button>
         <button class="mobile-sheet-cancel" id="sheetOptCancel">Закрыть</button>
       </div>
     `;
@@ -196,23 +197,30 @@ export function showMobileTrackOptionsSheet(track, index, tracks, playlistContex
 
     sheet.querySelector(".mobile-sheet-overlay").addEventListener("click", closeSheet);
     sheet.querySelector("#sheetOptCancel").addEventListener("click", closeSheet);
+    sheet.querySelector('#sheetOptSaveOrRemove').addEventListener('click',async()=>{
+      closeSheet();try {
+        if(track.catalog){await this.music.ensureTrack(track);this.refreshCurrentView();this.showToast('Трек сохранён','success');}
+        else if(confirm(`Удалить трек «${track.title}»?`)){await this.music.removeTrack(track);this.showToast('Трек удалён');}
+      }catch(error){this.showToast(error.message,'error');}
+    });
 
     sheet.querySelector("#sheetOptLike").addEventListener("click", async () => {
-      closeSheet();
-      const liked = await this.library.toggleLike(track.id);
-      this.updateLikeButtons(track.id, liked);
+      closeSheet();try {
+      const saved=await this.music.ensureTrack(track);
+      const liked = await this.library.toggleLike(saved.id);
+      this.updateLikeButtons(saved.id, liked);
       this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
+      }catch(error){this.showToast(error.message,'error');}
     });
 
-    sheet.querySelector("#sheetOptQueue").addEventListener("click", () => {
+    sheet.querySelector("#sheetOptQueue").addEventListener("click", async () => {
       closeSheet();
-      this.player.addToQueue(track);
-      this.showToast("Добавлено в очередь");
+      try{this.player.addToQueue(await this.music.ensureTrack(track));this.showToast("Добавлено в очередь");}catch(error){this.showToast(error.message,'error');}
     });
 
-    sheet.querySelector("#sheetOptAddToPlaylist").addEventListener("click", () => {
+    sheet.querySelector("#sheetOptAddToPlaylist").addEventListener("click", async () => {
       closeSheet();
-      this.showAddToPlaylistModal(track.id);
+      try{this.showAddToPlaylistModal((await this.music.ensureTrack(track)).id);}catch(error){this.showToast(error.message,'error');}
     });
 
     sheet.querySelector("#sheetOptArtist").addEventListener("click", () => {

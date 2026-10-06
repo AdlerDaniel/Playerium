@@ -22,6 +22,7 @@ export class Library {
     this.importChain = Promise.resolve();
     this.coverUrls = new Map();
     this.blockedSources = new Set();
+    this.removedSources = new Set();
   }
 
   async init() {
@@ -75,6 +76,8 @@ export class Library {
   }
 
   async loadAll() {
+    const removed=await this.getFromStore('settings','removedTracks');
+    this.removedSources=new Set(removed?.value || []);
     const tracks = await this.getAllFromStore("tracks");
     const corrected = [];
     for (const t of tracks) {
@@ -169,6 +172,34 @@ export class Library {
 
   getTrackById(id) {
     return this.tracks.get(id);
+  }
+
+  async addDownloaded(file, expected) {
+    const sourceKey=file.fullPath||file.uri;
+    if(this.removedSources.delete(sourceKey))await this.putInStore('settings',{key:'removedTracks',value:[...this.removedSources]});
+    await this.syncFolderToPlaylist(file.folderName,file.folderSource,[file],!!file.uri,null,false);
+    const track=this.getTracks().find(t=>t.sourceKey===(file.fullPath||file.uri));
+    if(!track)throw Error('Не удалось добавить трек');
+    const {pictureBase64,...metadata}=file.metadata || {};
+    Object.assign(track,metadata,{downloadId:file.downloadId,catalog:false});
+    if(expected)track.recordingKey=`${expected.artist}|${expected.title}`;
+    await this.putInStore('tracks',track);this.onLibraryChanged?.();return track;
+  }
+
+  async removeTrack(id) {
+    await this.importChain.catch(()=>{});
+    const track=this.tracks.get(id);if(!track)return;
+    const removed=new Set(this.removedSources);if(track.sourceKey)removed.add(track.sourceKey);
+    const playlists=this.getPlaylists().map(p=>({...p,trackIds:p.trackIds.filter(t=>t!==id)}));
+    const tx=this.db.transaction(['tracks','files','playlists','settings'],'readwrite');
+    tx.objectStore('tracks').delete(id);tx.objectStore('files').delete(id);
+    tx.objectStore('settings').put({key:'removedTracks',value:[...removed]});
+    for(const p of playlists)tx.objectStore('playlists').put(p);
+    await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error);});
+    this.removedSources=removed;this.tracks.delete(id);this.audioBlobs.delete(id);
+    if(this.coverUrls.has(id))URL.revokeObjectURL(this.coverUrls.get(id));this.coverUrls.delete(id);
+    for(const p of playlists)this.playlists.set(p.id,p);
+    this.onLibraryChanged?.();
   }
 
   async toggleLike(trackId) {
@@ -357,6 +388,8 @@ export class Library {
     // File objects must stay available until committed, including after a restart.
     const folderSource = source || `web:${folderName}`;
     this.blockedSources.delete(folderSource);
+    for(const key of this.removedSources)if(key.startsWith(folderSource+'/'))this.removedSources.delete(key);
+    await this.putInStore('settings',{key:'removedTracks',value:[...this.removedSources]});
     const descriptors = files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified,
       relativePath: file.relativePath || (file.webkitRelativePath ? file.webkitRelativePath.split("/").slice(1).join("/") : file.name), file, handle: file.handle }));
     const result = await this.syncFolderToPlaylist(folderName, folderSource, descriptors, false, progressCallback, false);
@@ -426,7 +459,9 @@ export class Library {
     this.playlists.clear();
     this.folders = [];
 
-    const tx = this.db.transaction(["tracks", "playlists", "folders", "files"], "readwrite");
+    this.removedSources.clear();
+    const tx = this.db.transaction(["tracks", "playlists", "folders", "files", "settings"], "readwrite");
+    tx.objectStore('settings').delete('removedTracks');
     tx.objectStore("tracks").clear();
     tx.objectStore("playlists").clear();
     tx.objectStore("folders").clear();
@@ -452,7 +487,7 @@ export class Library {
 
   async importFolder(folderName, folderSource, files, isAndroid = false, progressCallback = null, replaceContents = true) {
     if (this.blockedSources.has(folderSource)) return { ignored: true };
-    const audio = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac)$/i.test(f.name));
+    const audio = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(f.name));
     const identity = f => f.fullPath || f.uri || `${folderSource}/${f.relativePath || f.name}`;
     let playlist = this.findPlaylistByFolderSource(folderSource);
     const isNewPlaylist = !playlist;
@@ -474,6 +509,7 @@ export class Library {
     for (let i = 0; i < audio.length; i++) {
       const f = audio[i];
       const key = identity(f);
+      if(this.removedSources.has(key))continue;
       let track = index.get(key);
       if (!track) {
         const candidates = legacyIndex.get(`${folderName}/${f.name}/${f.size}`);
@@ -504,7 +540,7 @@ export class Library {
         } catch (error) { parsed = false; failedCount++; console.warn("Metadata import failed:", f.name, error); }
         const id = track?.id || `trk_${crypto.randomUUID()}`;
         const previous = track;
-        track = { ...metadata, id, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
+        track = { ...metadata, id, downloadId:f.downloadId || previous?.downloadId || null, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
           sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
           liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, unavailable: false };
         track.title = normalizeTrackTitle(track.title);

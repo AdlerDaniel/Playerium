@@ -178,6 +178,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     static boolean hasMusicPermission(Context context, Uri uri) {
+        if("file".equals(uri.getScheme())) {
+            try {java.io.File file=new java.io.File(uri.getPath());return file.isFile()&&file.getCanonicalPath().startsWith(MusicEngine.managedDirectory(context).getCanonicalPath()+java.io.File.separator);}
+            catch(Exception e){return false;}
+        }
         if (!"content".equals(uri.getScheme())) return false;
         for (UriPermission permission : context.getContentResolver().getPersistedUriPermissions()) {
             if (!permission.isReadPermission()) continue;
@@ -232,12 +236,14 @@ public class MainActivity extends AppCompatActivity {
         }
         @JavascriptInterface public void clearSelectedFiles() { getSharedPreferences("playerium", MODE_PRIVATE).edit().remove("selected_music_files").apply(); }
         @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
+        @JavascriptInterface public void musicRequest(String id,String operation,String payload) { MusicEngine.get(MainActivity.this).request(id,operation,payload); }
+        @JavascriptInterface public void cancelMusic(String id) { MusicEngine.get(MainActivity.this).cancel(id); }
 
         @JavascriptInterface
         public void openFolderPicker() {
             runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             try {
                 startActivityForResult(intent, FOLDER_PICKER_RESULTCODE);
             } catch (Exception e) {
@@ -252,6 +258,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     try {
+                        if("playerium-music".equals(folderUriStr)){runOnUiThread(()->{if(webView!=null)webView.evaluateJavascript("window.playerApp && window.playerApp.music && window.playerApp.music.restore();",null);});return;}
                         if ("android-files".equals(folderUriStr)) { scanSelectedFiles(false); return; }
                         Uri treeUri = Uri.parse(folderUriStr);
                         if (!hasMusicPermission(MainActivity.this, treeUri)) throw new SecurityException("Unauthorized folder");
@@ -287,6 +294,10 @@ public class MainActivity extends AppCompatActivity {
     public boolean isForeground() { return foreground; }
     public void resumeUpdateMonitor() { runOnUiThread(() -> { if (updater != null) updater.onResume(); }); }
     @Override protected void onPause() { foreground = false; super.onPause(); }
+    void sendMusicResponse(JSONObject response) {
+        runOnUiThread(()->{if(webView!=null)webView.evaluateJavascript("window.onMusicResponse && window.onMusicResponse("+response+");",null);});
+    }
+
     public void sendUpdateState(final JSONObject state) {
         runOnUiThread(() -> {
             if (webView != null) webView.evaluateJavascript("window.playerApp && window.playerApp.onUpdateState && window.playerApp.onUpdateState(" + state + ");", null);
@@ -397,7 +408,7 @@ public class MainActivity extends AppCompatActivity {
                 if (name != null) {
                     String lower = name.toLowerCase(java.util.Locale.ROOT);
                     if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
-                        lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac")) {
+                        lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac") || lower.endsWith(".opus")) {
                         results.add(file);
                     }
                 }
@@ -432,7 +443,7 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     getContentResolver().takePersistableUriPermission(
                         treeUri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                     );
                 } catch (Exception e) {
                     e.printStackTrace();

@@ -159,6 +159,16 @@ export class AudioPlayer {
   async playTrack(track, queueIndex = 0, newQueue = null, context = null) {
     if (!track) return;
     const request = ++this.playRequest;
+    if(track.catalog) {
+      try {
+        const pendingId=track.id;track=await this.library.ensureTrack(track);
+        if(request!==this.playRequest)return;
+        if(newQueue){newQueue=newQueue.map(t=>t.id===pendingId?track:t);queueIndex=newQueue.findIndex(t=>t.id===track.id);}
+        this.queue=this.queue.map(t=>t.id===pendingId?track:t);
+        this.originalQueue=this.originalQueue.map(t=>t.id===pendingId?track:t);
+      }catch(error){if(request===this.playRequest)this.onError?.(error.message);return;}
+    }
+    if(track.nativeUri && newQueue && window.AndroidBridge?.setPlaybackQueue){newQueue=newQueue.filter(t=>t.nativeUri);queueIndex=newQueue.findIndex(t=>t.id===track.id);}
     this.audio.pause();
     this.audio.removeAttribute("src");
     this.audio.load();
@@ -235,6 +245,20 @@ export class AudioPlayer {
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
       title: t.title, artist: t.artist, album: t.album })), index: this.queueIndex, play, reset,
       repeat: this.repeatMode, volume: this.volume }));
+  }
+
+  stopTrack() {
+    ++this.playRequest;this.pause();window.AndroidBridge?.playbackCommand?.('stop',0);
+    this.audio.removeAttribute('src');this.audio.load();
+    if(this.sourceUrl?.startsWith('blob:'))URL.revokeObjectURL(this.sourceUrl);this.sourceUrl=null;
+    this.currentTrack=null;this.nativePlayback=false;this.onTrackChange?.(null);
+  }
+
+  removeTrack(id) {
+    const currentId=this.currentTrack?.id;
+    this.queue=this.queue.filter(t=>t.id!==id);this.originalQueue=this.originalQueue.filter(t=>t.id!==id);
+    this.queueIndex=currentId?this.queue.findIndex(t=>t.id===currentId):-1;
+    if(this.nativePlayback)this.syncNativeQueue();this.onQueueChange?.(this.queue,this.queueIndex);
   }
 
   applyNativeState(state) {

@@ -243,20 +243,18 @@ export function renderSearchView(container) {
       });
       searchWrapper.appendChild(catGrid);
     } else {
-      const results = this.library.search(this.searchQuery);
-      const resHeader = document.createElement("h2");
-      resHeader.className = "mobile-section-title";
-      resHeader.textContent = `Найдено треков: ${results.length}`;
-      searchWrapper.appendChild(resHeader);
-
-      if (results.length > 0) {
-        searchWrapper.appendChild(this.createTrackTable(results));
-      } else {
-        const empty = document.createElement("div");
-        empty.style.cssText = "padding: 40px 0; text-align: center; color: var(--sp-text-subdued);";
-        empty.innerHTML = `<h3>Ничего не найдено</h3><p style="margin-top: 8px;">Попробуйте поискать по другому названию или исполнителю.</p>`;
-        searchWrapper.appendChild(empty);
-      }
+      const query=this.searchQuery,resultsHost=document.createElement('div');
+      resultsHost.className='song-search-results';searchWrapper.append(resultsHost);
+      let first=true;
+      const render=(tracks,loading,error)=>{
+        if(!first && (!searchWrapper.isConnected || this.searchQuery!==query))return;
+        first=false;resultsHost.replaceChildren();
+        const heading=document.createElement('h2');heading.className='mobile-section-title';heading.textContent='Песни';resultsHost.append(heading);
+        const status=document.createElement('p');status.className='song-search-status';status.setAttribute('role','status');
+        status.textContent=loading?'Поиск…':error||(!tracks.length?'Ничего не найдено':'');resultsHost.append(status);
+        if(tracks.length)resultsHost.append(this.createTrackTable(tracks,null,true));
+      };
+      if(this.music)this.music.schedule(query,render);else render(this.library.search(query),false,null);
     }
 
     container.appendChild(searchWrapper);

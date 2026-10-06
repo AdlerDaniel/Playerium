@@ -5,6 +5,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   unwatchFolder: path => ipcRenderer.invoke('folder:unwatch', path),
   getAudioSource: path => ipcRenderer.invoke('file:source', path),
   getMetadata: path => ipcRenderer.invoke('file:metadata', path),
+  musicRequest: (operation,payload,id) => ipcRenderer.invoke('music:request',operation,payload,id),
+  cancelMusic: id => ipcRenderer.invoke('music:cancel',id),
+  onMusicProgress: callback => {
+    const listener=(_event,state)=>callback(state);ipcRenderer.on('music:progress',listener);
+    return ()=>ipcRenderer.removeListener('music:progress',listener);
+  },
   openExternal: url => ipcRenderer.invoke('shell:openExternal', url),
   installUpdate: info => ipcRenderer.invoke('update:install', info),
   getUpdateStatus: () => ipcRenderer.invoke('update:status'),
