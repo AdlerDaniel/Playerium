@@ -340,51 +340,21 @@
   </div>
 
   <!-- Modal: Update Available -->
-  <div class="modal-overlay" id="modalUpdateAvailable">
-    <div class="modal-card">
-      <div class="modal-header">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="var(--sp-green)"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-          <h2>Доступно обновление Playerium</h2>
-        </div>
-      </div>
+  <div class="modal-overlay" id="modalUpdateAvailable" role="dialog" aria-modal="true" aria-labelledby="updateHeading">
+    <div class="modal-card update-card">
+      <div class="modal-header"><h2 id="updateHeading">Изменения</h2></div>
       <div class="modal-body">
-        <div style="background-color: var(--sp-dark-800); padding: 12px 16px; border-radius: 6px; margin-bottom: 16px;">
-          <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
-            <span style="color: var(--sp-text-subdued);">Новая версия:</span>
-            <strong style="color: var(--sp-green);" id="updateModalLatestVer">v1.0.1</strong>
-          </div>
-          <div style="display: flex; justify-content: space-between; font-size: 13px;">
-            <span style="color: var(--sp-text-subdued);">Текущая версия:</span>
-            <span id="updateModalCurrentVer">v1.0.0</span>
-          </div>
-        </div>
-        <div style="margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--sp-text-subdued); text-transform: uppercase;">Что нового:</div>
-        <div id="updateModalNotes" style="background-color: var(--sp-dark-900); padding: 12px; border-radius: 6px; font-size: 13px; max-height: 160px; overflow-y: auto; color: var(--sp-text-secondary); white-space: pre-wrap; line-height: 1.5;"></div>
-
-        <!-- Download Status Indicator with animated progress bar -->
-        <div id="updateDownloadStatus" style="display: none; margin-top: 14px; background: rgba(31, 223, 100, 0.1); border: 1px solid rgba(31, 223, 100, 0.3); border-radius: 8px; padding: 12px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span id="updateSpinner" class="spinner" style="width: 14px; height: 14px; border: 2px solid var(--sp-green); border-top-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite;"></span>
-              <span id="updateStatusText" style="font-size: 13px; font-weight: 600; color: #fff;">Загрузка обновления...</span>
-            </div>
-            <span id="updatePercentText" style="font-size: 13px; font-weight: 700; color: var(--sp-green); font-variant-numeric: tabular-nums;">0%</span>
-          </div>
-          <div style="font-size: 12px; color: var(--sp-text-secondary); margin-bottom: 8px;" id="updateStatusDetail">
-            Подготовка к загрузке...
-          </div>
-          <div style="height: 6px; width: 100%; background: var(--sp-dark-700); border-radius: 3px; overflow: hidden; position: relative;">
-            <div id="updateProgressBarFill" style="height: 100%; width: 0%; background: var(--sp-green); border-radius: 3px; transition: width 0.25s ease;"></div>
+        <ul id="updateModalNotes" class="update-notes"></ul>
+        <div id="updateDownloadStatus" class="update-status" hidden>
+          <span id="updateStatusText" role="status" aria-live="polite"></span>
+          <div id="updateProgress" class="update-progress" role="progressbar" aria-label="Загрузка обновления" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="updateProgressBarFill"></div>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="settings-btn-secondary" id="btnUpdateLater">Закрыть</button>
-        <button id="btnDownloadUpdate" class="settings-btn-primary" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; border: none;">
-          <svg id="btnDownloadUpdateIcon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-          <span id="btnDownloadUpdateText">Скачать обновление</span>
-        </button>
+        <button class="settings-btn-secondary" id="btnUpdateLater">Игнорировать</button>
+        <button id="btnDownloadUpdate" class="settings-btn-primary">Обновить</button>
       </div>
     </div>
   </div>

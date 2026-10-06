@@ -4,7 +4,7 @@
  */
 
 export class AutoUpdater {
-  static CURRENT_VERSION = "1.3.1";
+  static CURRENT_VERSION = "1.4.0";
   static DEFAULT_REPO = "AdlerDaniel/Playerium"; // User can configure in Settings
 
   constructor() {
@@ -35,6 +35,8 @@ export class AutoUpdater {
     this.autoCheckEnabled = !!enabled;
     localStorage.setItem("playerium_auto_update_check", this.autoCheckEnabled.toString());
   }
+
+  ignoreVersion(version) { localStorage.setItem('playerium_ignored_update', version); }
 
   /**
    * Check for updates via GitHub API
@@ -98,6 +100,7 @@ export class AutoUpdater {
 
       const updateInfo = {
         hasUpdate,
+        repo: this.repo,
         currentVersion: this.currentVersion,
         latestVersion: latestVer,
         releaseTitle: release.name || latestTag,
@@ -108,7 +111,7 @@ export class AutoUpdater {
         htmlUrl: release.html_url
       };
 
-      if (hasUpdate && this.onUpdateFound) {
+      if (hasUpdate && this.onUpdateFound && (isManual || localStorage.getItem('playerium_ignored_update') !== latestVer)) {
         this.onUpdateFound(updateInfo);
       }
 

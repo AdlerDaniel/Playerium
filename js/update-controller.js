@@ -1,187 +1,72 @@
+export function releaseChanges(notes) {
+  const lines=String(notes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  return lines.filter(s=>!/^#{1,6}\s|^\*\*Full Changelog|^https?:\/\/|^Проверено:|^Прошли |^Android проверен|^<!--/.test(s))
+    .map(s=>s.replace(/^[-*+]\s+|^\d+[.)]\s+/,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/\*\*|`/g,''))
+    .filter(Boolean).slice(0,30);
+}
+
 export function bindUpdateController() {
-      // Download state is reported by Android; browser downloads have no progress API.
-      this.lastUpdateInfo = null;
-      this.activeDownloadedUpdateId = null;
-
-      this.ui.showUpdateModal = (info) => {
-        this.lastUpdateInfo = info;
-        this.activeDownloadedUpdateId = null;
-        const modal = document.getElementById("modalUpdateAvailable");
-        if (!modal) return;
-        document.getElementById("updateModalLatestVer").textContent = "v" + info.latestVersion;
-        document.getElementById("updateModalCurrentVer").textContent = "v" + info.currentVersion;
-        document.getElementById("updateModalNotes").textContent = info.releaseNotes || "Новая версия Playerium доступна для загрузки.";
-
-        const statusBox = document.getElementById("updateDownloadStatus");
-        if (statusBox) statusBox.style.display = "none";
-        const progressFill = document.getElementById("updateProgressBarFill");
-        if (progressFill) progressFill.style.width = "0%";
-        const percentText = document.getElementById("updatePercentText");
-        if (percentText) percentText.textContent = "0%";
-        const spinner = document.getElementById("updateSpinner");
-        if (spinner) spinner.style.display = "inline-block";
-
-        const dlBtn = document.getElementById("btnDownloadUpdate");
-        const dlText = document.getElementById("btnDownloadUpdateText");
-        const dlIcon = document.getElementById("btnDownloadUpdateIcon");
-        if (dlBtn) {
-          dlBtn.disabled = false;
-          dlBtn.style.opacity = "1";
-          dlBtn.style.backgroundColor = "";
-          dlBtn.style.color = "";
-          dlBtn.onclick = () => this.ui.handleDownloadUpdate(info);
-        }
-        if (dlText) dlText.textContent = "Скачать обновление";
-        if (dlIcon) {
-          dlIcon.innerHTML = `<path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>`;
-        }
-
-        modal.classList.add("active");
-      };
-
-      // Called from Android Native Bridge during download
-      this.onUpdateDownloadProgress = (percent, bytesDownloaded, totalBytes) => {
-        const p = Math.max(0, Math.min(100, percent || 0));
-        const progressFill = document.getElementById("updateProgressBarFill");
-        if (progressFill) progressFill.style.width = p + "%";
-        const percentText = document.getElementById("updatePercentText");
-        if (percentText) percentText.textContent = p + "%";
-        const statusText = document.getElementById("updateStatusText");
-        if (statusText) statusText.textContent = `Загрузка обновления (${p}%)...`;
-        const statusDetail = document.getElementById("updateStatusDetail");
-        if (statusDetail) {
-          if (totalBytes > 0 && bytesDownloaded > 0) {
-            const mbDown = (bytesDownloaded / (1024 * 1024)).toFixed(1);
-            const mbTotal = (totalBytes / (1024 * 1024)).toFixed(1);
-            statusDetail.textContent = `${mbDown} МБ из ${mbTotal} МБ скачано`;
-          } else {
-            statusDetail.textContent = `Загрузка файла обновления (${p}%)...`;
-          }
-        }
-      };
-
-      // Called from Android Native Bridge when download finishes
-      this.onUpdateDownloadComplete = (downloadId) => {
-        this.activeDownloadedUpdateId = downloadId;
-        const progressFill = document.getElementById("updateProgressBarFill");
-        if (progressFill) progressFill.style.width = "100%";
-        const percentText = document.getElementById("updatePercentText");
-        if (percentText) percentText.textContent = "100%";
-        const statusText = document.getElementById("updateStatusText");
-        if (statusText) statusText.textContent = "Обновление готово к установке!";
-        const statusDetail = document.getElementById("updateStatusDetail");
-        if (statusDetail) statusDetail.textContent = "Файл успешно загружен. Нажмите кнопку «Установить обновление» ниже.";
-        const spinner = document.getElementById("updateSpinner");
-        if (spinner) spinner.style.display = "none";
-
-        const dlBtn = document.getElementById("btnDownloadUpdate");
-        const dlText = document.getElementById("btnDownloadUpdateText");
-        const dlIcon = document.getElementById("btnDownloadUpdateIcon");
-        if (dlBtn) {
-          dlBtn.disabled = false;
-          dlBtn.style.opacity = "1";
-          dlBtn.style.backgroundColor = "var(--sp-green)";
-          dlBtn.style.color = "var(--sp-black)";
-          dlBtn.onclick = () => this.installUpdate(downloadId);
-        }
-        if (dlText) dlText.textContent = "Установить обновление";
-        if (dlIcon) {
-          dlIcon.innerHTML = `<path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>`;
-        }
-
-        this.ui.showToast("✅ Обновление скачано! Нажмите «Установить»", "success");
-      };
-
-      // Called from Android Native Bridge if download fails
-      this.onUpdateDownloadFailed = (reason) => {
-        const statusText = document.getElementById("updateStatusText");
-        if (statusText) statusText.textContent = "Ошибка загрузки";
-        const statusDetail = document.getElementById("updateStatusDetail");
-        if (statusDetail) statusDetail.textContent = reason || "Не удалось загрузить файл обновления. Попробуйте еще раз.";
-        const spinner = document.getElementById("updateSpinner");
-        if (spinner) spinner.style.display = "none";
-
-        const dlBtn = document.getElementById("btnDownloadUpdate");
-        const dlText = document.getElementById("btnDownloadUpdateText");
-        if (dlBtn) {
-          dlBtn.disabled = false;
-          dlBtn.style.opacity = "1";
-        }
-        if (dlText) dlText.textContent = "Повторить загрузку";
-        this.ui.showToast("❌ Ошибка при загрузке обновления", "danger");
-      };
-
-      // Trigger installation of downloaded APK
-      this.installUpdate = (downloadId) => {
-        const id = downloadId || this.activeDownloadedUpdateId || 0;
-        if (window.AndroidBridge && typeof window.AndroidBridge.installDownloadedUpdate === "function") {
-          window.AndroidBridge.installDownloadedUpdate(id);
-        } else {
-          this.ui.showToast("Запуск инсталлятора...", "success");
-        }
-      };
-
-      this.ui.handleDownloadUpdate = (info) => {
-        const updateInfo = info || this.lastUpdateInfo || { latestVersion: this.ui.updater.currentVersion };
-        const dlBtn = document.getElementById("btnDownloadUpdate");
-        const statusBox = document.getElementById("updateDownloadStatus");
-        const statusText = document.getElementById("updateStatusText");
-        const statusDetail = document.getElementById("updateStatusDetail");
-        const dlText = document.getElementById("btnDownloadUpdateText");
-        const dlIcon = document.getElementById("btnDownloadUpdateIcon");
-        const progressFill = document.getElementById("updateProgressBarFill");
-        const percentText = document.getElementById("updatePercentText");
-        const spinner = document.getElementById("updateSpinner");
-
-        const url = updateInfo.downloadUrl || updateInfo.htmlUrl || "https://github.com/AdlerDaniel/Playerium/releases/latest";
-        const isAndroid = /Android/i.test(navigator.userAgent) || Boolean(window.AndroidBridge);
-        const fileName = isAndroid ? `Playerium-${updateInfo.latestVersion || this.ui.updater.currentVersion}.apk` : `Playerium-Setup-${updateInfo.latestVersion || this.ui.updater.currentVersion}.exe`;
-
-        if (dlText) dlText.textContent = "Загрузка...";
-        if (dlBtn) {
-          dlBtn.disabled = true;
-          dlBtn.style.opacity = "0.85";
-        }
-        if (dlIcon) {
-          dlIcon.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border: 2px solid #000; border-top-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite;"></span>`;
-        }
-        if (statusBox) statusBox.style.display = "block";
-        if (progressFill) progressFill.style.width = "0%";
-        if (percentText) percentText.textContent = "0%";
-        if (spinner) spinner.style.display = "inline-block";
-        if (statusText) statusText.textContent = isAndroid ? "Подготовка к загрузке..." : "Загрузка обновления...";
-        if (statusDetail) {
-          statusDetail.textContent = isAndroid
-            ? `Файл ${fileName} загружается. Прогресс отображается ниже.`
-            : `Файл ${fileName} загружается через браузер.`;
-        }
-
-        if (!/^https:\/\//i.test(url)) { this.onUpdateDownloadFailed("Недопустимый адрес обновления"); return; }
-        this.ui.showToast(`📥 Загрузка ${fileName} начата!`, "success");
-
-        if (window.AndroidBridge && typeof window.AndroidBridge.downloadUpdate === "function") {
-          window.AndroidBridge.downloadUpdate(url, fileName);
-        } else if (window.AndroidBridge && typeof window.AndroidBridge.openExternalUrl === "function") {
-          window.AndroidBridge.openExternalUrl(url);
-        } else if (window.electronAPI && typeof window.electronAPI.openExternal === "function") {
-          window.electronAPI.openExternal(url).catch(error => this.onUpdateDownloadFailed(error.message));
-          if (spinner) spinner.style.display = "none";
-          if (statusText) statusText.textContent = "Загрузка открыта в браузере";
-          if (statusDetail) statusDetail.textContent = "После загрузки запустите установщик из папки загрузок.";
-          if (dlBtn) dlBtn.disabled = false;
-        } else {
-          if (spinner) spinner.style.display = "none";
-          if (statusText) statusText.textContent = "Загрузка открыта в браузере";
-          if (statusDetail) statusDetail.textContent = "После загрузки запустите установщик из папки загрузок.";
-          if (dlBtn) dlBtn.disabled = false;
-          const a = document.createElement("a");
-          a.href = url;
-          a.target = "_blank";
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
-      };
-
+  const modal=document.getElementById('modalUpdateAvailable');
+  const button=document.getElementById('btnDownloadUpdate');
+  const ignore=document.getElementById('btnUpdateLater');
+  const status=document.getElementById('updateDownloadStatus');
+  const text=document.getElementById('updateStatusText');
+  const progress=document.getElementById('updateProgress');
+  const fill=document.getElementById('updateProgressBarFill');
+  let busy=false;
+  this.lastUpdateInfo=null;
+  this.ui.showUpdateModal=info=>{
+    if(busy)return;
+    this.lastUpdateInfo=info;
+    const list=document.getElementById('updateModalNotes');list.replaceChildren();
+    for(const change of releaseChanges(info.releaseNotes)) {
+      const li=document.createElement('li');li.textContent=change;list.append(li);
+    }
+    status.hidden=true;button.disabled=false;button.textContent='Обновить';ignore.disabled=false;
+    modal.classList.add('active');
+  };
+  this.onUpdateState=data=>{
+    if(!data)return;
+    const labels={downloading:'Скачивание',verifying:'Проверка обновления',installing:'Установка',permission:'Подтвердите установку',complete:'Обновление установлено'};
+    status.hidden=false;text.textContent=data.message||labels[data.state]||'';
+    const percent=Math.max(0,Math.min(100,Number(data.percent)||0));
+    progress.hidden=data.state!=='downloading';fill.style.width=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
+    if(data.state==='downloading')text.textContent=`Скачивание ${percent}%`;
+    busy=!['failed','complete'].includes(data.state);
+    button.disabled=busy;ignore.disabled=busy;button.textContent=data.state==='failed'?'Обновить':busy?(labels[data.state]||'Обновление'):'Обновить';
+    modal.dataset.busy=String(busy);
+    if(!busy)localStorage.removeItem('playerium_pending_update');
+  };
+  this.onUpdateDownloadFailed=message=>this.onUpdateState({state:'failed',message});
+  this.ui.handleDownloadUpdate=async(info=this.lastUpdateInfo)=>{
+    if(busy)return;
+    localStorage.setItem('playerium_pending_update',JSON.stringify(info));
+    this.onUpdateState({state:'downloading',percent:0});
+    try {
+      const request={latestVersion:info.latestVersion,repo:this.ui.updater.repo};
+      if(window.electronAPI?.installUpdate)await window.electronAPI.installUpdate(request);
+      else if(window.AndroidBridge?.installUpdate)window.AndroidBridge.installUpdate(JSON.stringify(request));
+      else throw Error('Обновление доступно в приложении Playerium для Windows и Android.');
+    }catch(error){this.onUpdateDownloadFailed(error.message||'Не удалось обновить приложение. Попробуйте снова.');}
+  };
+  button.onclick=()=>this.ui.handleDownloadUpdate();
+  ignore.onclick=()=>{
+    if(busy)return;
+    if(this.lastUpdateInfo)this.ui.updater.ignoreVersion(this.lastUpdateInfo.latestVersion);
+    modal.classList.remove('active');
+  };
+  window.electronAPI?.onUpdateState?.(data=>this.onUpdateState(data));
+  const restore=data=>{
+    if(data?.state==='complete'){localStorage.removeItem('playerium_pending_update');return;}
+    if(data?.state==='failed'){this.ui.showToast(data.message||'Не удалось завершить обновление','error');return;}
+    if(['downloading','verifying','installing','permission'].includes(data?.state)) {
+      try{const info=JSON.parse(localStorage.getItem('playerium_pending_update'));if(info)this.ui.showUpdateModal(info);}catch{}
+      this.onUpdateState(data);
+    }
+  };
+  window.electronAPI?.getUpdateStatus?.().then(restore).catch(()=>{});
+  if(window.AndroidBridge?.getUpdateStatus){
+    try {restore(JSON.parse(window.AndroidBridge.getUpdateStatus()));}catch{}
+  }
+  if(this.ui.pendingUpdateInfo){this.ui.showUpdateModal(this.ui.pendingUpdateInfo);this.ui.pendingUpdateInfo=null;}
 }

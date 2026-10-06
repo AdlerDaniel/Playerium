@@ -1,0 +1,36 @@
+const {test,expect}=require('@playwright/test');
+for(const android of [false,true])test(`one update button uses the native ${android?'Android':'Windows'} pipeline`,async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  if(android)await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(android=>{
+    localStorage.setItem('playerium_auto_update_check','false');window.updateCalls=[];window.externalCalls=0;
+    const install=info=>{window.updateCalls.push(typeof info==='string'?JSON.parse(info):info);};
+    if(android)window.AndroidBridge={installUpdate:install,getUpdateStatus:()=> '{}',openExternalUrl:()=>window.externalCalls++};
+    else window.electronAPI={installUpdate:async info=>install(info),onUpdateState:cb=>window.reportUpdate=cb,getUpdateStatus:async()=>null,openExternal:()=>window.externalCalls++};
+  },android);
+  await page.route('https://api.github.com/repos/AdlerDaniel/Playerium/releases/latest',route=>route.fulfill({json:{tag_name:'v9.0.0',body:'## Changes\n- Исправлено обновление\n- Улучшено воспроизведение\n\nПроверено: тесты\n**Full Changelog**: https://github.com/example',assets:[]}}));
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.evaluate(()=>window.playerApp.ui.updater.checkForUpdates(true));
+  const modal=page.locator('#modalUpdateAvailable');await expect(modal).toBeVisible();
+  await expect(modal.getByRole('button')).toHaveText(['Игнорировать','Обновить']);
+  await expect(modal.locator('li')).toHaveText(['Исправлено обновление','Улучшено воспроизведение']);
+  await expect(page.locator('#updateModalCurrentVer,#updateModalLatestVer')).toHaveCount(0);
+  await page.screenshot({path:testInfo.outputPath('update-dialog.png')});
+  await modal.getByRole('button',{name:'Обновить',exact:true}).click();
+  expect(await page.evaluate(()=>window.updateCalls)).toEqual([{latestVersion:'9.0.0',repo:'AdlerDaniel/Playerium'}]);
+  await expect(page.locator('#btnDownloadUpdate')).toBeDisabled();
+  await page.evaluate(()=>window.playerApp.onUpdateState({state:'downloading',percent:47}));
+  await expect(page.locator('#updateStatusText')).toHaveText('Скачивание 47%');
+  await page.evaluate(()=>window.playerApp.onUpdateState({state:'installing'}));
+  await expect(page.locator('#updateStatusText')).toHaveText('Установка');
+  expect(await page.evaluate(()=>window.externalCalls)).toBe(0);
+  await page.keyboard.press('Escape');await expect(modal).toBeVisible();
+  await page.evaluate(()=>window.playerApp.onUpdateState({state:'failed',message:'Не удалось скачать обновление'}));
+  await modal.getByRole('button',{name:'Обновить',exact:true}).click();
+  expect(await page.evaluate(()=>window.updateCalls.length)).toBe(2);
+  await page.evaluate(()=>window.playerApp.onUpdateState({state:'failed',message:'Отмена'}));
+  await modal.getByRole('button',{name:'Игнорировать',exact:true}).click();await expect(modal).not.toBeVisible();
+  await page.evaluate(()=>window.playerApp.ui.updater.checkForUpdates(false));await expect(modal).not.toBeVisible();
+  await page.evaluate(()=>window.playerApp.ui.updater.checkForUpdates(true));await expect(modal).toBeVisible();
+  expect(errors).toEqual([]);
+});

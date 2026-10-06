@@ -4,6 +4,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
+const { DesktopUpdater } = require('./desktop-updater');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
@@ -110,6 +111,10 @@ app.whenReady().then(async () => {
       picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null };
   });
   handle('shell:openExternal', openExternal);
+  const updater = new DesktopUpdater({ app, fetcher: (url,options) => net.fetch(url,options),
+    onState: state => mainWindow?.webContents.send('update:state', state) });
+  handle('update:install', info => updater.install(info));
+  handle('update:status', () => updater.getStatus());
   createWindow();
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });

@@ -55,29 +55,8 @@ public class MainActivity extends AppCompatActivity {
 
     private final java.util.Map<String, JSONObject> metadataCache = new java.util.LinkedHashMap<>(128, 0.75f, true);
 
-    private long activeDownloadId = -1;
-    private Handler progressHandler;
-    private Runnable progressRunnable;
-    private boolean isDownloadNotified = false;
-
-    private final BroadcastReceiver onDownloadCompleteReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
-                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-                if (id > 0 && id == activeDownloadId) {
-                    if (!isSuccessfulDownload(id)) return;
-                    activeDownloadId = id;
-                    stopDownloadProgressMonitor();
-                    if (!isDownloadNotified) {
-                        isDownloadNotified = true;
-                        notifyJsDownloadComplete(id);
-                        triggerApkInstall(id);
-                    }
-                }
-            }
-        }
-    };
+    private AppUpdater updater;
+    private boolean foreground;
 
     public static MainActivity getInstance() {
         return instance;
@@ -88,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         instance = this;
 
+        updater = new AppUpdater(this);
         webView = new WebView(this);
         setContentView(webView);
 
@@ -134,13 +114,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Register receiver for downloaded APK auto-installation prompt
-        try {
-            ContextCompat.registerReceiver(this, onDownloadCompleteReceiver,
-                new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_EXPORTED);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
@@ -172,6 +145,8 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onResume() {
         super.onResume();
+        foreground = true;
+        if (updater != null) updater.onResume();
         if (webView != null) webView.evaluateJavascript("window.playerApp && window.playerApp.library && window.playerApp.library.db && window.playerApp.library.initFolderWatchers();", null);
     }
 
@@ -288,55 +263,8 @@ public class MainActivity extends AppCompatActivity {
             }).start();
         }
 
-        @JavascriptInterface
-        public void downloadUpdate(final String url, final String fileName) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        Uri updateUri = Uri.parse(url);
-                        if (!"https".equals(updateUri.getScheme()) || !"github.com".equals(updateUri.getHost()) || !updateUri.getPath().contains("/releases/download/")) throw new SecurityException("Invalid update URL");
-                        String name = (fileName != null && fileName.matches("[A-Za-z0-9._ -]+\\.apk")) ? fileName : "Playerium-update.apk";
-                        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                        request.setTitle("Playerium " + name);
-                        request.setDescription("Загрузка обновления Playerium...");
-                        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
-                        request.setMimeType("application/vnd.android.package-archive");
-
-                        DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                        if (manager != null) {
-                            isDownloadNotified = false;
-                            activeDownloadId = manager.enqueue(request);
-                            startDownloadProgressMonitor(activeDownloadId);
-                            Toast.makeText(MainActivity.this, "Загрузка началась! Проверьте шторку уведомлений.", Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        try {
-                            if (!isWebUrl(url)) return;
-                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                            browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            startActivity(browserIntent);
-                            Toast.makeText(MainActivity.this, "Открытие загрузки в браузере...", Toast.LENGTH_SHORT).show();
-                        } catch (Exception ex) {
-                            ex.printStackTrace();
-                        }
-                    }
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void installDownloadedUpdate(final long downloadId) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    long id = (downloadId > 0) ? downloadId : activeDownloadId;
-                    if (id == activeDownloadId && isSuccessfulDownload(id)) triggerApkInstall(id);
-                }
-            });
-        }
+        @JavascriptInterface public void installUpdate(final String info) { updater.install(info); }
+        @JavascriptInterface public String getUpdateStatus() { return updater.status(); }
 
         @JavascriptInterface
         public void openExternalUrl(final String url) {
@@ -356,149 +284,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void startDownloadProgressMonitor(final long downloadId) {
-        stopDownloadProgressMonitor();
-        if (progressHandler == null) {
-            progressHandler = new Handler(Looper.getMainLooper());
-        }
-
-        progressRunnable = new Runnable() {
-            @Override
-            public void run() {
-                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                if (dm == null) return;
-
-                DownloadManager.Query q = new DownloadManager.Query();
-                q.setFilterById(downloadId);
-                Cursor cursor = null;
-                boolean shouldContinue = true;
-                try {
-                    cursor = dm.query(q);
-                    if (cursor != null && cursor.moveToFirst()) {
-                        int bytesIdx = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
-                        int totalIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES);
-                        int statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
-
-                        long bytesDownloaded = (bytesIdx != -1) ? cursor.getLong(bytesIdx) : 0;
-                        long totalBytes = (totalIdx != -1) ? cursor.getLong(totalIdx) : 0;
-                        int status = (statusIdx != -1) ? cursor.getInt(statusIdx) : -1;
-
-                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            shouldContinue = false;
-                            stopDownloadProgressMonitor();
-                            if (!isDownloadNotified) {
-                                isDownloadNotified = true;
-                                notifyJsDownloadComplete(downloadId);
-                                triggerApkInstall(downloadId);
-                            }
-                            return;
-                        } else if (status == DownloadManager.STATUS_FAILED) {
-                            shouldContinue = false;
-                            stopDownloadProgressMonitor();
-                            notifyJsDownloadFailed("Загрузка обновления не удалась");
-                            return;
-                        } else {
-                            int percent = totalBytes > 0 ? (int)((bytesDownloaded * 100L) / totalBytes) : 0;
-                            notifyJsDownloadProgress(percent, bytesDownloaded, totalBytes);
-                        }
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                } finally {
-                    if (cursor != null) cursor.close();
-                }
-
-                if (shouldContinue && progressHandler != null && progressRunnable != null) {
-                    progressHandler.postDelayed(this, 250);
-                }
-            }
-        };
-        progressHandler.post(progressRunnable);
-    }
-
-    private void stopDownloadProgressMonitor() {
-        if (progressHandler != null && progressRunnable != null) {
-            progressHandler.removeCallbacks(progressRunnable);
-            progressRunnable = null;
-        }
-    }
-
-    private void notifyJsDownloadProgress(final int percent, final long downloaded, final long total) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (webView != null) {
-                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadProgress && window.playerApp.onUpdateDownloadProgress(%d, %d, %d);", percent, downloaded, total);
-                    if (webView != null) webView.evaluateJavascript(script, null);
-                }
-            }
+    public boolean isForeground() { return foreground; }
+    public void resumeUpdateMonitor() { runOnUiThread(() -> { if (updater != null) updater.onResume(); }); }
+    @Override protected void onPause() { foreground = false; super.onPause(); }
+    public void sendUpdateState(final JSONObject state) {
+        runOnUiThread(() -> {
+            if (webView != null) webView.evaluateJavascript("window.playerApp && window.playerApp.onUpdateState && window.playerApp.onUpdateState(" + state + ");", null);
         });
-    }
-
-    private void notifyJsDownloadComplete(final long downloadId) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (webView != null) {
-                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadComplete && window.playerApp.onUpdateDownloadComplete(%d);", downloadId);
-                    if (webView != null) webView.evaluateJavascript(script, null);
-                }
-            }
-        });
-    }
-
-    private void notifyJsDownloadFailed(final String reason) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (webView != null) {
-                    String safeReason = JSONObject.quote(reason != null ? reason : "Ошибка");
-                    String script = String.format("window.playerApp && window.playerApp.onUpdateDownloadFailed && window.playerApp.onUpdateDownloadFailed(%s);", safeReason);
-                    if (webView != null) webView.evaluateJavascript(script, null);
-                }
-            }
-        });
-    }
-
-    private boolean isSuccessfulDownload(long id) {
-        if (id <= 0) return false;
-        DownloadManager manager = (DownloadManager)getSystemService(DOWNLOAD_SERVICE);
-        try (Cursor cursor = manager.query(new DownloadManager.Query().setFilterById(id))) {
-            return cursor != null && cursor.moveToFirst() && cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL;
-        } catch (Exception e) { return false; }
-    }
-
-    private void triggerApkInstall(final long downloadId) {
-        if (downloadId != activeDownloadId || !isSuccessfulDownload(downloadId)) return;
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!getPackageManager().canRequestPackageInstalls()) {
-                    Intent settingsIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
-                    settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(settingsIntent);
-                    Toast.makeText(MainActivity.this, "Разрешите установку обновлений для Playerium", Toast.LENGTH_LONG).show();
-                    return;
-                }
-            }
-
-            DownloadManager downloadManager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-            if (downloadManager == null) return;
-
-            Uri downloadUri = downloadManager.getUriForDownloadedFile(downloadId);
-            if (downloadUri != null) {
-                Intent installIntent = new Intent(Intent.ACTION_VIEW);
-                installIntent.setDataAndType(downloadUri, "application/vnd.android.package-archive");
-                installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(installIntent);
-            } else {
-                Intent downloadsIntent = new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS);
-                downloadsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(downloadsIntent);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            Toast.makeText(MainActivity.this, "Ошибка запуска установщика: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
     }
 
     private synchronized void scanFolderAndSend(Uri treeUri, boolean isInitial) {
@@ -667,10 +459,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        stopDownloadProgressMonitor();
-        try {
-            unregisterReceiver(onDownloadCompleteReceiver);
-        } catch (Exception ignored) {}
+        if (updater != null) updater.detach();
         instance = null;
         if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); webView = null; }
         super.onDestroy();

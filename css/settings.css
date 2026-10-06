@@ -346,3 +346,12 @@ input:checked + .slider-toggle:before {
   50% { left: 40%; }
   100% { left: 100%; }
 }
+/* Updates show only release changes and the action required now. */
+#modalUpdateAvailable:not(.active) { visibility: hidden; }
+.update-notes { margin: 0; padding-left: 20px; max-height: min(45vh, 360px); overflow: auto; color: var(--sp-text-secondary); line-height: 1.6; }
+.update-notes li + li { margin-top: 10px; }
+.update-card .modal-footer button { min-height: 44px; }
+.update-status { margin-top: 16px; font-size: 13px; color: var(--sp-text-secondary); font-variant-numeric: tabular-nums; }
+.update-progress { height: 4px; margin-top: 10px; overflow: hidden; border-radius: 4px; background: var(--sp-dark-700); }
+#updateProgressBarFill { height: 100%; width: 0; background: var(--sp-green); transition: width 150ms ease-out; }
+@media (prefers-reduced-motion: reduce) { #updateProgressBarFill { transition: none; } }

@@ -173,9 +173,6 @@ export class UIController {
       });
     });
 
-    document.getElementById("btnUpdateLater")?.addEventListener("click", () => {
-      document.getElementById("modalUpdateAvailable")?.classList.remove("active");
-    });
 
     // Close context menu on any document click
     document.addEventListener("click", () => this.closeContextMenu());
@@ -853,22 +850,10 @@ export class UIController {
     btnCreate.addEventListener("click", handler);
   }
 
-  showUpdateModal(info) {
-    const modal = document.getElementById("modalUpdateAvailable");
-    if (!modal) return;
-    document.getElementById("updateModalLatestVer").textContent = "v" + info.latestVersion;
-    document.getElementById("updateModalCurrentVer").textContent = "v" + info.currentVersion;
-    document.getElementById("updateModalNotes").textContent = info.releaseNotes || "Новая версия Playerium доступна для загрузки.";
-    const dlBtn = document.getElementById("btnDownloadUpdate");
-    if (dlBtn) {
-      dlBtn.href = info.downloadUrl || info.htmlUrl;
-      dlBtn.title = info.assetName || "Скачать релиз";
-    }
-    modal.classList.add("active");
-  }
+  showUpdateModal(info) { this.pendingUpdateInfo = info; }
 
   closeModals() {
-    document.querySelectorAll(".modal-overlay").forEach((m) => m.classList.remove("active"));
+    document.querySelectorAll(".modal-overlay").forEach((m) => { if (m.dataset.busy !== 'true') m.classList.remove("active"); });
   }
 
   async triggerFolderPicker() {

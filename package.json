@@ -1,6 +1,6 @@
 {
   "name": "playerium",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Playerium - Modern Spotify-style local music player for PC and Android",
   "main": "main.js",
   "scripts": {
@@ -30,7 +30,8 @@
       "assets/**/*",
       "build/icon.ico",
       "package.json",
-      "desktop-files.js"
+      "desktop-files.js",
+      "desktop-updater.js"
     ],
     "win": {
       "icon": "build/icon.ico",
