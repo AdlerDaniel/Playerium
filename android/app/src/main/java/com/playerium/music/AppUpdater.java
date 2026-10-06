@@ -33,7 +33,8 @@ final class AppUpdater {
     private final MainActivity activity;
     private final SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final AtomicBoolean busy = new AtomicBoolean();
+    // A recreated Activity must not start a second verification/install worker.
+    private static final AtomicBoolean busy = new AtomicBoolean();
     private boolean detached;
     private final Runnable monitor = new Runnable() {
         @Override public void run() {

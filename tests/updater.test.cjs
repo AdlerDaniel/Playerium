@@ -38,7 +38,7 @@ test('Windows updater verifies bytes before launching and duplicate clicks start
 
 test('portable helper escapes paths and replaces the launcher atomically',()=>{
   const script=helperScript({parentId:123,source:"C:\\temp\\O'Brien.exe",target:"C:\\Music Player\\Playerium.exe",portable:true,result:'C:\\temp\\result.json',digest:'a'.repeat(64)});
-  assert.ok(script.includes("O''Brien.exe"));assert.match(script,/\[IO.File\]::Replace/);assert.match(script,/Get-FileHash/);assert.doesNotMatch(script,/\/S/);
+  assert.ok(script.includes("O''Brien.exe"));assert.match(script,/\[IO.File\]::Replace/);assert.match(script,/Security.Cryptography.SHA256/);assert.doesNotMatch(script,/\/S/);
 });
 
 test('ignored release stays hidden on startup but manual checks can show it',async()=>{

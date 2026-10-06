@@ -33,14 +33,19 @@ function helperScript({parentId,source,target,portable,result,digest}) {
   return `$ErrorActionPreference='Stop'
 $source=${ps(source)}; $target=${ps(target)}; $result=${ps(result)}
 function Report($state,$message) { @{state=$state;message=$message} | ConvertTo-Json -Compress | Set-Content -LiteralPath $result -Encoding UTF8 }
+function FileHash($file) {
+  $stream=[IO.File]::OpenRead($file); $sha=[Security.Cryptography.SHA256]::Create()
+  try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant() }
+  finally { $stream.Dispose(); $sha.Dispose() }
+}
 try {
   Wait-Process -Id ${Number(parentId)} -Timeout 120 -ErrorAction SilentlyContinue
   if(Get-Process -Id ${Number(parentId)} -ErrorAction SilentlyContinue) { throw 'Не удалось закрыть Playerium' }
-  if((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLower() -ne ${ps(digest)}) { throw 'Файл обновления повреждён' }
+  if((FileHash $source) -ne ${ps(digest)}) { throw 'Файл обновления повреждён' }
   ${portable ? `
   $next=$target+'.new-'+[guid]::NewGuid().ToString('N'); $backup=$target+'.previous'
   Copy-Item -LiteralPath $source -Destination $next
-  if((Get-FileHash -LiteralPath $next -Algorithm SHA256).Hash.ToLower() -ne ${ps(digest)}) { throw 'Не удалось скопировать обновление' }
+  if((FileHash $next) -ne ${ps(digest)}) { throw 'Не удалось скопировать обновление' }
   if(Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup }
   for($attempt=0;;$attempt++) {
     try { [IO.File]::Replace($next,$target,$backup); break }
