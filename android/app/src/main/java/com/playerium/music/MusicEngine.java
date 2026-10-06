@@ -42,7 +42,7 @@ final class MusicEngine {
             MainActivity current=MainActivity.getInstance();if(current!=null)current.sendMusicResponse(result);
             tasks.remove(id);
         });
-        tasks.put(id,task);if(task.isDone())tasks.remove(id,task);
+        tasks.put(id,task);if(task.isDone())tasks.remove(id);
     }
     private String get(String url) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
