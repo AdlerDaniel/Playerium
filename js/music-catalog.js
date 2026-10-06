@@ -77,7 +77,7 @@ export class MusicCatalog {
       const folder=this.library.folders.findLast(f=>!f.source.startsWith('web:') && f.source!=='android-files');
       const save=()=>this.request('download',{track:{...track,sources},folderSource:folder?.source||null});
       let saved;
-      if(sources.length){try{saved=await save();}catch{}}
+      if(sources.length){try{saved=await save();}catch(error){if(/папк|доступ|места/i.test(error.message))throw error;}}
       if(!saved) {
         const results=await Promise.allSettled(searchProviders.map(async provider=>{
           const data=await this.request('search',{provider,query:`${track.artist} ${track.title}`});
