@@ -43,7 +43,9 @@ export class MusicCatalog {
     for(const row of document.querySelectorAll('[data-track-id]'))if(row.dataset.trackId===state.id){row.dataset.downloading='true';const btn=row.querySelector('.track-download-btn');if(btn){btn.disabled=true;btn.setAttribute('aria-label','Сохранение трека');}}
   }
   schedule(query,onResults) {
-    for(const id of this.searchRequests){window.electronAPI?.cancelMusic?.(id);window.AndroidBridge?.cancelMusic?.(id);}
+    for(const id of this.searchRequests){window.electronAPI?.cancelMusic?.(id);window.AndroidBridge?.cancelMusic?.(id);
+      const task=this.pending.get(id);if(task){clearTimeout(task.timer);this.pending.delete(id);task.reject(Error('Поиск изменён'));}
+    }
     this.searchRequests.clear();
     clearTimeout(this.timer);const version=++this.searchVersion;
     const local=this.library.search(query);

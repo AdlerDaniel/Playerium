@@ -28,18 +28,21 @@ final class MusicEngine {
     private final ExecutorService workers=Executors.newFixedThreadPool(5);
     private final ExecutorService downloader=Executors.newSingleThreadExecutor();
     private final Map<String,Process> processes=new ConcurrentHashMap<>();
+    private final Map<String,Future<?>> tasks=new ConcurrentHashMap<>();
     private final File runtime;
     private JSONObject records;
     private MusicEngine(Context context){this.context=context;runtime=new File(context.getNoBackupFilesDir(),"music-runtime-0.18.1-2026.08.19");}
-    void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();}
+    void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();Future<?> task=tasks.remove(id);if(task!=null)task.cancel(true);}
     void request(String id,String operation,String json) {
         if(!id.matches("[\\w-]{1,100}"))return;
-        (operation.equals("download")||operation.equals("delete")?downloader:workers).execute(()->{
+        Future<?> task=(operation.equals("download")||operation.equals("delete")?downloader:workers).submit(()->{
             JSONObject result=new JSONObject();
             try {result.put("id",id).put("data",execute(operation,new JSONObject(json),id));}
             catch(Exception e){try{result.put("id",id).put("error",e instanceof SecurityException?e.getMessage():"Не удалось завершить действие. Попробуйте снова.");}catch(Exception ignored){}}
             MainActivity current=MainActivity.getInstance();if(current!=null)current.sendMusicResponse(result);
+            tasks.remove(id);
         });
+        tasks.put(id,task);if(task.isDone())tasks.remove(id,task);
     }
     private String get(String url) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
@@ -142,7 +145,7 @@ final class MusicEngine {
         if(info.optString("artist").isEmpty()&&credits!=null&&credits.length()>0){who=credits.optString(0);}
         if(title.matches(".*\\s[-–—]\\s.*")){String[] parts=title.split("\\s[-–—]\\s",2);if(!credited){who=parts[0];title=parts[1];}else if(artist(parts[0]).equals(artist(who)))title=parts[1];}
         String raw=info.optString("title").toLowerCase(Locale.ROOT);
-        if(raw.matches(".*\\b(cover|karaoke|live|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|music video|official video|bts)\\b.*")||raw.matches(".*(кавер|концерт|ремикс|караоке|наживо|кліп|клип).*"))return false;
+        if(raw.matches(".*\\b(cover|karaoke|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts)\\b.*")||raw.matches(".*([\\[(]\\s*live\\b|\\blive\\s+(at|from|in|on|version|performance|session)\\b|\\blive\\s*[\\])]|кавер|концерт|ремикс|караоке|наживо|кліп|клип).*"))return false;
         title=title.replaceAll("(?i)\\s*[\\[(]?(?:official\\s+(?:audio|lyric(?:s)?(?:\\s+video)?)|audio\\s+only|visuali[sz]er|lyrics?)[\\])]?\\s*"," ").trim();
         double duration=track.optDouble("duration",0),actual=info.optDouble("duration",0);
         return norm(title).equals(norm(track.optString("title")))&&artist(who).equals(artist(track.optString("artist")))&&(! (duration>0&&actual>0)||Math.abs(duration-actual)<=Math.max(8,duration*.04));
@@ -190,7 +193,8 @@ final class MusicEngine {
             if(!write)throw new SecurityException("Выберите папку музыки ещё раз, чтобы разрешить сохранение треков.");
             DocumentFile root=DocumentFile.fromTreeUri(context,tree);if(root==null||!root.canWrite())throw new SecurityException("Нет доступа к папке музыки");
             if(root.findFile(name)!=null)throw new IOException("File already exists");
-            DocumentFile file=root.createFile(extension.equals(".m4a")?"audio/mp4":extension.equals(".opus")?"audio/ogg":"audio/mpeg",name);if(file==null)throw new IOException("Cannot create track");
+            String mime=extension.equals(".m4a")?"audio/mp4":extension.equals(".opus")||extension.equals(".ogg")?"audio/ogg":extension.equals(".flac")?"audio/flac":extension.equals(".wav")?"audio/wav":extension.equals(".aac")?"audio/aac":"audio/mpeg";
+            DocumentFile file=root.createFile(mime,name);if(file==null)throw new IOException("Cannot create track");
             DocumentFile sidecar=null,image=null;
             try {
                 try(InputStream in=new FileInputStream(audio);OutputStream out=context.getContentResolver().openOutputStream(file.getUri())){copy(in,out);}

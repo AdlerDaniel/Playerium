@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.*;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -28,11 +29,19 @@ public class MusicRuntimeTest {
         builder.environment().put("LD_LIBRARY_PATH",new File(runtime,"python/usr/lib")+":"+new File(runtime,"ffmpeg/usr/lib"));
         builder.redirectErrorStream(true);Process process=builder.start();ByteArrayOutputStream log=new ByteArrayOutputStream();byte[] bytes=new byte[4096];int n;while((n=process.getInputStream().read(bytes))!=-1)log.write(bytes,0,n);
         assertTrue(process.waitFor(60,TimeUnit.SECONDS));assertEquals(new String(log.toByteArray(),StandardCharsets.UTF_8),0,process.exitValue());assertTrue(fixture.length()>1000);
+        File picture=new File(context.getCacheDir(),"test-cover.png");try(InputStream in=context.getAssets().open("assets/icon.png");OutputStream out=new FileOutputStream(picture)){while((n=in.read(bytes))!=-1)out.write(bytes,0,n);}
+        String audioUrl=android.net.Uri.fromFile(fixture).toString();
+        JSONObject info=new JSONObject().put("id","fixture").put("title","Saved recording").put("artist","Playerium").put("album","Test album").put("meta_title","Saved recording").put("meta_artist","Playerium").put("duration",1).put("ext","m4a").put("url",audioUrl).put("extractor","generic").put("extractor_key","Generic")
+            .put("formats",new JSONArray().put(new JSONObject().put("format_id","audio").put("url",audioUrl).put("ext","m4a").put("vcodec","none").put("acodec","aac").put("protocol","file")))
+            .put("thumbnails",new JSONArray().put(new JSONObject().put("id","cover").put("url",android.net.Uri.fromFile(picture))));
+        File description=new File(context.getCacheDir(),"test-recording.json");try(OutputStream out=new FileOutputStream(description)){out.write(info.toString().getBytes(StandardCharsets.UTF_8));}
+        String output=(String)run.invoke(engine,Arrays.asList("--load-info-json",description.getAbsolutePath(),"--enable-file-urls","--no-playlist","--quiet","--no-progress","-x","--audio-format","m4a","--embed-metadata","--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail","-o",new File(context.getCacheDir(),"processed-test.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"),"pipeline-test",60000L);
+        String[] lines=output.split("\\r?\\n");File processed=new File(lines[lines.length-1]);assertTrue(processed.length()>1000);
         Method publish=MusicEngine.class.getDeclaredMethod("publish",File.class,File.class,JSONObject.class,String.class,String.class);publish.setAccessible(true);
-        JSONObject metadata=new JSONObject().put("title","Test recording").put("artist","Playerium").put("album","Test album").put("duration",1);
-        JSONObject record=(JSONObject)publish.invoke(engine,fixture,null,metadata,"","song_abcd1234");
+        JSONObject metadata=new JSONObject().put("title","Saved recording").put("artist","Playerium").put("album","Test album").put("duration",1);
+        JSONObject record=(JSONObject)publish.invoke(engine,processed,null,metadata,"","song_abcd1234");
         File owned=new File(android.net.Uri.parse(record.getString("uri")).getPath());assertTrue(owned.exists());
-        android.media.MediaMetadataRetriever reader=new android.media.MediaMetadataRetriever();reader.setDataSource(owned.getAbsolutePath());assertEquals("Test recording",reader.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE));reader.release();
-        Method delete=MusicEngine.class.getDeclaredMethod("deleteOwned",JSONObject.class);delete.setAccessible(true);delete.invoke(engine,record);assertFalse(owned.exists());fixture.delete();
+        android.media.MediaMetadataRetriever reader=new android.media.MediaMetadataRetriever();reader.setDataSource(owned.getAbsolutePath());assertEquals("Saved recording",reader.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE));assertEquals("Test album",reader.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM));assertTrue(reader.getEmbeddedPicture().length>0);reader.release();
+        Method delete=MusicEngine.class.getDeclaredMethod("deleteOwned",JSONObject.class);delete.setAccessible(true);delete.invoke(engine,record);assertFalse(owned.exists());fixture.delete();processed.delete();description.delete();picture.delete();
     }
 }

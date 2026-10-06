@@ -33,7 +33,7 @@ class DesktopMusic {
       const child=spawn(path.join(this.tools,'yt-dlp.exe'),['--ignore-config','--no-warnings','--socket-timeout','15','--retries','1','--js-runtimes',`node:${process.execPath}`,'--ffmpeg-location',this.tools,...args],
         {windowsHide:true,env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','pipe','pipe']});
       this.active.set(id,child);let out='',error='';const timer=setTimeout(()=>this.cancel(id),timeout);
-      child.stdout.on('data',data=>{out+=data;if(out.length>12*1024*1024)child.kill();});
+      child.stdout.on('data',data=>{out+=data;if(out.length>12*1024*1024){out=out.slice(0,12*1024*1024);this.cancel(id);}});
       child.stderr.on('data',data=>{error=(error+data).slice(-3000);});
       const done=()=>{clearTimeout(timer);if(this.active.get(id)===child)this.active.delete(id);};
       child.on('error',e=>{done();reject(e);});

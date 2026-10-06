@@ -18,7 +18,8 @@ test('repost titles cannot claim another performer as the recording author',asyn
   assert.equal(audioCandidate({title:'Kevin Macleod Monkeys Spinning Monkeys',artists:['Other'],uploader:'Other',url:'https://soundcloud.com/repost/song'},'soundcloud'),null);
 });
 test('different performers and different recordings are not collapsed',async()=>{
-  const {mergeSongs}=await import('../js/music-match.js');
+  const {mergeSongs,isVariant}=await import('../js/music-match.js');
+  assert.equal(isVariant('Live Forever'),false);assert.equal(isVariant('Long Live'),false);assert.equal(isVariant('Song (Live)'),true);
   const one={title:'Storm',artist:'GENER8ION',duration:210,sources:[]};
   const rows=mergeSongs([[one,{...one,artist:'Other'},{...one,duration:420}]],'Storm');assert.equal(rows.length,3);
 });

@@ -1,7 +1,7 @@
 // Recording identity is independent of the platform that supplies its audio.
 export const normalize = value => String(value || '').normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase().replace(/[’'`]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const presentation = /\s*[\[(]?(?:official\s+(?:audio|lyric(?:s)?(?:\s+video)?)|audio\s+only|visuali[sz]er|lyrics?|provided to youtube)[\])]?\s*/gi;
-const unwanted = /\b(?:cover|karaoke|live|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts|behind the scenes)\b|кавер|концерт|ремикс|караоке|наживо|кліп|клип/i;
+const unwanted = /\b(?:cover|karaoke|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts|behind the scenes)\b|[\[(]\s*live\b|\blive\s+(?:at|from|in|on|version|performance|session)\b|\blive\s*[\])]|кавер|концерт|ремикс|караоке|наживо|кліп|клип/i;
 export const cleanTitle = title => String(title || '').replace(presentation,' ').replace(/\s+/g,' ').trim();
 export function isVariant(title, query='') {
   const found=String(title).match(unwanted);
@@ -61,8 +61,8 @@ export function mergeSongs(groups, query, local=[]) {
     const saved=local.find(t=>sameRecording(t,track));
     if(saved)Object.assign(track,saved,{catalog:false});
     else {
-      let hash=2166136261;for(const c of songKey(track))hash=Math.imul(hash^c.codePointAt(0),16777619);
-      track.id=`song_${(hash>>>0).toString(16)}`;
+      let hash=14695981039346656037n;for(const c of songKey(track))hash=BigInt.asUintN(64,(hash^BigInt(c.codePointAt(0)))*1099511628211n);
+      track.id=`song_${hash.toString(16)}`;
     }
   }
   const result=[...local.filter(t=>!merged.some(m=>m.id===t.id)),...merged];
