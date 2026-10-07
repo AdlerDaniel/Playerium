@@ -117,7 +117,9 @@ app.whenReady().then(async () => {
     onProgress:state=>mainWindow?.webContents.send('music:progress',state)});
   handle('music:request',(operation,payload,id)=>music.request(operation,payload,id));
   handle('music:cancel',id=>music.cancel(id));
-  const updater = new DesktopUpdater({ app, fetcher: (url,options) => net.fetch(url,options),
+  // Node fetch exposes manual redirects; Electron net.fetch cancels them.
+  // The updater must validate each redirect before following it.
+  const updater = new DesktopUpdater({ app,
     onState: state => mainWindow?.webContents.send('update:state', state) });
   handle('update:install', info => updater.install(info));
   handle('update:status', () => updater.getStatus());

@@ -117,4 +117,4 @@ class DesktopUpdater {
     }catch(error){this.busy=false;if(source)await fs.rm(source,{force:true}).catch(()=>{});this.onState({state:'failed',message:error.message});throw error;}
   }
 }
-module.exports={DesktopUpdater,helperScript,safeURL,newer};
+module.exports={DesktopUpdater,helperScript,safeURL,newer,request};

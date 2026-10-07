@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 function wav() {
   const rate=8000, samples=rate*20, data=Buffer.alloc(44+samples*2);
   data.write('RIFF');data.writeUInt32LE(data.length-8,4);data.write('WAVEfmt ',8);data.writeUInt32LE(16,16);
@@ -50,11 +51,29 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     await win.waitForFunction(()=>window.playerApp.player.isPlaying);
     assert.deepEqual(errors,[]);
     console.log('Electron import, streaming playback, reload and IPC access checks passed');
+    const server=http.createServer((req,res)=>{
+      if(req.url==='/redirect'){res.writeHead(302,{location:'/update'});res.end();}
+      else {res.writeHead(200);res.end('verified update bytes');}
+    });
+    try {
+      await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+      const result=await app.evaluate(async(_,url)=>{
+        const response=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(5000)});
+        const status=response.status,location=response.headers.get('location');
+        await response.body?.cancel();
+        const final=await fetch(new URL(location,url).href,{redirect:'manual',signal:AbortSignal.timeout(5000)});
+        return {status,bytes:await final.text()};
+      },`http://127.0.0.1:${server.address().port}/redirect`);
+      assert.deepEqual(result,{status:302,bytes:'verified update bytes'});
+    }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
     await app.evaluate(() => {
       const {createRequire}=process.getBuiltinModule('module');
       const localRequire=createRequire(process.cwd()+'/.update-test.cjs');
       const {DesktopUpdater}=localRequire(process.cwd()+'/desktop-updater.js');
-      DesktopUpdater.prototype.install=async function(info){global.updateTestInfo=info;this.onState({state:'installing'});return {started:true};};
+      DesktopUpdater.prototype.install=async function(info){
+        if(this.fetcher!==globalThis.fetch)throw Error('Updater must use Node fetch for manual redirects');
+        global.updateTestInfo=info;this.onState({state:'installing'});return {started:true};
+      };
     });
     await win.evaluate(()=>window.playerApp.ui.showUpdateModal({latestVersion:'9.0.0',releaseNotes:'- Исправлено обновление'}));
     await win.locator('#btnDownloadUpdate').click();

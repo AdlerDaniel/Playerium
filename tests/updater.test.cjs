@@ -3,8 +3,27 @@ const assert = require('node:assert/strict');
 const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
 const {createHash}=require('node:crypto');
 const {EventEmitter}=require('node:events');
-const {DesktopUpdater,safeURL,newer,helperScript}=require('../desktop-updater');
+const {DesktopUpdater,safeURL,newer,helperScript,request}=require('../desktop-updater');
 const repo='AdlerDaniel/Playerium';
+
+test('update downloads follow validated GitHub redirects and reject unsafe or endless redirects',async()=>{
+  const start=`https://github.com/${repo}/releases/download/v1.7.0/setup.exe`;
+  const target='https://release-assets.githubusercontent.com/update.exe';
+  const calls=[];
+  const response=await request(async(url,options)=>{
+    calls.push(url);assert.equal(options.redirect,'manual');
+    return url===start?new Response(null,{status:302,headers:{location:target}}):new Response('verified bytes');
+  },start);
+  assert.deepEqual(calls,[start,target]);assert.equal(await response.text(),'verified bytes');
+  for(const location of ['https://evil.test/update.exe','http://release-assets.githubusercontent.com/update.exe']) {
+    let reads=0;
+    await assert.rejects(request(async()=>{reads++;return new Response(null,{status:302,headers:{location}});},start),/Недопустимый/);
+    assert.equal(reads,1,'An untrusted redirect must never be requested');
+  }
+  let loops=0;
+  await assert.rejects(request(async()=>{loops++;return new Response(null,{status:307,headers:{location:start}});},start),/перенаправлений/);
+  assert.equal(loops,6);
+});
 
 test('native updater rejects untrusted origins and invalid or older versions',()=>{
   assert.ok(newer('1.4.0','1.3.1'));assert.equal(newer('1.4.0-beta.1','1.3.1'),false);assert.equal(newer('1.3.0','1.3.1'),false);
