@@ -23,6 +23,13 @@ export function showSurfaceMenu(ui,{title,items,anchor}={}) {
     if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}
     else if(['ArrowDown','ArrowUp','Tab','Home','End'].includes(e.key)){e.preventDefault();buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowUp'||e.shiftKey?-1:1)+buttons.length)%buttons.length]?.focus();}
   };
+  if(ui.isMobile){
+    let start=null,delta=0;
+    panel.onpointerdown=e=>{if(!e.target.closest('.mobile-sheet-handle'))return;start=e.clientY;delta=0;panel.setPointerCapture(e.pointerId);};
+    panel.onpointermove=e=>{if(start===null)return;delta=Math.max(0,e.clientY-start);panel.style.transform=`translateY(${delta}px)`;};
+    const release=commit=>{if(start===null)return;start=null;panel.style.transform='';if(commit&&delta>72)close();};
+    panel.onpointerup=()=>release(true);panel.onpointercancel=()=>release(false);
+  }
   if(!ui.isMobile){const rect=anchor?.getBoundingClientRect?.()||{left:innerWidth/2, bottom:innerHeight/2};panel.style.left=Math.max(8,Math.min(rect.left,innerWidth-panel.offsetWidth-8))+'px';panel.style.top=Math.max(8,Math.min(rect.bottom,innerHeight-panel.offsetHeight-8))+'px';}
   requestAnimationFrame(()=>root.classList.add('active'));panel.querySelector('button')?.focus({preventScroll:true});
   return close;

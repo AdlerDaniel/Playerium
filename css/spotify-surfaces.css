@@ -66,6 +66,10 @@ body[data-view="artist"] .view-header-details { z-index: 1; }
 .artist-discography { padding: 0 24px 24px; }
 .artist-discography .shelf-card { color: #fff; text-align: left; background: transparent; }
 .view-metadata [role="link"], .now-playing-panel-artist[role="link"] { cursor: pointer; }
+@media (min-width: 769px) {
+  body[data-view="album"] .track-row.no-album, body[data-view="album"] .track-table-header.no-album { grid-template-columns: 32px minmax(0,1fr) 112px !important; }
+  body[data-view="album"] .track-col-date, body[data-view="album"] .th-date { display: none; }
+}
 .view-metadata [role="link"]:hover, .now-playing-panel-artist[role="link"]:hover { text-decoration: underline; }
 .collection-tool { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; color: #b3b3b3; padding: 8px 12px; border-radius: 20px; background: #ffffff0d; }
 .collection-tool svg { width: 16px; height: 16px; fill: currentColor; }
