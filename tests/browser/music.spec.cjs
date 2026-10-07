@@ -65,3 +65,32 @@ for(const android of [false,true])test(`Muzend merges with catalog metadata and 
   expect(result.sources).toHaveLength(1);expect(result.sources[0].provider).toBe('muzend');expect(result.sources[0].official).toBe(false);
   await expect(page.locator('.song-search-results')).not.toContainText(/Muzend|источник|интернет/i);
 });
+
+test('Android restores relocated downloads before rebuilding its paused playback queue',async({page})=>{
+  await page.addInitScript(()=>{
+    localStorage.setItem('playerium_auto_update_check','false');window.nativeQueues=[];window.restoreFinished=false;
+    window.AndroidBridge={
+      musicRequest:(id,operation)=>setTimeout(()=>{
+        const file=JSON.parse(localStorage.getItem('relocated_fixture')||'null');
+        window.restoreFinished=true;window.onMusicResponse({id,data:operation==='restore'?(file?[file]:[]):file});
+      },80),
+      getPlaybackState:()=>localStorage.getItem('playback_fixture')||'{}',
+      setPlaybackQueue:json=>window.nativeQueues.push({ready:window.restoreFinished,...JSON.parse(json)})
+    };
+  });
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db&&window.restoreFinished);
+  const expected=await page.evaluate(async()=>{
+    const lib=window.playerApp.library;
+    const old={name:'Artist - Song [ab12].mp3',uri:'content://music/old.mp3',folderName:'Music',folderSource:'content://music/tree',size:100,lastModified:1,downloadId:'song_ab12',metadata:{title:'Song',artist:'Artist',duration:120}};
+    const track=await lib.addDownloaded(old,null);await lib.toggleLike(track.id);
+    const playlist=await lib.createPlaylist('Saved');await lib.addTrackToPlaylist(playlist.id,track.id);
+    localStorage.setItem('relocated_fixture',JSON.stringify({...old,uri:'content://music/PlayeriumDownloads/song.mp3',previousUri:old.uri}));
+    localStorage.setItem('playback_fixture',JSON.stringify({queue:[track.id],id:track.id,index:0,playing:false,position:42000,duration:120000}));
+    return {id:track.id,playlist:playlist.id};
+  });
+  await page.reload();await page.waitForFunction(()=>window.nativeQueues.length>0);
+  const result=await page.evaluate(playlist=>({tracks:window.playerApp.library.getTracks(),playlist:window.playerApp.library.getPlaylistTracks(playlist).map(t=>t.id),queue:window.nativeQueues.at(-1),time:window.playerApp.player.getCurrentTime()}),expected.playlist);
+  expect(result.tracks).toHaveLength(1);expect(result.tracks[0].id).toBe(expected.id);expect(result.tracks[0].liked).toBe(true);
+  expect(result.playlist).toEqual([expected.id]);expect(result.queue.ready).toBe(true);expect(result.queue.play).toBe(false);expect(result.queue.reset).toBe(false);
+  expect(result.queue.tracks[0].uri).toBe('content://music/PlayeriumDownloads/song.mp3');expect(result.time).toBe(42);
+});

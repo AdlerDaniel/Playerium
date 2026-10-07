@@ -16,6 +16,11 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class MusicRuntimeTest {
+    @Test public void relocatingTheActiveSongKeepsItsPlaybackPosition() {
+        assertEquals(42000,MediaNotificationService.retainedPosition(false,"saved","saved",42000));
+        assertEquals(0,MediaNotificationService.retainedPosition(true,"saved","saved",42000));
+        assertEquals(0,MediaNotificationService.retainedPosition(false,"saved","next",42000));
+    }
     @Test public void galleryProtectionIsLimitedToTheDownloadDirectory() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         File selected=new File(context.getCacheDir(),"gallery-test-"+java.util.UUID.randomUUID());assertTrue(selected.mkdirs());

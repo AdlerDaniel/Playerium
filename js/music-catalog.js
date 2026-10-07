@@ -43,7 +43,7 @@ export class MusicCatalog {
     const id=`music-${Date.now()}-${++this.counter}`;
     if(search)this.searchRequests.add(id);
     const task=window.electronAPI?.musicRequest?window.electronAPI.musicRequest(operation,payload,id):new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{this.pending.delete(id);window.AndroidBridge.cancelMusic?.(id);reject(Error('Не удалось завершить действие. Попробуйте снова.'));},operation==='download'?660000:90000);
+      const timer=setTimeout(()=>{this.pending.delete(id);window.AndroidBridge.cancelMusic?.(id);reject(Error('Не удалось завершить действие. Попробуйте снова.'));},['download','restore'].includes(operation)?660000:90000);
       this.pending.set(id,{resolve,reject,timer});
       try{window.AndroidBridge.musicRequest(id,operation,JSON.stringify(payload));}catch(error){clearTimeout(timer);this.pending.delete(id);reject(error);}
     });

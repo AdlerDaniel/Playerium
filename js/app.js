@@ -27,11 +27,13 @@ class App {
       window.playerApp = this;
 
       await this.library.init();
+      // Android can relocate old downloads before exposing playable library rows.
+      if(window.AndroidBridge)await this.music.restore();
       this.player.loadSavedPreferences();
       this.ui.init();
-      this.music.restore();
+      if(!window.AndroidBridge)this.music.restore();
       if (window.AndroidBridge?.getPlaybackState) {
-        try { this.player.applyNativeState(JSON.parse(window.AndroidBridge.getPlaybackState())); } catch {}
+        try { this.player.applyNativeState(JSON.parse(window.AndroidBridge.getPlaybackState()));this.player.syncNativeQueue(); } catch {}
       }
 
       // Hook UI folder picker to universal selector

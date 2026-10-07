@@ -112,12 +112,17 @@ public class MediaNotificationService extends MediaSessionService {
             player.addMediaItems(items.subList(index + 1, items.size()));
             player.replaceMediaItem(index, items.get(index));
         } else {
-            player.setMediaItems(items, index, 0);
+            long position=retainedPosition(data.optBoolean("reset"),currentId,items.get(index).mediaId,player.getCurrentPosition());
+            player.setMediaItems(items, index, position);
             player.prepare();
             player.setPlayWhenReady(play);
         }
         player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
         player.setVolume((float)data.optDouble("volume", 0.8));
+    }
+
+    static long retainedPosition(boolean reset,String currentId,String nextId,long position) {
+        return !reset&&!currentId.isEmpty()&&currentId.equals(nextId)?Math.max(0,position):0;
     }
 
     private void command(String command, double value) {
