@@ -34,7 +34,7 @@ export function renderSettingsView(container) {
         <div class="settings-card">
           <div class="settings-row">
             <div class="settings-label-wrap">
-              <span class="settings-label">Папки с музыкой на компьютере</span>
+              <span class="settings-label">Папки с музыкой на устройстве</span>
               <span class="settings-desc">Укажите каталоги, где хранятся ваши MP3, FLAC, WAV или M4A треки.</span>
             </div>
             <button class="settings-btn-primary" id="btnSettingsAddFolder">
@@ -167,7 +167,7 @@ export function renderSettingsView(container) {
       </div>
     `;
 
-    container.appendChild(settingsDiv);
+    container.replaceChildren(settingsDiv);
 
     // Bind update settings
     const repoInput = document.getElementById("inputSettingsGithubRepo");
@@ -207,6 +207,10 @@ export function renderSettingsView(container) {
       }
     });
 
+    settingsDiv.querySelector('#settingsEqToggle').setAttribute('aria-label','Включить эквалайзер');
+    settingsDiv.querySelector('#settingsEqPreset').setAttribute('aria-label','Пресет эквалайзера');
+    settingsDiv.querySelectorAll('.eq-slider-vertical').forEach((slider,i)=>slider.setAttribute('aria-label',`Частота ${eq.constructor.FREQUENCIES[i]} Гц`));
+    settingsDiv.querySelectorAll('.theme-dot').forEach(dot=>{dot.tabIndex=0;dot.setAttribute('role','button');dot.setAttribute('aria-label',dot.title);dot.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();dot.click();}};});
     // Bind settings event listeners
     document.getElementById("btnSettingsAddFolder").addEventListener("click", () => this.triggerFolderPicker());
 

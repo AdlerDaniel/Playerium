@@ -1,91 +1,39 @@
+import {icons} from './design-icons.js';
+import {mountCover} from './artwork.js';
 export function renderRightQueue() {
-    const container = document.getElementById("rightPanelContent");
-    container.innerHTML = "";
-
-    const curTrack = this.player.currentTrack;
-    const upcoming = this.player.queue.slice(this.player.queueIndex + 1);
-
-    let html = `
-      <div class="queue-section-title">Сейчас играет</div>
-    `;
-
-    if (curTrack) {
-      html += `
-        <div class="queue-item current">
-          <div class="queue-item-thumb">
-            ${curTrack.pictureUrl ? `<img src="${curTrack.pictureUrl}" />` : `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`}
-          </div>
-          <div class="queue-item-info">
-            <div class="queue-item-title">${this.escapeHTML(curTrack.title)}</div>
-            <div class="queue-item-artist">${this.escapeHTML(curTrack.artist)}</div>
-          </div>
-        </div>
-      `;
+  const ui=this,container=document.getElementById('rightPanelContent');container.replaceChildren();
+  const first=this.player.queueIndex+1,upcoming=this.player.queue.slice(first);
+  const selected=new Set();
+  const currentHeading=document.createElement('h3');currentHeading.className='queue-section-title';currentHeading.textContent='Сейчас играет';container.append(currentHeading);
+  let controls;
+  const updateSelection=()=>{const b=controls.querySelector('.queue-remove-selected');b.hidden=!selected.size;b.textContent=`Удалить выбранные (${selected.size})`;};
+  const row=(track,index,current=false)=>{
+    const item=document.createElement('div');item.className='queue-item'+(current?' current':'');if(!current)item.dataset.queueIdx=index;
+    item.tabIndex=0;item.setAttribute('role','button');
+    item.innerHTML=`${current?'':`<input class="queue-select" type="checkbox" aria-label="Выбрать ${ui.escapeHTML(track.title)}">`}<div class="queue-item-thumb"></div><div class="queue-item-info"><div class="queue-item-title">${ui.escapeHTML(track.title)}</div><div class="queue-item-artist">${ui.escapeHTML(track.artist)}</div></div>${current?`<button class="queue-current-toggle" aria-label="${ui.player.isPlaying?'Пауза':'Воспроизвести'}">${ui.player.isPlaying?icons.pause:icons.play}</button>`:`<button class="queue-item-remove" aria-label="Удалить из очереди ${ui.escapeHTML(track.title)}">×</button><button class="queue-drag" aria-label="Переместить ${ui.escapeHTML(track.title)}. Используйте стрелки вверх и вниз">${icons.list}</button>`}`;
+    mountCover(item.querySelector('.queue-item-thumb'),track);
+    const activate=()=>{if(current){if(!ui.player.isPlaying)ui.player.play();}else{ui.player.queueIndex=index;ui.player.playTrack(ui.player.queue[index],index);}};
+    item.onclick=e=>{if(!e.target.closest('button,input'))activate();};item.onkeydown=e=>{if(e.target===item&&['Enter',' '].includes(e.key)){e.preventDefault();activate();}};
+    if(current)item.querySelector('button').onclick=()=>ui.player.togglePlay();
+    else {
+      item.querySelector('.queue-item-remove').onclick=()=>ui.player.removeFromQueue(index);
+      item.querySelector('.queue-select').onchange=e=>{e.target.checked?selected.add(index):selected.delete(index);item.classList.toggle('selected',e.target.checked);updateSelection();};
+      const handle=item.querySelector('.queue-drag');
+      handle.onkeydown=e=>{if(['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const to=index+(e.key==='ArrowUp'?-1:1);ui.player.moveUpcomingTrack(index,to);container.querySelector(`[data-queue-idx="${to}"] .queue-drag`)?.focus();}};
+      let target=index,start=null;
+      handle.onpointerdown=e=>{start=e.clientY;target=index;handle.setPointerCapture(e.pointerId);item.classList.add('dragging');};
+      handle.onpointermove=e=>{if(start===null)return;item.style.transform=`translateY(${e.clientY-start}px)`;for(const r of container.querySelectorAll('.queue-item:not(.current)')){const b=r.getBoundingClientRect();if(r!==item&&e.clientY>=b.top&&e.clientY<=b.bottom)target=Number(r.dataset.queueIdx);r.classList.toggle('drop-target',Number(r.dataset.queueIdx)===target&&r!==item);}};
+      const finish=commit=>{if(start===null)return;start=null;item.classList.remove('dragging');item.style.transform='';container.querySelectorAll('.drop-target').forEach(r=>r.classList.remove('drop-target'));if(commit)ui.player.moveUpcomingTrack(index,target);};
+      handle.onpointerup=()=>finish(true);handle.onpointercancel=()=>finish(false);
     }
-
-    html += `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
-        <div class="queue-section-title" style="margin:0;">Следующие в очереди (${upcoming.length})</div>
-        ${upcoming.length > 0 ? `<button id="btnClearQueueBtn" style="font-size: 11px; font-weight: 600; color: var(--sp-text-subdued);">Очистить</button>` : ""}
-      </div>
-      <div class="queue-list" style="margin-top: 8px;">
-    `;
-
-    if (upcoming.length === 0) {
-      html += `<div style="color: var(--sp-text-subdued); font-size: 13px; padding: 12px 0;">Очередь пуста. Вы можете нажать «Добавить в очередь» у любого трека.</div>`;
-    } else {
-      upcoming.forEach((track, idx) => {
-        const queueListIdx = this.player.queueIndex + 1 + idx;
-        html += `
-          <div class="queue-item" data-queue-idx="${queueListIdx}">
-            <div class="queue-item-thumb">
-              ${track.pictureUrl ? `<img src="${track.pictureUrl}" />` : `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`}
-            </div>
-            <div class="queue-item-info">
-              <div class="queue-item-title">${this.escapeHTML(track.title)}</div>
-              <div class="queue-item-artist">${this.escapeHTML(track.artist)}</div>
-            </div>
-            <button class="queue-item-remove" data-remove-idx="${queueListIdx}" title="Удалить из очереди">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-            </button>
-          </div>
-        `;
-      });
-    }
-
-    html += `</div>`;
-    container.innerHTML = html;
-
-    // Bind queue click events
-    container.querySelectorAll(".queue-item").forEach((item) => {
-      item.tabIndex = 0;
-      item.setAttribute('role', 'button');
-      item.addEventListener('keydown', e => {
-        if (e.target === item && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); item.click(); }
-      });
-      item.addEventListener("click", (e) => {
-        if (e.target.closest(".queue-item-remove")) return;
-        if (item.classList.contains('current')) { if (!this.player.isPlaying) this.player.play(); return; }
-        const qIdx = parseInt(item.dataset.queueIdx, 10);
-        this.player.queueIndex = qIdx;
-        this.player.playTrack(this.player.queue[qIdx], qIdx);
-      });
-    });
-
-    container.querySelectorAll(".queue-item-remove").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const rIdx = parseInt(btn.dataset.removeIdx, 10);
-        this.player.removeFromQueue(rIdx);
-        this.renderRightQueue();
-      });
-    });
-
-    const clearBtn = document.getElementById("btnClearQueueBtn");
-    if (clearBtn) {
-      clearBtn.addEventListener("click", () => {
-        this.player.clearUpcomingQueue();
-        this.renderRightQueue();
-      });
-    }
+    return item;
+  };
+  if(this.player.currentTrack)container.append(row(this.player.currentTrack,this.player.queueIndex,true));
+  const heading=document.createElement('div');heading.className='queue-heading';heading.innerHTML=`<h3 class="queue-section-title">Следующие в очереди (${upcoming.length})</h3>${upcoming.length?'<button id="btnClearQueueBtn">Очистить</button>':''}`;container.append(heading);
+  heading.querySelector('button')?.addEventListener('click',()=>this.player.clearUpcomingQueue());
+  const list=document.createElement('div');list.className='queue-list';upcoming.forEach((t,i)=>list.append(row(t,first+i)));container.append(list);
+  if(!upcoming.length){const empty=document.createElement('p');empty.className='queue-empty';empty.textContent='Очередь пуста. Добавьте треки через меню ⋯.';list.append(empty);}
+  controls=document.createElement('div');controls.className='queue-controls';controls.innerHTML=`<button class="queue-shuffle" aria-pressed="${this.player.isShuffle}">${icons.shuffle}<span>Перемешать</span></button><button class="queue-repeat" aria-label="Повтор" data-repeat="${this.player.repeatMode}" aria-pressed="${this.player.repeatMode!=='off'}">${icons.repeat}<span>Повтор</span></button><button class="queue-remove-selected" hidden>Удалить выбранные</button>`;
+  controls.querySelector('.queue-shuffle').onclick=()=>{this.player.toggleShuffle();this.renderRightQueue();};controls.querySelector('.queue-repeat').onclick=()=>{this.player.toggleRepeat();this.renderRightQueue();};
+  controls.querySelector('.queue-remove-selected').onclick=()=>{for(const i of [...selected].sort((a,b)=>b-a))this.player.removeFromQueue(i);};container.append(controls);
 }

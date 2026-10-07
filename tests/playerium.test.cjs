@@ -46,6 +46,16 @@ test('native queue edits preserve playing or paused state', async () => {
   p.isPlaying=false;p.addToQueue({id:'c',nativeUri:'content://music/c'});
   assert.equal(messages.at(-1).play,false);
 });
+test('reordering future duplicate tracks preserves native playback and exact queue positions',async()=>{
+  const {AudioPlayer}=await modules();const messages=[];
+  window.AndroidBridge={setPlaybackQueue:json=>messages.push(JSON.parse(json))};
+  const p=new AudioPlayer({}),a={id:'a',nativeUri:'content://music/a'},b={id:'b',nativeUri:'content://music/b'},c={id:'c',nativeUri:'content://music/c'};
+  p.nativePlayback=true;p.isPlaying=false;p.currentTrack=a;p.queue=[a,b,c,b];p.originalQueue=p.queue.slice();p.queueIndex=0;
+  p.moveUpcomingTrack(3,1);assert.deepEqual(p.queue,[a,b,b,c]);assert.equal(p.currentTrack,a);assert.equal(p.queueIndex,0);
+  assert.equal(messages.at(-1).reset,false);assert.equal(messages.at(-1).play,false);
+  p.moveUpcomingTrack(0,2);p.moveUpcomingTrack(1,-1);assert.deepEqual(p.queue,[a,b,b,c]);
+  p.toggleShuffle();p.toggleShuffle();assert.deepEqual(p.queue,[a,b,b,c]);
+});
 test('row activation preserves shuffle and resumes current track without reloading',async()=>{
   const {playRow}=await import('../js/playback-controls.js');
   const a={id:'a'},b={id:'b'},c={id:'c'},context={type:'playlist',id:'pl'};

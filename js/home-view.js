@@ -1,8 +1,9 @@
 import { bindCollectionPlay, playRow } from './playback-controls.js';
 import { icons } from './design-icons.js';
+import {mountCover} from './artwork.js';
 
 function artwork(ui, item) {
-  return item.pictureUrl ? `<img src="${ui.escapeHTML(item.pictureUrl)}" alt="" loading="lazy">` : icons[item.icon || 'music'];
+  return item.pictureUrl ? '<span class="card-cover"></span>' : icons[item.icon || 'music'];
 }
 function activate(element, action) {
   element.tabIndex = 0;
@@ -41,6 +42,7 @@ export function renderHomeDashboard(container) {
   for (const item of quickItems.slice(0,8)) {
     const card=document.createElement('div');card.className='home-quick-card';
     card.innerHTML=`<div class="home-quick-art ${item.className||''}">${artwork(ui,item)}</div><span>${this.escapeHTML(item.title)}</span>`;
+    if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item);
     activate(card,()=>this.navigateTo(item.view));quick.append(card);
   }
   home.append(quick);
@@ -55,6 +57,7 @@ export function renderHomeDashboard(container) {
     for(const item of items.slice(0,12)) {
       const card=document.createElement('div');card.className='shelf-card'+(item.round?' artist':'');
       card.innerHTML=`<div class="shelf-art">${artwork(ui,item)}<button class="shelf-play" aria-label="Воспроизвести ${this.escapeHTML(item.title)}">${icons.play}</button></div><div class="shelf-title">${this.escapeHTML(item.title)}</div><div class="shelf-subtitle">${this.escapeHTML(item.subtitle)}</div>`;
+      if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item);
       activate(card,()=>item.view?this.navigateTo(item.view):playRow(this,item.tracks[0],tracks,all.view));
       const button=card.querySelector('.shelf-play');
       if(item.view) bindCollectionPlay(this,button,item.tracks,item.view);
@@ -67,6 +70,7 @@ export function renderHomeDashboard(container) {
   if(filter==='all') shelf('Недавно добавленные',tracks.slice(0,12).map(t=>({title:t.title,subtitle:t.artist,pictureUrl:t.pictureUrl,tracks:[t,...tracks.filter(x=>x.id!==t.id)]})),all.view);
   if(filter==='albums') shelf('Ваши альбомы',albums,{type:'library',title:'Моя медиатека',tab:'albums'});
   if(filter==='artists') shelf('Ваши исполнители',artists,{type:'library',title:'Моя медиатека',tab:'artists'});
+  if(filter==='all'){shelf('Ваши альбомы',albums,{type:'library',title:'Моя медиатека',tab:'albums'});shelf('Ваши исполнители',artists,{type:'library',title:'Моя медиатека',tab:'artists'});}
   if(filter==='all'||filter==='playlists') shelf('Ваши плейлисты',playlists,{type:'library',title:'Моя медиатека',tab:'playlists'});
   if(!home.querySelector('.home-shelf')) {
     const empty=document.createElement('section');empty.className='home-onboarding';

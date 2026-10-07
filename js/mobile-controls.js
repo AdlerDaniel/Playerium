@@ -1,3 +1,5 @@
+import {showSurfaceMenu} from './surface-menu.js';
+import {icons} from './design-icons.js';
 import {showTrackMenu} from './track-menu.js';
 export function bindMobileEvents() {
     // 1. Mobile Navigation Bar Tabs
@@ -28,14 +30,18 @@ export function bindMobileEvents() {
       });
     }
 
+    document.getElementById('mobileNavCreate').onclick=()=>this.showMobileAddSheet();
     // 2. Mobile Mini-Player (Tap to expand fullscreen)
     const miniPlayer = document.getElementById("mobileMiniPlayer");
     const fsPlayer = document.getElementById("mobileFullscreenPlayer");
+    const syncFullscreen=()=>{const active=fsPlayer.classList.contains('active');fsPlayer.inert=!active;fsPlayer.setAttribute('aria-hidden',String(!active));if(active)document.getElementById('btnMobileFsClose').focus({preventScroll:true});else if(fsPlayer.contains(document.activeElement))miniPlayer?.focus({preventScroll:true});};
+    new MutationObserver(syncFullscreen).observe(fsPlayer,{attributes:true,attributeFilter:['class']});syncFullscreen();
     if (miniPlayer) {
       miniPlayer.addEventListener("click", (e) => {
         if (e.target.closest("#mobileMiniLike") || e.target.closest("#mobileMiniPlayPause")) return;
         if (this.player.currentTrack && fsPlayer) {
-          fsPlayer.classList.add("active");
+          fsPlayer.classList.add("active");fsPlayer.scrollTop=0;
+          document.getElementById('btnMobileFsClose').focus({preventScroll:true});
         }
       });
     }
@@ -128,6 +134,14 @@ export function bindMobileEvents() {
       this.toggleRightPanel("queue");
     });
 
+    document.getElementById('btnMobileFsShare').onclick=()=>{if(this.player.currentTrack){showTrackMenu(this,this.player.currentTrack,{mobile:true});document.getElementById('sheetOptShare')?.click();}};
+    for(const [id,kind] of [['btnMobileFsAlbum','album'],['btnMobileFsArtist','artist']])document.getElementById(id).onclick=()=>{const t=this.player.currentTrack;if(!t)return;fsPlayer.classList.remove('active');this.navigateTo(kind==='album'&&t.album?{type:'album',id:t.album,extra:t.artist,title:t.album}:kind==='artist'?{type:'artist',id:t.artist,title:t.artist}:{type:'allTracks',title:'Добавленные'});};
+    let swipeStart=null,delta=0;
+    const header=fsPlayer.querySelector('.mobile-fs-header');header.onpointerdown=e=>{if(e.target.closest('button'))return;swipeStart=e.clientY;delta=0;header.setPointerCapture(e.pointerId);};
+    header.onpointermove=e=>{if(swipeStart===null)return;delta=Math.max(0,e.clientY-swipeStart);fsPlayer.style.transform=`translateY(${delta}px)`;};
+    const finishSwipe=commit=>{if(swipeStart===null)return;swipeStart=null;fsPlayer.style.transform='';if(commit&&delta>80){fsPlayer.classList.remove('active');miniPlayer.focus();}};header.onpointerup=()=>finishSwipe(true);header.onpointercancel=()=>finishSwipe(false);
+    miniPlayer.tabIndex=0;miniPlayer.setAttribute('role','button');miniPlayer.setAttribute('aria-label','Открыть плеер');miniPlayer.onkeydown=e=>{if(e.target===miniPlayer&&['Enter',' '].includes(e.key)){e.preventDefault();miniPlayer.click();}};
+    fsPlayer.onkeydown=e=>{if(e.key==='Tab'){const targets=[...fsPlayer.querySelectorAll('button,input')],i=targets.indexOf(document.activeElement);e.preventDefault();targets[(i+(e.shiftKey?-1:1)+targets.length)%targets.length]?.focus();}};
     // Fullscreen Options Button
     document.getElementById("btnMobileFsOptions")?.addEventListener("click", () => {
       if (this.player.currentTrack) {
@@ -151,55 +165,11 @@ export function showMobileTrackOptionsSheet(track, index, tracks, playlistContex
 }
 
 export function showMobileAddSheet() {
-    const sheet = document.createElement("div");
-    sheet.className = "mobile-bottom-sheet";
-    sheet.innerHTML = `
-      <div class="mobile-sheet-overlay"></div>
-      <div class="mobile-sheet-content">
-        <div class="mobile-sheet-handle"></div>
-        <h3 class="mobile-sheet-title">Добавить в медиатеку</h3>
-        <button class="mobile-sheet-item" id="sheetAddFiles">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-          <span>Выбрать аудиофайлы с телефона</span>
-        </button>
-        <button class="mobile-sheet-item" id="sheetCreatePl">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
-          <span>Создать новый плейлист</span>
-        </button>
-        <button class="mobile-sheet-item" id="sheetAddFolder">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-          <span>Выбрать папку с музыкой</span>
-        </button>
-        <button class="mobile-sheet-cancel" id="sheetCancel">Отмена</button>
-      </div>
-    `;
-
-    document.querySelectorAll('.mobile-bottom-sheet').forEach(s => s.remove());
-    document.body.appendChild(sheet);
-    requestAnimationFrame(() => sheet.classList.add("active"));
-
-    const closeSheet = () => {
-      sheet.classList.remove("active");
-      setTimeout(() => sheet.remove(), 300);
-    };
-
-    sheet.querySelector(".mobile-sheet-overlay").addEventListener("click", closeSheet);
-    sheet.querySelector("#sheetCancel").addEventListener("click", closeSheet);
-
-    sheet.querySelector("#sheetAddFiles").addEventListener("click", () => {
-      closeSheet();
-      this.triggerMobileFileImport();
-    });
-
-    sheet.querySelector("#sheetCreatePl").addEventListener("click", () => {
-      closeSheet();
-      this.showCreatePlaylistModal();
-    });
-
-    sheet.querySelector("#sheetAddFolder").addEventListener("click", () => {
-      closeSheet();
-      this.triggerFolderPicker();
-    });
+  return showSurfaceMenu(this,{title:'Создать и добавить',items:[
+    {label:'Плейлист',icon:icons.music,action:()=>this.showCreatePlaylistModal()},
+    {label:'Выбрать аудиофайлы',icon:icons.plus,action:()=>this.triggerMobileFileImport()},
+    {label:'Добавить папку с музыкой',icon:icons.music,action:()=>this.triggerFolderPicker()},
+  ]});
 }
 
 export function triggerMobileFileImport() {

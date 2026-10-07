@@ -19,7 +19,11 @@ export class ShortcutsManager {
         target.isContentEditable;
 
       // Escape always closes modals/context menus
+      if (e.defaultPrevented) return;
       if (e.key === "Escape") {
+        if(this.ui.dismissTrackMenu){this.ui.dismissTrackMenu();return;}
+        if(this.ui.dismissSurface){this.ui.dismissSurface();return;}
+        if(this.ui.isRightPanelOpen){this.ui.closeRightPanel();return;}
         const sheet = document.querySelector('.mobile-bottom-sheet');
         if (sheet) { sheet.remove(); return; }
         const fullscreen = document.getElementById('mobileFullscreenPlayer');

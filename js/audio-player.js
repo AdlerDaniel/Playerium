@@ -499,6 +499,15 @@ export class AudioPlayer {
     this.onQueueChange?.(this.queue, this.queueIndex);
   }
 
+  moveUpcomingTrack(from, to) {
+    // Editing the future queue must never reload or seek the playing track.
+    const first=this.queueIndex+1;
+    if(!Number.isInteger(from)||!Number.isInteger(to)||from<first||to<first||from>=this.queue.length||to>=this.queue.length||from===to)return;
+    const [track]=this.queue.splice(from,1);this.queue.splice(to,0,track);
+    if(!this.isShuffle)this.originalQueue=this.queue.slice();
+    this.syncNativeQueue();this.onQueueChange?.(this.queue,this.queueIndex);
+  }
+
   clearUpcomingQueue() {
     this.queue = this.queue.slice(0, this.queueIndex + 1);
     const keep = new Set(this.queue.map(t => t.id));

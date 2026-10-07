@@ -1,3 +1,7 @@
+import {renderLibrary} from './library-view.js';
+import {mountCover} from './artwork.js';
+import {collectionMenu,editPlaylist} from './collection-menu.js';
+import {showSurfaceMenu} from './surface-menu.js';
 import { bindCollectionPlay } from './playback-controls.js';
 import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
@@ -114,6 +118,7 @@ export function renderSidebar() {
         list.appendChild(item);
       });
     }
+    list.querySelectorAll('.item-thumb img').forEach(img=>mountCover(img.parentElement,{pictureUrl:img.getAttribute('src')}));
     const query = (this.libraryQuery || "").toLocaleLowerCase();
     for (const item of list.children) {
       item.hidden = query && !item.textContent.toLocaleLowerCase().includes(query);
@@ -158,155 +163,7 @@ export function renderAllTracksView(container) {
     container.appendChild(this.createTrackTable(tracks));
 }
 
-export function renderLibraryView(container) {
-    const libWrapper = document.createElement("div");
-    libWrapper.className = "mobile-library-view";
-
-    const header = document.createElement("div");
-    header.className = "mobile-library-header";
-    header.innerHTML = `
-      <div class="mobile-library-title-row">
-        <h1 class="mobile-library-title">Моя медиатека</h1>
-        <div class="mobile-library-actions">
-          <button class="mobile-lib-btn" id="btnMobileLibAdd" title="Добавить">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="mobile-library-pills">
-        <button class="mobile-lib-pill active" data-filter="all">Все</button>
-        <button class="mobile-lib-pill" data-filter="playlists">Плейлисты</button>
-        <button class="mobile-lib-pill" data-filter="artists">Исполнители</button>
-        <button class="mobile-lib-pill" data-filter="albums">Альбомы</button>
-      </div>
-    `;
-    libWrapper.appendChild(header);
-
-    const listContainer = document.createElement("div");
-    listContainer.className = "mobile-library-list";
-    libWrapper.appendChild(listContainer);
-
-    let activeFilter = this.currentView.tab || "all";
-
-    const renderItems = (filter) => {
-      listContainer.innerHTML = "";
-
-      if (filter === "all" || filter === "playlists") {
-        const all = document.createElement("div");all.className="mobile-lib-row";
-        all.innerHTML=`<div class="mobile-lib-thumb local-art">${icons.music}</div><div class="mobile-lib-meta"><span class="mobile-lib-name">Добавленные</span><span class="mobile-lib-sub">${this.library.getTracks().length} треков</span></div>`;
-        all.addEventListener("click",()=>this.navigateTo({type:"allTracks",title:"Добавленные"}));listContainer.append(all);
-      }
-      // 1. Liked songs
-      if (filter === "all" || filter === "playlists") {
-        const likedTracks = this.library.getLikedTracks();
-        const likedRow = document.createElement("div");
-        likedRow.className = "mobile-lib-row";
-        likedRow.innerHTML = `
-          <div class="mobile-lib-thumb liked-thumb">
-            <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-          </div>
-          <div class="mobile-lib-meta">
-            <span class="mobile-lib-name">Любимые треки</span>
-            <span class="mobile-lib-sub">Закреплено • Плейлист • ${likedTracks.length} треков</span>
-          </div>
-        `;
-        likedRow.addEventListener("click", () => this.navigateTo({ type: "liked", title: "Любимые треки" }));
-        listContainer.appendChild(likedRow);
-      }
-
-      // 2. Playlists
-      if (filter === "all" || filter === "playlists") {
-        const playlists = this.library.getPlaylists().filter(p => !p.isFolderPlaylist);
-        playlists.forEach((pl) => {
-          const row = document.createElement("div");
-          row.className = "mobile-lib-row";
-          row.innerHTML = `
-            <div class="mobile-lib-thumb">
-              <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
-            </div>
-            <div class="mobile-lib-meta">
-              <span class="mobile-lib-name">${this.escapeHTML(pl.name)}</span>
-              <span class="mobile-lib-sub">Плейлист • ${pl.trackIds.length} треков</span>
-            </div>
-          `;
-          row.addEventListener("click", () => this.navigateTo({ type: "playlist", id: pl.id, title: pl.name }));
-          listContainer.appendChild(row);
-        });
-      }
-
-      // 3. Artists
-      if (filter === "artists") {
-        const artists = this.library.getArtists();
-        artists.forEach((art) => {
-          const row = document.createElement("div");
-          row.className = "mobile-lib-row";
-          const thumbHtml = art.pictureUrl
-            ? `<img src="${art.pictureUrl}" alt="Artist" />`
-            : `<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
-          row.innerHTML = `
-            <div class="mobile-lib-thumb round">${thumbHtml}</div>
-            <div class="mobile-lib-meta">
-              <span class="mobile-lib-name">${this.escapeHTML(art.name)}</span>
-              <span class="mobile-lib-sub">Исполнитель</span>
-            </div>
-          `;
-          row.addEventListener("click", () => this.navigateTo({ type: "artist", id: art.name, title: art.name }));
-          listContainer.appendChild(row);
-        });
-      }
-
-      // 4. Albums
-      if (filter === "albums") {
-        const albums = this.library.getAlbums();
-        albums.forEach((alb) => {
-          const row = document.createElement("div");
-          row.className = "mobile-lib-row";
-          const thumbHtml = alb.pictureUrl
-            ? `<img src="${alb.pictureUrl}" alt="Album" />`
-            : `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`;
-          row.innerHTML = `
-            <div class="mobile-lib-thumb">${thumbHtml}</div>
-            <div class="mobile-lib-meta">
-              <span class="mobile-lib-name">${this.escapeHTML(alb.name)}</span>
-              <span class="mobile-lib-sub">Альбом • ${this.escapeHTML(alb.artist)}</span>
-            </div>
-          `;
-          row.addEventListener("click", () => this.navigateTo({ type: "album", id: alb.name, title: alb.name, extra: alb.artist }));
-          listContainer.appendChild(row);
-        });
-      }
-    };
-
-    header.querySelectorAll(".mobile-lib-pill").forEach((pill) => {
-      pill.classList.toggle("active", pill.dataset.filter === activeFilter);
-      pill.setAttribute("aria-pressed", String(pill.dataset.filter === activeFilter));
-      pill.addEventListener("click", () => {
-        header.querySelectorAll(".mobile-lib-pill").forEach((p) => p.classList.remove("active"));
-        pill.classList.add("active");
-        activeFilter = pill.dataset.filter;
-        header.querySelectorAll(".mobile-lib-pill").forEach(p => p.setAttribute("aria-pressed", String(p === pill)));
-        this.currentView.tab = activeFilter;
-        renderItems(activeFilter);
-      });
-    });
-
-    renderItems(activeFilter);
-    const makeAccessible = () => listContainer.querySelectorAll(".mobile-lib-row").forEach(row => {
-      row.tabIndex = 0; row.setAttribute("role", "button");
-      row.onkeydown = e => { if(e.key === "Enter" || e.key === " ") {e.preventDefault();row.click();} };
-    });
-    makeAccessible();
-    const accessibilityObserver = new MutationObserver(makeAccessible);
-    accessibilityObserver.observe(listContainer,{childList:true});
-    const cleanupObserver = new MutationObserver(() => {if(!libWrapper.isConnected){accessibilityObserver.disconnect();cleanupObserver.disconnect();}});
-    requestAnimationFrame(()=>cleanupObserver.observe(container,{childList:true}));
-
-    header.querySelector("#btnMobileLibAdd")?.addEventListener("click", () => {
-      this.showMobileAddSheet();
-    });
-
-    container.appendChild(libWrapper);
-}
+export function renderLibraryView(container) { return renderLibrary(this,container); }
 
 export function renderLikedView(container) {
     let tracks = this.library.getLikedTracks();
@@ -383,7 +240,7 @@ export function renderPlaylistView(container, playlistId) {
       </div>
     `;
 
-    if (playlistCover) header.querySelector(".view-header-cover").innerHTML = `<img src="${this.escapeHTML(playlistCover)}" alt="">`;
+    if (playlistCover) mountCover(header.querySelector('.view-header-cover'),{pictureUrl:playlistCover},true);
     container.appendChild(header);
     container.appendChild(this.createActionBar(tracks, pl));
     container.appendChild(this.createTrackTable(tracks, pl));
@@ -398,9 +255,7 @@ export function renderArtistView(container, artistName) {
     const header = document.createElement("div");
     header.className = "view-header";
     header.innerHTML = `
-      <div class="view-header-cover" style="border-radius: 50%; ${coverUrl ? `background-image: url('${coverUrl}'); background-size: cover;` : ""}">
-        ${!coverUrl ? `<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>` : ""}
-      </div>
+      <div class="view-header-cover artist-hero-art">${icons.artist}</div>
       <div class="view-header-details">
         <span class="view-type-badge">Исполнитель</span>
         <h1 class="view-title">${this.escapeHTML(artistName)}</h1>
@@ -410,9 +265,15 @@ export function renderArtistView(container, artistName) {
       </div>
     `;
 
+    if(coverUrl) mountCover(header.querySelector('.view-header-cover'),{pictureUrl:coverUrl},true);
     container.appendChild(header);
     container.appendChild(this.createActionBar(sorted));
+    const heading=document.createElement('h2');heading.className='collection-section-heading';heading.textContent='Треки';container.append(heading);
     container.appendChild(this.createTrackTable(sorted));
+    const albums=this.library.getAlbums().filter(a=>a.artist===artistName);
+    if(albums.length){const section=document.createElement('section');section.className='artist-discography';section.innerHTML='<h2>Дискография</h2><div class="shelf-cards"></div>';
+      for(const album of albums){const card=document.createElement('button');card.className='shelf-card';card.innerHTML=`<div class="shelf-art"></div><div class="shelf-title">${this.escapeHTML(album.name)}</div><div class="shelf-subtitle">Альбом</div>`;mountCover(card.firstElementChild,album);card.onclick=()=>this.navigateTo({type:'album',id:album.name,extra:artistName,title:album.name});section.lastElementChild.append(card);}container.append(section);}
+
 }
 
 export function renderAlbumView(container, albumName, artistName) {
@@ -424,9 +285,7 @@ export function renderAlbumView(container, albumName, artistName) {
     const header = document.createElement("div");
     header.className = "view-header";
     header.innerHTML = `
-      <div class="view-header-cover" style="${coverUrl ? `background-image: url('${coverUrl}'); background-size: cover;` : ""}">
-        ${!coverUrl ? `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>` : ""}
-      </div>
+      <div class="view-header-cover">${icons.music}</div>
       <div class="view-header-details">
         <span class="view-type-badge">Альбом</span>
         <h1 class="view-title">${this.escapeHTML(albumName)}</h1>
@@ -441,56 +300,21 @@ export function renderAlbumView(container, albumName, artistName) {
       </div>
     `;
 
+    if(coverUrl)mountCover(header.querySelector('.view-header-cover'),{pictureUrl:coverUrl},true);
+    const artistLink=header.querySelector('.view-metadata strong');artistLink.tabIndex=0;artistLink.setAttribute('role','link');const openArtist=()=>this.navigateTo({type:'artist',id:artistName||sorted[0]?.artist,title:artistName||sorted[0]?.artist});artistLink.onclick=openArtist;artistLink.onkeydown=e=>{if(e.key==='Enter')openArtist();};
     container.appendChild(header);
     container.appendChild(this.createActionBar(sorted));
     container.appendChild(this.createTrackTable(sorted, null, false));
 }
 
 export function createActionBar(tracks, playlist = null) {
-    const bar = document.createElement("div");
-    bar.className = "view-actions";
-
-    bar.innerHTML = `
-      <div class="view-actions-left">
-        <button class="btn-primary-play" id="btnHeroPlay" title="Воспроизвести все">
-          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-        </button>
-        ${playlist ? `
-          <button class="action-icon-btn" id="btnDeletePlaylist" title="Удалить плейлист">
-            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-          </button>
-        ` : ""}
-      </div>
-      <div class="view-actions-right">
-        <select class="sort-dropdown" id="tableSortDropdown">
-          <option value="dateAdded" ${this.sortBy === "dateAdded" ? "selected" : ""}>По дате добавления</option>
-          <option value="title" ${this.sortBy === "title" ? "selected" : ""}>По названию трека</option>
-          <option value="artist" ${this.sortBy === "artist" ? "selected" : ""}>По исполнителю</option>
-          <option value="album" ${this.sortBy === "album" ? "selected" : ""}>По альбому</option>
-          <option value="duration" ${this.sortBy === "duration" ? "selected" : ""}>По длительности</option>
-        </select>
-      </div>
-    `;
-
-    bindCollectionPlay(this, bar.querySelector("#btnHeroPlay"), tracks, { ...this.currentView });
-
-    // Delete playlist button
-    if (playlist) {
-      bar.querySelector("#btnDeletePlaylist").addEventListener("click", async () => {
-        if (confirm(`Удалить плейлист «${playlist.name}»?`)) {
-          await this.library.deletePlaylist(playlist.id);
-          this.showToast("Плейлист удален");
-          this.navigateTo({ type: "allTracks", title: "Добавленные" });
-        }
-      });
-    }
-
-    // Sort change
-    bar.querySelector("#tableSortDropdown").addEventListener("change", (e) => {
-      this.sortBy = e.target.value;
-      this.sortAsc = this.sortBy === "title" || this.sortBy === "artist" || this.sortBy === "album";
-      this.refreshCurrentView();
-    });
-
+    const bar=document.createElement('div');bar.className='view-actions';
+    bar.innerHTML=`<div class="view-actions-left"><button class="btn-primary-play" id="btnHeroPlay" title="Воспроизвести все">${icons.play}</button><button class="action-icon-btn collection-shuffle" aria-label="Перемешать" aria-pressed="${this.player.isShuffle}">${icons.shuffle}</button><button class="action-icon-btn collection-more" aria-label="Действия с коллекцией">${icons.more}</button></div><div class="view-actions-right">${playlist?`<button class="collection-tool collection-add">${icons.plus}Добавить</button><button class="collection-tool collection-edit">${icons.edit}Изменить</button>`:''}<button class="collection-tool collection-sort">${icons.sort}Сортировать</button></div>`;
+    bindCollectionPlay(this,bar.querySelector('#btnHeroPlay'),tracks,{...this.currentView});
+    bar.querySelector('.collection-shuffle').onclick=()=>{this.player.toggleShuffle();};
+    bar.querySelector('.collection-more').onclick=e=>collectionMenu(this,{tracks,playlist,anchor:e.currentTarget});
+    if(playlist){bar.querySelector('.collection-add').onclick=()=>this.navigateTo({type:'search',title:'Поиск'});bar.querySelector('.collection-edit').onclick=()=>editPlaylist(this,playlist);}
+    const labels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',album:'По альбому',duration:'По длительности'};
+    bar.querySelector('.collection-sort').onclick=e=>showSurfaceMenu(this,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(labels).map(([value,label])=>({label,selected:this.sortBy===value,icon:icons.sort,action:()=>{this.sortBy=value;this.sortAsc=['title','artist','album'].includes(value);this.refreshCurrentView();}}))});
     return bar;
 }

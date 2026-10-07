@@ -1,9 +1,10 @@
 import {icons,saveIcon} from './design-icons.js';
 import {mountCover} from './artwork.js';
+import {showFormDialog} from './surface-menu.js';
 const glyph=path=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const moreIcons={queue:glyph('M3 5h14v2H3zm0 4h14v2H3zm0 4h8v2H3zm15-1h2v4h4v2h-4v4h-2v-4h-4v-2h4z'),download:glyph('M11 3h2v10l3-3 1.4 1.4L12 17l-5.4-5.6L8 10l3 3V3zM5 19h14v2H5z'),credits:glyph('M11 10h2v8h-2zm0-4h2v2h-2zM12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22zm0 2a9 9 0 1 1 0 18 9 9 0 0 1 0-18z'),share:glyph('M18 2a4 4 0 1 1-3.6 5.7L8 11a4 4 0 0 1 0 2l6.4 3.3a4 4 0 1 1-1 2L7 15a4 4 0 1 1 0-6l6.4-3.3A4 4 0 0 1 18 2z')};
 export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=null}={}) {
-  ui.dismissTrackMenu?.();ui.closeContextMenu();
+  ui.dismissTrackMenu?.();ui.dismissSurface?.();ui.closeContextMenu();
   const opener=document.activeElement;
   let root,panel,closed=false,pane='main';
   if(mobile){root=document.createElement('div');root.className='mobile-bottom-sheet track-options-sheet';root.innerHTML='<div class="mobile-sheet-overlay"></div><div class="mobile-sheet-content" role="dialog" aria-modal="true"></div>';panel=root.lastElementChild;document.body.append(root);requestAnimationFrame(()=>root.classList.add('active'));}
@@ -21,7 +22,7 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
     const title=document.createElement('h3');title.className='menu-pane-title';title.textContent='Добавить в плейлист';panel.append(title);
     const available=ui.library.getPlaylists();
     for(const p of available)button('trackPlaylist-'+p.id,p.name,icons.music,async()=>{const saved=await ui.music.ensureTrack(track);await ui.library.addTrackToPlaylist(p.id,saved.id);ui.showToast(`Добавлено в «${p.name}»`);ui.renderSidebar();});
-    button('trackNewPlaylist','Новый плейлист',saveIcon,async()=>{const name=prompt('Название плейлиста');if(!name?.trim())return;const saved=await ui.music.ensureTrack(track);const p=await ui.library.createPlaylist(name.trim());await ui.library.addTrackToPlaylist(p.id,saved.id);ui.renderSidebar();ui.showToast(`Добавлено в «${p.name}»`);});
+    button('trackNewPlaylist','Новый плейлист',saveIcon,async()=>{const values=await showFormDialog(ui,{title:'Новый плейлист',fields:[{name:'name',label:'Название',required:true}]});if(!values)return;const name=values.name;const saved=await ui.music.ensureTrack(track);const p=await ui.library.createPlaylist(name.trim());await ui.library.addTrackToPlaylist(p.id,saved.id);ui.renderSidebar();ui.showToast(`Добавлено в «${p.name}»`);});
     position();focusFirst();
   };
   const credits=()=>{

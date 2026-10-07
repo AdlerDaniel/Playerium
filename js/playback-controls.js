@@ -38,6 +38,7 @@ function updateCollectionButton(player, button) {
 }
 
 export function syncPlaybackControls(player) {
+  document.querySelectorAll('.collection-shuffle').forEach(button=>button.setAttribute('aria-pressed',String(player.isShuffle)));
   document.querySelectorAll('[data-playback-context]').forEach(button => updateCollectionButton(player, button));
   document.querySelectorAll('[data-track-play-id]').forEach(button => {
     const playing = player.isPlaying && button.dataset.trackPlayId === player.currentTrack?.id;
