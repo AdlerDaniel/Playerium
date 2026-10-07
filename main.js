@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
 const { DesktopUpdater } = require('./desktop-updater');
-const { DesktopMusic } = require('./desktop-music');
+const { DesktopMusic, downloadError } = require('./desktop-music');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
@@ -115,7 +115,10 @@ app.whenReady().then(async () => {
   const music=new DesktopMusic({app,fetcher:(url,options)=>net.fetch(url,options),authorize,
     onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));},
     onProgress:state=>mainWindow?.webContents.send('music:progress',state)});
-  handle('music:request',(operation,payload,id)=>music.request(operation,payload,id));
+  handle('music:request',async(operation,payload,id)=>{
+    try{return {ok:true,data:await music.request(operation,payload,id)};}
+    catch(error){return {ok:false,error:downloadError(error)};}
+  });
   handle('music:cancel',id=>music.cancel(id));
   // Node fetch exposes manual redirects; Electron net.fetch cancels them.
   // The updater must validate each redirect before following it.

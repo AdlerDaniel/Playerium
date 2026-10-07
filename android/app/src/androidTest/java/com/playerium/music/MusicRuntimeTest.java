@@ -16,6 +16,13 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class MusicRuntimeTest {
+    @Test public void downloadErrorsDistinguishProtectionAndNetworkFailures() throws Exception {
+        Method diagnostic=MusicEngine.class.getDeclaredMethod("downloadError",Exception.class);diagnostic.setAccessible(true);
+        String protectedMessage=(String)diagnostic.invoke(null,new IOException("This video is DRM protected"));
+        assertTrue(protectedMessage.contains("защищена"));
+        assertEquals(protectedMessage,diagnostic.invoke(null,new IOException(protectedMessage)));
+        assertTrue(((String)diagnostic.invoke(null,new IOException("Read timed out"))).contains("соединиться"));
+    }
     @Test public void nativeToolsRunAndOwnedAudioCanBeSavedAndDeleted() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         MusicEngine engine=MusicEngine.get(context);

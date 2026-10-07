@@ -79,7 +79,35 @@ test('download diagnostics distinguish access restrictions, networking and stora
   assert.match(downloadError(Error('Timed out')),/соединиться/);
   assert.match(downloadError(Error('ENOSPC')),/места/);
   assert.match(downloadError(Error('EACCES')),/папке/);
+  const protectedError=downloadError(Error('This video is DRM protected'));
+  assert.match(protectedError,/защищена/);assert.equal(downloadError(Error(protectedError)),protectedError);
   assert.ok(!downloadError(Error('HTTP Error 403 https://secret.invalid/token')).includes('https://'));
+});
+
+test('music search retains official audio credits, album and duration while excluding videos',async()=>{
+  const {youtubeMusicEntries}=await import('../js/music-youtube.js');
+  const {audioCandidate,sameRecording,cleanTitle}=await import('../js/music-match.js');
+  const browse=(text,pageType)=>({text,navigationEndpoint:{browseEndpoint:{browseEndpointContextSupportedConfigs:{browseEndpointContextMusicConfig:{pageType}}}}});
+  const row=type=>({musicResponsiveListItemRenderer:{flexColumns:[
+    {musicResponsiveListItemFlexColumnRenderer:{text:{runs:[{text:'747',navigationEndpoint:{watchEndpoint:{videoId:'abcdefghijk',watchEndpointMusicSupportedConfigs:{watchEndpointMusicConfig:{musicVideoType:type}}}}}]}}},
+    {musicResponsiveListItemFlexColumnRenderer:{text:{runs:[browse('DOROFEEVA','MUSIC_PAGE_TYPE_ARTIST'),{text:' • '},browse('747 - Single','MUSIC_PAGE_TYPE_ALBUM'),{text:' • '},{text:'2:54'}]}}}
+  ]}});
+  const data={contents:[row('MUSIC_VIDEO_TYPE_ATV'),row('MUSIC_VIDEO_TYPE_OMV'),row('MUSIC_VIDEO_TYPE_ATV')]};
+  const entries=youtubeMusicEntries(data);assert.equal(entries.length,1);
+  const song=audioCandidate(entries[0],'youtubeMusic');assert.equal(song.artist,'DOROFEEVA');assert.equal(song.album,'747 - Single');assert.equal(song.duration,174);
+  assert.ok(sameRecording(song,{title:'747',artist:'DOROFEEVA',duration:173.963}));
+  assert.equal(cleanTitle('DOROFEEVA - різнокольорова (Lyric Video)'),'DOROFEEVA - різнокольорова');
+});
+
+test('known song audio is attempted before discovery, and discovery network errors reach the user',async()=>{
+  global.window={};global.document={querySelectorAll:()=>[]};global.DOMParser=class {parseFromString(){return {querySelectorAll:()=>[]};}};
+  const {MusicCatalog}=await import('../js/music-catalog.js');
+  const song={id:'song_ab14',title:'747',artist:'DOROFEEVA',duration:174,catalog:true,sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/watch?v=abcdefghijk'}]};
+  const lib={getTracks:()=>[],folders:[],addDownloaded:async()=>song};
+  window.electronAPI={musicRequest:async(op)=>{assert.equal(op,'download');return {};}};
+  const catalog=new MusicCatalog(lib,{renderSidebar:()=>{}});await catalog.ensureTrack(song);
+  window.electronAPI.musicRequest=async()=>{throw Error('Не удалось соединиться с аудиосервисом.');};
+  await assert.rejects(catalog.ensureTrack({...song,sources:[]}),/соединиться/);
 });
 test('Cyrillic artist searches retain original Latin-script catalog recordings and find saved artist/title queries',async()=>{
   const {mergeSongs}=await import('../js/music-match.js');

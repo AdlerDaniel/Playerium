@@ -22,9 +22,10 @@ function catalogURL(provider,query) {
 }
 function downloadError(error) {
   const message=String(error?.message||'');
-  if(/^(Не удалось|Полная версия|Аудиосервис|Недостаточно|Нет доступа|Не найден)/.test(message))return message;
+  if(/^(Не удалось|Полная версия|Полная запись|Аудиосервис|Недостаточно|Нет доступа|Не найден)/.test(message))return message;
   if(/ENOSPC|no space/i.test(message))return 'Недостаточно места для сохранения трека.';
   if(/EACCES|EPERM|permission denied/i.test(message))return 'Нет доступа к папке музыки. Выберите её ещё раз.';
+  if(/DRM|protected|premium|subscription|only.*preview/i.test(message))return 'Полная запись защищена от скачивания. Другую доступную запись найти не удалось.';
   if(/403|429|451|geo.?restrict|not available in your|sign in|captcha|blocked/i.test(message))return 'Аудиосервис ограничил доступ к этой записи. Попробуйте другую сеть или VPN.';
   if(/timeout|timed out|network|connection|resolve|certificate|tunnel|SSL/i.test(message))return 'Не удалось соединиться с аудиосервисом. Проверьте сеть и настройки VPN.';
   if(/ENOENT|ffmpeg.*not found/i.test(message))return 'Не найден компонент загрузки. Обновите Playerium.';
@@ -40,9 +41,9 @@ class DesktopMusic {
   async saveRecords(){this.storeChain=this.storeChain.catch(()=>{}).then(async()=>{const temp=this.manifestFile+'.new';await fs.writeFile(temp,JSON.stringify(this.manifest));await fs.rename(temp,this.manifestFile);});return this.storeChain;}
   run(args,id,timeout=45000) {
     return new Promise((resolve,reject)=>{
-      const child=spawn(path.join(this.tools,'yt-dlp.exe'),['--ignore-config','--no-warnings','--socket-timeout','15','--retries','1','--js-runtimes',`node:${process.execPath}`,'--ffmpeg-location',this.tools,...args],
+      const child=spawn(path.join(this.tools,'yt-dlp.exe'),['--ignore-config','--no-warnings','--impersonate','chrome','--socket-timeout','15','--retries','1','--js-runtimes',`node:${process.execPath}`,'--ffmpeg-location',this.tools,...args],
         {windowsHide:true,env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','pipe','pipe']});
-      this.active.set(id,child);let out='',error='';const timer=setTimeout(()=>this.cancel(id),timeout);
+      this.active.set(id,child);let out='',error='';const timer=setTimeout(()=>{this.cancel(id);reject(Error('Не удалось соединиться с аудиосервисом. Время ожидания истекло.'));},timeout);
       child.stdout.on('data',data=>{out+=data;if(out.length>12*1024*1024){out=out.slice(0,12*1024*1024);this.cancel(id);}});
       child.stderr.on('data',data=>{error=(error+data).slice(-3000);});
       const done=()=>{clearTimeout(timer);if(this.active.get(id)===child)this.active.delete(id);};
@@ -69,6 +70,23 @@ class DesktopMusic {
     if(operation==='search') {
       if(!PROVIDERS.has(payload.provider))throw Error('Недопустимый запрос');
       const query=String(payload.query||'').trim().slice(0,200);if(query.length<2)return {entries:[]};
+      if(payload.provider==='youtubeMusic') {
+        const controller=new AbortController();this.requests.set(id,controller);const timer=setTimeout(()=>controller.abort(),20000);
+        try {
+          if(!this.musicClientVersion) {
+            const home=await this.fetcher('https://music.youtube.com/',{signal:controller.signal});
+            if(!home.ok)throw Error('HTTP '+home.status);
+            this.musicClientVersion=(await home.text()).match(/"INNERTUBE_CLIENT_VERSION"\s*:\s*"([^"]+)"/)?.[1];
+          }
+          if(!this.musicClientVersion)throw Error('Не удалось получить результаты поиска.');
+          const response=await this.fetcher('https://music.youtube.com/youtubei/v1/search?prettyPrint=false',{
+            method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json','Origin':'https://music.youtube.com'},
+            body:JSON.stringify({context:{client:{clientName:'WEB_REMIX',clientVersion:this.musicClientVersion,hl:'en'}},query,params:'EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D'})});
+          if(!response.ok)throw Error('HTTP '+response.status);
+          const text=await response.text();if(text.length>4*1024*1024)throw Error('Некорректный ответ');return JSON.parse(text);
+        }catch(error){this.musicClientVersion=null;throw Error(downloadError(error));}
+        finally{clearTimeout(timer);this.requests.delete(id);}
+      }
       const url=payload.provider==='youtubeMusic'?`https://music.youtube.com/search?q=${encodeURIComponent(query)}#songs`:payload.provider==='soundcloud'?`scsearch12:${query}`:`ytsearch12:${query} official audio`;
       return JSON.parse(await this.run(['--flat-playlist','--dump-single-json','--playlist-end','12','--ignore-errors','--skip-download','--',url],id));
     }

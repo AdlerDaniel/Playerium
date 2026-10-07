@@ -5,7 +5,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   unwatchFolder: path => ipcRenderer.invoke('folder:unwatch', path),
   getAudioSource: path => ipcRenderer.invoke('file:source', path),
   getMetadata: path => ipcRenderer.invoke('file:metadata', path),
-  musicRequest: (operation,payload,id) => ipcRenderer.invoke('music:request',operation,payload,id),
+  musicRequest: async (operation,payload,id) => {
+    const result=await ipcRenderer.invoke('music:request',operation,payload,id);
+    if(!result.ok)throw Error(result.error);
+    return result.data;
+  },
   cancelMusic: id => ipcRenderer.invoke('music:cancel',id),
   onMusicProgress: callback => {
     const listener=(_event,state)=>callback(state);ipcRenderer.on('music:progress',listener);

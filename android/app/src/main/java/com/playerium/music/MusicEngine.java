@@ -31,6 +31,7 @@ final class MusicEngine {
     private final Map<String,Future<?>> tasks=new ConcurrentHashMap<>();
     private final File runtime;
     private JSONObject records;
+    private String musicClientVersion;
     private MusicEngine(Context context){this.context=context;runtime=new File(context.getNoBackupFilesDir(),"music-runtime-0.18.1-2026.08.19");}
     void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();Future<?> task=tasks.remove(id);if(task!=null)task.cancel(true);}
     void request(String id,String operation,String json) {
@@ -46,18 +47,25 @@ final class MusicEngine {
     }
     private static String downloadError(Exception error) {
         String message=error==null?"":String.valueOf(error.getMessage());
-        if(message.startsWith("Не удалось")||message.startsWith("Полная версия")||message.startsWith("Аудиосервис")||message.startsWith("Недостаточно"))return message;
+        if(message.startsWith("Не удалось")||message.startsWith("Полная версия")||message.startsWith("Полная запись")||message.startsWith("Аудиосервис")||message.startsWith("Недостаточно"))return message;
         String text=message.toLowerCase(Locale.ROOT);
         if(text.matches("(?s).*(no space|enospc).*$"))return "Недостаточно места для сохранения трека.";
+        if(text.matches("(?s).*(drm|protected|premium|subscription|only.*preview).*$"))return "Полная запись защищена от скачивания. Другую доступную запись найти не удалось.";
         if(text.matches("(?s).*(403|429|451|geo.?restrict|sign in|captcha|blocked).*$"))return "Аудиосервис ограничил доступ к этой записи. Попробуйте другую сеть или VPN.";
         if(text.matches("(?s).*(timeout|timed out|network|connection|resolve|certificate|tunnel|ssl).*$"))return "Не удалось соединиться с аудиосервисом. Проверьте сеть и настройки VPN.";
         return "Полная версия этой записи недоступна для скачивания. Попробуйте позже.";
     }
     private String get(String url) throws Exception {
+        return get(url,null);
+    }
+    private String get(String url,String body) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
         connection.setConnectTimeout(15000);connection.setReadTimeout(20000);
         connection.setRequestProperty("User-Agent","Playerium/1.6.0 (https://github.com/AdlerDaniel/Playerium)");
-        try(InputStream in=connection.getInputStream()){return new String(read(in,4*1024*1024),StandardCharsets.UTF_8);}finally{connection.disconnect();}
+        try {
+            if(body!=null){connection.setRequestMethod("POST");connection.setDoOutput(true);connection.setRequestProperty("Content-Type","application/json");connection.setRequestProperty("Origin","https://music.youtube.com");try(OutputStream out=connection.getOutputStream()){out.write(body.getBytes(StandardCharsets.UTF_8));}}
+            try(InputStream in=connection.getInputStream()){return new String(read(in,4*1024*1024),StandardCharsets.UTF_8);}
+        }finally{connection.disconnect();}
     }
     private static byte[] read(InputStream input,int limit) throws IOException {
         ByteArrayOutputStream output=new ByteArrayOutputStream();byte[] buffer=new byte[65536];int n;
@@ -82,6 +90,18 @@ final class MusicEngine {
             String text=get(url);return payload.getString("provider").equals("bandcamp")?text:new JSONObject(text);
         }
         if(operation.equals("search")) {
+            if(payload.getString("provider").equals("youtubeMusic")) {
+                try {
+                    if(musicClientVersion==null) {
+                        java.util.regex.Matcher matcher=java.util.regex.Pattern.compile("\"INNERTUBE_CLIENT_VERSION\"\\s*:\\s*\"([^\"]+)\"").matcher(get("https://music.youtube.com/"));
+                        if(matcher.find())musicClientVersion=matcher.group(1);
+                    }
+                    if(musicClientVersion==null)throw new IOException("Не удалось получить результаты поиска.");
+                    JSONObject client=new JSONObject().put("clientName","WEB_REMIX").put("clientVersion",musicClientVersion).put("hl","en");
+                    JSONObject body=new JSONObject().put("context",new JSONObject().put("client",client)).put("query",query).put("params","EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D");
+                    return new JSONObject(get("https://music.youtube.com/youtubei/v1/search?prettyPrint=false",body.toString()));
+                }catch(Exception e){musicClientVersion=null;throw e;}
+            }
             String url;
             switch(payload.getString("provider")) {
                 case "youtubeMusic":url="https://music.youtube.com/search?q="+URLEncoder.encode(query,"UTF-8")+"#songs";break;
@@ -155,7 +175,7 @@ final class MusicEngine {
         if(title.matches(".*\\s[-–—]\\s.*")){String[] parts=title.split("\\s[-–—]\\s",2);if(!credited){who=parts[0];title=parts[1];}else if(artist(parts[0]).equals(artist(who)))title=parts[1];}
         String raw=info.optString("title").toLowerCase(Locale.ROOT);
         if(raw.matches(".*\\b(cover|karaoke|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts)\\b.*")||raw.matches(".*([\\[(]\\s*live\\b|\\blive\\s+(at|from|in|on|version|performance|session)\\b|\\blive\\s*[\\])]|кавер|концерт|ремикс|караоке|наживо|кліп|клип).*"))return false;
-        title=title.replaceAll("(?i)\\s*[\\[(]?(?:official\\s+(?:audio|lyric(?:s)?(?:\\s+video)?)|audio\\s+only|visuali[sz]er|lyrics?)[\\])]?\\s*"," ").trim();
+        title=title.replaceAll("(?i)\\s*[\\[(]?(?:official\\s+(?:audio|lyric(?:s)?(?:\\s+video)?)|audio\\s+only|visuali[sz]er|lyric(?:s)?(?:\\s+video)?)[\\])]?\\s*"," ").trim();
         double duration=track.optDouble("duration",0),actual=info.optDouble("duration",0);
         return norm(title).equals(norm(track.optString("title")))&&artist(who).equals(artist(track.optString("artist")))&&(! (duration>0&&actual>0)||Math.abs(duration-actual)<=Math.max(8,duration*.04));
     }

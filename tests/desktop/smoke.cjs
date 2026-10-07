@@ -50,6 +50,17 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     await win.evaluate(()=>window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))));
     await win.waitForFunction(()=>window.playerApp.player.isPlaying);
     assert.deepEqual(errors,[]);
+    await app.evaluate(()=>{
+      const {createRequire}=process.getBuiltinModule('module');
+      const {DesktopMusic}=createRequire(process.cwd()+'/.music-test.cjs')('./desktop-music.js');
+      const original=DesktopMusic.prototype.request;
+      DesktopMusic.prototype.request=function(op,...args){if(op==='download')throw Error('This video is DRM protected');return original.call(this,op,...args);};
+    });
+    const musicError=await win.evaluate(async()=>{
+      try{await window.electronAPI.musicRequest('download',{},'error-test');return '';}
+      catch(error){return error.message;}
+    });
+    assert.equal(musicError,'Полная запись защищена от скачивания. Другую доступную запись найти не удалось.');
     console.log('Electron import, streaming playback, reload and IPC access checks passed');
     const server=http.createServer((req,res)=>{
       if(req.url==='/redirect'){res.writeHead(302,{location:'/update'});res.end();}

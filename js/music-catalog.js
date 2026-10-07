@@ -1,4 +1,5 @@
 import {audioCandidate,mergeSongs,sameRecording,isVariant} from './music-match.js';
+import {youtubeMusicEntries} from './music-youtube.js';
 const searchProviders=['youtubeMusic','soundcloud','youtubeAudio'];
 const catalogProviders=['itunes','itunesUA','deezer','musicbrainz','audius','bandcamp'];
 function catalogTracks(provider,data) {
@@ -60,7 +61,7 @@ export class MusicCatalog {
       await Promise.allSettled(providers.map(async provider=>{
         try {
           const data=await this.request(searchProviders.includes(provider)?'search':'catalog',{provider,query},true);
-          const tracks=searchProviders.includes(provider)?(data.entries||[]).map(e=>audioCandidate(e,provider)).filter(Boolean):catalogTracks(provider,data).map(t=>({...t,metadataScore:['itunes','itunesUA','deezer'].includes(provider)?3:2}));
+          const tracks=searchProviders.includes(provider)?(provider==='youtubeMusic'?youtubeMusicEntries(data):(data.entries||[])).map(e=>audioCandidate(e,provider)).filter(Boolean):catalogTracks(provider,data).map(t=>({...t,metadataScore:['itunes','itunesUA','deezer'].includes(provider)?3:2}));
           groups.push(tracks);successes++;
           if(version===this.searchVersion)onResults(mergeSongs(groups,query,this.library.search(query)),true,null);
         }catch{}
@@ -74,7 +75,7 @@ export class MusicCatalog {
     const existing=this.library.getTracks().find(t=>sameRecording(t,track));if(existing)return existing;
     if(this.downloads.has(track.id))return this.downloads.get(track.id);
     const task=(async()=>{
-      let sources=[...(track.sources||[])],saved,lastError;
+      let sources=[...(track.sources||[])],saved,lastError,discoveryError;
       const attempted=new Set();
       const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4};
       const folder=this.library.folders.findLast(f=>!f.source.startsWith('web:') && f.source!=='android-files');
@@ -89,16 +90,16 @@ export class MusicCatalog {
         const results=await Promise.allSettled(providers.map(async provider=>{
           const catalog=!searchProviders.includes(provider);
           const data=await this.request(catalog?'catalog':'search',{provider,query:`${track.artist} ${track.title}`});
-          const candidates=catalog?catalogTracks(provider,data):(data.entries||[]).map(e=>audioCandidate(e,provider)).filter(Boolean);
+          const candidates=catalog?catalogTracks(provider,data):(provider==='youtubeMusic'?youtubeMusicEntries(data):(data.entries||[])).map(e=>audioCandidate(e,provider)).filter(Boolean);
           return candidates.filter(t=>!isVariant(t.rawTitle||t.title)&&sameRecording(track,t)).flatMap(t=>t.sources);
         }));
-        for(const r of results)if(r.status==='fulfilled')sources.push(...r.value);
+        for(const r of results)if(r.status==='fulfilled')sources.push(...r.value);else discoveryError||=r.reason;
       };
       // Prefer independent artist catalogs before waiting for restricted video services.
-      if(sources.some(s=>['audius','bandcamp'].includes(s.provider)))await save();
+      if(sources.length)await save();
       if(!saved){await resolve(['audius','bandcamp']);await save();}
       if(!saved){await resolve(searchProviders);await save();}
-      if(!saved)throw lastError||Error('Полная версия этой записи недоступна. Проверьте сеть и настройки VPN или попробуйте позже.');
+      if(!saved)throw lastError||discoveryError||Error('Не удалось найти доступную полную запись.');
       const added=await this.library.addDownloaded(saved,track);
       this.cache.clear();this.ui.renderSidebar();return added;
     })();
