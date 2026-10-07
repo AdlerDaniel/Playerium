@@ -202,3 +202,18 @@ test('reimport of one unambiguous legacy file restores its ID, likes and playlis
   assert.equal(lib.getTracks().length,1);assert.equal(lib.getTracks()[0].id,old.id);
   assert.equal(lib.getPlaylistTracks(playlist.id)[0].liked,true);
 });
+
+test('moving a downloaded Android song keeps its ID, likes, playlist membership and new playback URI after restart',async()=>{
+  const lib=await library();
+  const old={name:'Artist - Song [ab12].mp3',uri:'content://music/old.mp3',folderName:'Music',folderSource:'content://music/tree',size:100,lastModified:1,downloadId:'song_ab12',metadata:{title:'Song',artist:'Artist',duration:42}};
+  const song=await lib.addDownloaded(old,null);await lib.toggleLike(song.id);
+  const playlist=await lib.createPlaylist('Saved');await lib.addTrackToPlaylist(playlist.id,song.id);
+  const moved={...old,uri:'content://music/PlayeriumDownloads/song.mp3',previousUri:old.uri};
+  await lib.addDownloaded(moved,null);
+  assert.equal(lib.getTracks().length,1);assert.equal(lib.getTracks()[0].id,song.id);assert.equal(lib.getTracks()[0].nativeUri,moved.uri);
+  assert.equal(lib.getTracks()[0].liked,true);assert.equal(lib.getPlaylistTracks(playlist.id)[0].id,song.id);
+  const reopened=new (await modules()).Library();await reopened.init();
+  assert.equal(reopened.getTrackById(song.id).nativeUri,moved.uri);assert.equal(reopened.getTrackById(song.id).liked,true);
+  await reopened.syncFolderToPlaylist('Music',old.folderSource,[{...moved,downloadId:undefined}],true);
+  assert.equal(reopened.getTracks().length,1);assert.equal(reopened.getPlaylistTracks(playlist.id)[0].id,song.id);
+});

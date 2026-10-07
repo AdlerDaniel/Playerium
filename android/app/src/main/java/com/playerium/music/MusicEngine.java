@@ -5,6 +5,10 @@ import android.content.UriPermission;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.media.MediaScannerConnection;
+import android.provider.DocumentsContract;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.util.AtomicFile;
 import android.util.Base64;
 import androidx.documentfile.provider.DocumentFile;
@@ -36,7 +40,7 @@ final class MusicEngine {
     void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();Future<?> task=tasks.remove(id);if(task!=null)task.cancel(true);}
     void request(String id,String operation,String json) {
         if(!id.matches("[\\w-]{1,100}"))return;
-        Future<?> task=(operation.equals("download")||operation.equals("delete")?downloader:workers).submit(()->{
+        Future<?> task=(operation.equals("download")||operation.equals("delete")||operation.equals("restore")?downloader:workers).submit(()->{
             JSONObject result=new JSONObject();
             try {result.put("id",id).put("data",execute(operation,new JSONObject(json),id));}
             catch(Exception e){try{result.put("id",id).put("error",e instanceof SecurityException?e.getMessage():downloadError(e));}catch(Exception ignored){}}
@@ -72,9 +76,9 @@ final class MusicEngine {
         while((n=input.read(buffer))!=-1){output.write(buffer,0,n);if(output.size()>limit)throw new IOException("Response too large");}return output.toByteArray();
     }
     private Object execute(String operation,JSONObject payload,String id) throws Exception {
-        if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {JSONObject record=saved.getJSONObject(keys.next());if(exists(record))files.put(record);}return files;}
+        if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {String key=keys.next();JSONObject record=saved.getJSONObject(key);if(exists(record)){try{record=protectDownloaded(record,key);}catch(IOException|SecurityException error){android.util.Log.w("Playerium","Could not hide downloaded media yet",error);}files.put(record);}}return files;}
         if(operation.equals("describe")){JSONObject record=records().optJSONObject(payload.getString("downloadId"));if(record==null)throw new IOException("Track unavailable");return withCover(record);}
-        if(operation.equals("delete")) {String key=payload.getString("downloadId");JSONObject record=records().optJSONObject(key);if(record!=null){deleteOwned(record);records().remove(key);saveRecords();}return true;}
+        if(operation.equals("delete")) {String key=payload.getString("downloadId");JSONObject record=records().optJSONObject(key);if(record!=null){if(record.optJSONObject("legacyMedia")!=null){deleteOwned(record.getJSONObject("legacyMedia"));refreshGallery(record.getJSONObject("legacyMedia"));}deleteOwned(record);records().remove(key);saveRecords();}return true;}
         String query=payload.optString("query").trim();if(query.length()>200)query=query.substring(0,200);
         if(operation.equals("catalog")) {
             String q=URLEncoder.encode(query,"UTF-8"),url;
@@ -186,7 +190,7 @@ final class MusicEngine {
     }
     private JSONObject download(JSONObject payload,String requestId) throws Exception {
         JSONObject track=payload.getJSONObject("track");String key=track.getString("id");if(!key.matches("song_[0-9a-f]+"))throw new SecurityException("Недопустимая запись");
-        JSONObject existing=records().optJSONObject(key);if(existing!=null&&exists(existing))return withCover(existing);
+        JSONObject existing=records().optJSONObject(key);if(existing!=null&&exists(existing))return withCover(protectDownloaded(existing,key));
         File staging=new File(context.getCacheDir(),"song-"+UUID.randomUUID());staging.mkdirs();
         JSONObject committed=null;Exception lastError=null;
         try {
@@ -232,7 +236,8 @@ final class MusicEngine {
         if(destination.startsWith("content:")) {
             Uri tree=Uri.parse(destination);boolean write=false;for(UriPermission p:context.getContentResolver().getPersistedUriPermissions())if(p.getUri().equals(tree)&&p.isWritePermission())write=true;
             if(!write)throw new SecurityException("Выберите папку музыки ещё раз, чтобы разрешить сохранение треков.");
-            DocumentFile root=DocumentFile.fromTreeUri(context,tree);if(root==null||!root.canWrite())throw new SecurityException("Нет доступа к папке музыки");
+            DocumentFile selected=DocumentFile.fromTreeUri(context,tree);if(selected==null||!selected.canWrite())throw new SecurityException("Нет доступа к папке музыки");
+            DocumentFile root=hiddenDownloadDirectory(selected);
             if(root.findFile(name)!=null)throw new IOException("File already exists");
             String mime=extension.equals(".m4a")?"audio/mp4":extension.equals(".opus")||extension.equals(".ogg")?"audio/ogg":extension.equals(".flac")?"audio/flac":extension.equals(".wav")?"audio/wav":extension.equals(".aac")?"audio/aac":"audio/mpeg";
             DocumentFile file=root.createFile(mime,name);if(file==null)throw new IOException("Cannot create track");
@@ -242,10 +247,10 @@ final class MusicEngine {
                 sidecar=root.createFile("application/json",name+".playerium.json");if(sidecar==null)throw new IOException();
                 try(OutputStream out=context.getContentResolver().openOutputStream(sidecar.getUri())){out.write(metadata.toString().getBytes(StandardCharsets.UTF_8));}
                 if(cover!=null){image=root.createFile("image/jpeg",name+".jpg");if(image==null)throw new IOException();try(InputStream in=new FileInputStream(cover);OutputStream out=context.getContentResolver().openOutputStream(image.getUri())){copy(in,out);}}
-                result.put("uri",file.getUri()).put("sidecar",sidecar.getUri()).put("cover",image==null?"":image.getUri()).put("folderSource",destination).put("folderName",root.getName());
+                result.put("uri",file.getUri()).put("sidecar",sidecar.getUri()).put("cover",image==null?"":image.getUri()).put("folderSource",destination).put("folderName",selected.getName());
             }catch(Exception e){file.delete();if(sidecar!=null)sidecar.delete();if(image!=null)image.delete();throw e;}
         }else {
-            File root=managedDirectory(context);root.mkdirs();File target=new File(root,name);if(target.exists())throw new IOException("File already exists");
+            File root=managedDirectory(context);hideDirectory(root);File target=new File(root,name);if(target.exists())throw new IOException("File already exists");
             try {
                 try(InputStream in=new FileInputStream(audio);OutputStream out=new FileOutputStream(target)){copy(in,out);}
                 File sidecar=new File(root,name+".playerium.json");try(OutputStream out=new FileOutputStream(sidecar)){out.write(metadata.toString().getBytes(StandardCharsets.UTF_8));}
@@ -253,7 +258,85 @@ final class MusicEngine {
                 result.put("uri",Uri.fromFile(target)).put("sidecar",Uri.fromFile(sidecar)).put("cover",cover==null?"":Uri.fromFile(image)).put("folderSource","playerium-music").put("folderName","Playerium");
             }catch(Exception e){target.delete();new File(root,name+".playerium.json").delete();new File(root,name+".jpg").delete();throw e;}
         }
-        return result;
+        return result.put("galleryHidden",true);
+    }
+    // Exclude only Playerium's downloads, not unrelated media in the selected tree.
+    static DocumentFile hiddenDownloadDirectory(DocumentFile selected) throws IOException {
+        DocumentFile root=selected.findFile("Playerium Downloads");
+        if(root==null)root=selected.createDirectory("Playerium Downloads");
+        if(root==null||!root.isDirectory()||!root.canWrite())throw new IOException("Не удалось создать папку для скачанных треков.");
+        DocumentFile marker=root.findFile(".nomedia");
+        if(marker==null)marker=root.createFile("application/octet-stream",".nomedia");
+        if(marker!=null&&!".nomedia".equals(marker.getName()))marker.renameTo(".nomedia");
+        if(marker==null||!marker.isFile()||!".nomedia".equals(marker.getName()))throw new IOException("Не удалось скрыть папку музыки из галереи.");
+        return root;
+    }
+    static void hideDirectory(File root) throws IOException {
+        if(!root.isDirectory()&&!root.mkdirs())throw new IOException("Не удалось создать папку музыки.");
+        File marker=new File(root,".nomedia");
+        if(!marker.isFile()&&!marker.createNewFile())throw new IOException("Не удалось скрыть папку музыки из галереи.");
+    }
+    private JSONObject protectDownloaded(JSONObject old,String key) throws Exception {
+        if(old.optBoolean("galleryHidden")) {
+            if("file".equals(Uri.parse(old.getString("uri")).getScheme()))hideDirectory(managedDirectory(context));
+            else {
+                DocumentFile selected=DocumentFile.fromTreeUri(context,Uri.parse(old.getString("folderSource")));
+                if(selected!=null&&selected.canWrite())hiddenDownloadDirectory(selected);
+            }
+            retryLegacyCleanup(old,key);
+            return old;
+        }
+        if(!key.matches("song_[0-9a-f]+"))throw new SecurityException("Недопустимая запись");
+        if("file".equals(Uri.parse(old.getString("uri")).getScheme())) {
+            hideDirectory(managedDirectory(context));
+            old.put("galleryHidden",true);synchronized(this){records().put(key,old);saveRecords();}
+            refreshGallery(old);return old;
+        }
+        File staging=new File(context.getCacheDir(),"hide-song-"+UUID.randomUUID());staging.mkdirs();
+        JSONObject moved=null;boolean saved=false;
+        try {
+            String name=old.getString("name"),extension=name.substring(name.lastIndexOf('.'));
+            if(!extension.matches("(?i)\\.(m4a|mp3|opus|ogg|flac|aac|wav)"))throw new IOException("Invalid audio");
+            File audio=new File(staging,"audio"+extension),cover=null;
+            copyOwnedTo(old.getString("uri"),audio);
+            if(audio.length()==0||(old.optLong("size",0)>0&&audio.length()!=old.getLong("size")))throw new IOException("Не удалось полностью перенести скачанный трек.");
+            if(!old.optString("cover").isEmpty()){cover=new File(staging,"audio.jpg");copyOwnedTo(old.getString("cover"),cover);}
+            moved=publish(audio,cover,old.getJSONObject("metadata"),old.getString("folderSource"),key);
+            // Commit the new location before deleting any existing file.
+            moved.put("previousUri",old.getString("uri")).put("legacyMedia",old);
+            synchronized(this){records().put(key,moved);try{saveRecords();saved=true;}catch(Exception error){records().put(key,old);throw error;}}
+            retryLegacyCleanup(moved,key);return moved;
+        }finally{try{if(moved!=null&&!saved)deleteOwned(moved);}finally{clear(staging);}}
+    }
+    private void copyOwnedTo(String value,File target) throws IOException {
+        Uri uri=Uri.parse(value);
+        if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Выберите папку музыки ещё раз, чтобы разрешить сохранение треков.");
+        try(InputStream in=context.getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(target)){
+            if(in==null)throw new IOException("Cannot read downloaded file");copy(in,out);
+        }
+    }
+    private void retryLegacyCleanup(JSONObject record,String key) throws Exception {
+        JSONObject legacy=record.optJSONObject("legacyMedia");if(legacy==null)return;
+        try{deleteOwned(legacy);refreshGallery(legacy);record.remove("legacyMedia");synchronized(this){records().put(key,record);saveRecords();}}
+        catch(IOException|SecurityException error){android.util.Log.w("Playerium","Will retry old media cleanup",error);}
+    }
+    private void refreshGallery(JSONObject record) {
+        List<String> paths=new ArrayList<>();
+        for(String field:new String[]{"uri","cover"})try {
+            Uri uri=Uri.parse(record.optString(field));
+            if("file".equals(uri.getScheme()))paths.add(uri.getPath());
+            else if("com.android.externalstorage.documents".equals(uri.getAuthority())) {
+                String document=DocumentsContract.getDocumentId(uri);
+                String[] parts=document.split(":",2);File root=null;
+                if(parts.length==2&&parts[0].equals("primary"))root=Environment.getExternalStorageDirectory();
+                else if(parts.length==2&&Build.VERSION.SDK_INT>=30) {
+                    StorageManager storage=context.getSystemService(StorageManager.class);
+                    if(storage!=null)for(StorageVolume volume:storage.getStorageVolumes())if(parts[0].equalsIgnoreCase(volume.getUuid())){root=volume.getDirectory();break;}
+                }
+                if(root!=null){File file=new File(root,parts[1]);if(file.getCanonicalPath().startsWith(root.getCanonicalPath()+File.separator))paths.add(file.getCanonicalPath());}
+            }
+        }catch(Exception ignored){}
+        if(!paths.isEmpty())MediaScannerConnection.scanFile(context,paths.toArray(new String[0]),null,null);
     }
     static File managedDirectory(Context context){File parent=context.getExternalFilesDir(Environment.DIRECTORY_MUSIC);return new File(parent==null?context.getFilesDir():parent,"Playerium");}
     private JSONObject withCover(JSONObject record) throws Exception {

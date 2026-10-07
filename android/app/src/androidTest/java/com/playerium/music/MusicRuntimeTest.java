@@ -16,6 +16,18 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class MusicRuntimeTest {
+    @Test public void galleryProtectionIsLimitedToTheDownloadDirectory() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File selected=new File(context.getCacheDir(),"gallery-test-"+java.util.UUID.randomUUID());assertTrue(selected.mkdirs());
+        File unrelated=new File(selected,"personal.jpg");assertTrue(unrelated.createNewFile());
+        androidx.documentfile.provider.DocumentFile parent=androidx.documentfile.provider.DocumentFile.fromFile(selected);
+        androidx.documentfile.provider.DocumentFile downloads=MusicEngine.hiddenDownloadDirectory(parent);
+        assertEquals("Playerium Downloads",downloads.getName());assertTrue(downloads.findFile(".nomedia").isFile());
+        assertNull(parent.findFile(".nomedia"));assertTrue(unrelated.exists());
+        assertEquals(downloads.getUri(),MusicEngine.hiddenDownloadDirectory(parent).getUri());
+        downloads.findFile(".nomedia").delete();MusicEngine.hiddenDownloadDirectory(parent);assertTrue(downloads.findFile(".nomedia").isFile());
+        downloads.delete();unrelated.delete();assertTrue(selected.delete());
+    }
     @Test public void muzendAcceptsOnlyPublicAudioFiles() throws Exception {
         Method validate=MusicEngine.class.getDeclaredMethod("source",String.class);validate.setAccessible(true);
         String audio="https://muzend.net/uploads/music/2026/08/Dorofeeva_747.mp3";
@@ -54,9 +66,25 @@ public class MusicRuntimeTest {
         String[] lines=output.split("\\r?\\n");File processed=new File(lines[lines.length-1]);assertTrue(processed.length()>1000);
         Method publish=MusicEngine.class.getDeclaredMethod("publish",File.class,File.class,JSONObject.class,String.class,String.class);publish.setAccessible(true);
         JSONObject metadata=new JSONObject().put("title","Saved recording").put("artist","Playerium").put("album","Test album").put("duration",1);
-        JSONObject record=(JSONObject)publish.invoke(engine,processed,null,metadata,"","song_abcd1234");
+        File savedCover=new File(context.getCacheDir(),"processed-test.jpg");assertTrue(savedCover.isFile());
+        JSONObject record=(JSONObject)publish.invoke(engine,processed,savedCover,metadata,"","song_abcd1234");
         File owned=new File(android.net.Uri.parse(record.getString("uri")).getPath());assertTrue(owned.exists());
+        assertTrue(record.getBoolean("galleryHidden"));assertTrue(new File(owned.getParentFile(),".nomedia").isFile());
+        // Existing downloads regain protection without changing their playback URI.
+        record.remove("galleryHidden");assertTrue(new File(owned.getParentFile(),".nomedia").delete());
+        Method protect=MusicEngine.class.getDeclaredMethod("protectDownloaded",JSONObject.class,String.class);protect.setAccessible(true);
+        JSONObject restored=(JSONObject)protect.invoke(engine,record,"song_abcd1234");
+        assertEquals(record.getString("uri"),restored.getString("uri"));assertTrue(new File(owned.getParentFile(),".nomedia").isFile());
+        Method withCover=MusicEngine.class.getDeclaredMethod("withCover",JSONObject.class);withCover.setAccessible(true);
+        assertTrue(((JSONObject)withCover.invoke(engine,restored)).getJSONObject("metadata").getString("pictureBase64").length()>0);
+        File coverFile=new File(android.net.Uri.parse(record.getString("cover")).getPath());
+        java.util.concurrent.CountDownLatch scanned=new java.util.concurrent.CountDownLatch(1);
+        android.media.MediaScannerConnection.scanFile(context,new String[]{coverFile.getAbsolutePath()},null,(path,uri)->scanned.countDown());
+        assertTrue(scanned.await(20,TimeUnit.SECONDS));
+        try(android.database.Cursor images=context.getContentResolver().query(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,new String[]{"_id"},"_data=?",new String[]{coverFile.getAbsolutePath()},null)){assertNotNull(images);assertEquals(0,images.getCount());}
         android.media.MediaMetadataRetriever reader=new android.media.MediaMetadataRetriever();reader.setDataSource(owned.getAbsolutePath());assertEquals("Saved recording",reader.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE));assertEquals("Test album",reader.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM));assertTrue(reader.getEmbeddedPicture().length>0);reader.release();
-        Method delete=MusicEngine.class.getDeclaredMethod("deleteOwned",JSONObject.class);delete.setAccessible(true);delete.invoke(engine,record);assertFalse(owned.exists());fixture.delete();processed.delete();description.delete();picture.delete();
+        Method execute=MusicEngine.class.getDeclaredMethod("execute",String.class,JSONObject.class,String.class);execute.setAccessible(true);
+        execute.invoke(engine,"delete",new JSONObject().put("downloadId","song_abcd1234"),"delete-test");
+        assertFalse(owned.exists());assertFalse(coverFile.exists());fixture.delete();processed.delete();description.delete();picture.delete();savedCover.delete();
     }
 }

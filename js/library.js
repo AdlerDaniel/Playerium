@@ -511,13 +511,17 @@ export class Library {
       const key = identity(f);
       if(this.removedSources.has(key))continue;
       let track = index.get(key);
+      // A native download can move into a gallery-hidden directory after an update.
+      // Its download ID stays stable, so likes and playlist references keep their IDs.
+      if(!track&&f.downloadId)track=this.getTracks().find(t=>t.downloadId===f.downloadId);
+      if(!track&&f.previousUri)track=index.get(f.previousUri);
       if (!track) {
         const candidates = legacyIndex.get(`${folderName}/${f.name}/${f.size}`);
         if (candidates?.length === 1 && !restoredLegacy.has(candidates[0].id)) {
           track = candidates[0]; restoredLegacy.add(track.id);
         }
       }
-      const changed = !track || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
+      const changed = !track || track.sourceKey !== key || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
       if (changed) {
         const cleanName = f.name.replace(/\.[^/.]+$/, "");
         const parts = cleanName.split(" - ");
