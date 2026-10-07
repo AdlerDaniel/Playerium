@@ -1,3 +1,5 @@
+import {mountCover} from './artwork.js';
+import {collectionMenu,editPlaylist} from './collection-menu.js';
 import {showTrackMenu} from './track-menu.js';
 import {renderSearchView} from './search-view.js';
 import { bindSlider, syncPlaybackControls } from './playback-controls.js';
@@ -305,6 +307,7 @@ export class UIController {
         if (button) { button.title = isPlaying ? 'Пауза' : 'Воспроизвести'; button.setAttribute('aria-label', button.title); }
       }
       syncPlaybackControls(this.player);
+      const currentButton=document.querySelector('.queue-current-toggle');if(currentButton){currentButton.innerHTML=isPlaying?'<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>':'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';currentButton.setAttribute('aria-label',isPlaying?'Пауза':'Воспроизвести');}
       // Update table play states
       document.querySelectorAll(".track-row").forEach((row) => {
         if (row.dataset.trackId === this.player.currentTrack?.id) {
@@ -333,11 +336,7 @@ export class UIController {
       document.getElementById("nowPlayingArtist").textContent = track.artist || "Неизвестный исполнитель";
       
       const thumb = document.getElementById("nowPlayingCover");
-      if (track.pictureUrl) {
-        thumb.innerHTML = `<img src="${track.pictureUrl}" alt="Cover" />`;
-      } else {
-        thumb.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
-      }
+      mountCover(thumb,track,true);
 
       // Update Mobile Mini-Player
       const miniPlayer = document.getElementById("mobileMiniPlayer");
@@ -346,25 +345,19 @@ export class UIController {
         document.getElementById("mobileMiniTitle").textContent = track.title || "Неизвестный трек";
         document.getElementById("mobileMiniArtist").textContent = track.artist || "Неизвестный исполнитель";
         const miniCover = document.getElementById("mobileMiniCover");
-        if (track.pictureUrl) {
-          miniCover.innerHTML = `<img src="${track.pictureUrl}" alt="Cover" />`;
-        } else {
-          miniCover.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
-        }
+        mountCover(miniCover,track,true);
       }
 
       // Update Mobile Fullscreen Player
       const fsArtwork = document.getElementById("mobileFsArtwork");
-      if (fsArtwork) {
-        if (track.pictureUrl) {
-          fsArtwork.innerHTML = `<img src="${track.pictureUrl}" alt="Cover" />`;
-        } else {
-          fsArtwork.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
-        }
-      }
+      if(fsArtwork)mountCover(fsArtwork,track,true);
       document.getElementById("mobileFsTitle").textContent = track.title || "Неизвестный трек";
       document.getElementById("mobileFsArtist").textContent = track.artist || "Неизвестный исполнитель";
       document.getElementById("mobileFsContextTitle").textContent = this.player.playbackContext?.title || "Добавленные";
+      const contextType=this.player.playbackContext?.type;
+      document.querySelector('.mobile-fs-context-subtitle').textContent=contextType==='album'?'Играет из альбома':contextType==='artist'?'Играет из исполнителя':contextType==='search'?'Играет из поиска':'Играет из плейлиста';
+      document.getElementById('mobileFsAlbum').textContent=track.album||'Добавленные';
+      document.getElementById('mobileFsAboutArtist').textContent=track.artist||'Неизвестный исполнитель';
 
       this.updateLikeButtons(track.id, track.liked);
 
@@ -435,6 +428,7 @@ export class UIController {
     };
 
     this.player.onShuffleChange = (isShuffle) => {
+      document.querySelectorAll('.collection-shuffle').forEach(button=>button.setAttribute('aria-pressed',String(isShuffle)));
       for (const id of ['btnShuffle', 'btnMobileFsShuffle']) document.getElementById(id)?.setAttribute('aria-pressed', String(isShuffle));
       document.getElementById("btnShuffle").classList.toggle("active", isShuffle);
       document.getElementById("btnMobileFsShuffle")?.classList.toggle("active", isShuffle);
@@ -500,6 +494,16 @@ export class UIController {
     }
   }
 
+  handleBack() {
+    if(this.dismissTrackMenu){this.dismissTrackMenu();return true;}
+    if(this.dismissSurface){this.dismissSurface();return true;}
+    const fullscreen=document.getElementById('mobileFullscreenPlayer');
+    if(fullscreen.classList.contains('active')){fullscreen.classList.remove('active');return true;}
+    if(this.isRightPanelOpen){this.closeRightPanel();return true;}
+    if(this.historyIndex>0){this.navigateBack();return true;}
+    return false;
+  }
+
   navigateForward() {
     if (this.historyIndex < this.history.length - 1) {
       this.historyIndex++;
@@ -523,6 +527,7 @@ export class UIController {
     const restoreScroll = preserveScroll ? scroll.scrollTop : view.scrollTop || 0;
     document.querySelector('#mainTopbar .home-filters')?.remove();
     this.currentView = view;
+    scroll.style.removeProperty('--collection-color');
     document.body.dataset.view = view.type;
     document.getElementById("btnGlobalHome").classList.toggle("active",view.type === "home");
     if (view.type === "home") this.updateMobileNavActive("home");
@@ -576,6 +581,9 @@ export class UIController {
     // Scroll to top
     scroll.scrollTop = restoreScroll;
     syncPlaybackControls(this.player);
+    container.classList.remove('view-enter');if(!preserveScroll){void container.offsetWidth;container.classList.add('view-enter');}
+    const header=container.querySelector('.view-header');
+    if(header){header.classList.add('collection-header',`collection-${view.type}`);const cover=header.querySelector('img');if(cover){const color=()=>{if(!header.isConnected)return;try{const c=document.createElement('canvas');c.width=c.height=1;const ctx=c.getContext('2d');ctx.drawImage(cover,0,0,1,1);const [r,g,b]=ctx.getImageData(0,0,1,1).data;scroll.style.setProperty('--collection-color',`rgb(${r*.55},${g*.55},${b*.55})`);}catch{}};cover.complete?color():cover.addEventListener('load',color,{once:true});}}
   }
 
   // --- View Renderers ---
@@ -622,6 +630,7 @@ export class UIController {
 
   switchRightTab(tab) {
     this.activeRightTab = tab;
+    document.querySelector('.right-panel-title').textContent=tab==='queue'?'Очередь':'Сейчас играет';
     document.getElementById("tabBtnNowPlaying").classList.toggle("active", tab === "nowPlaying");
     document.getElementById("tabBtnQueue").classList.toggle("active", tab === "queue");
 
@@ -639,12 +648,8 @@ export class UIController {
       return;
     }
 
-    const coverHtml = track.pictureUrl
-      ? `<img src="${track.pictureUrl}" alt="Cover" />`
-      : `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
-
     container.innerHTML = `
-      <div class="now-playing-panel-cover">${coverHtml}</div>
+      <div class="now-playing-panel-cover"></div>
       <div class="now-playing-panel-meta">
         <div class="now-playing-panel-title">${this.escapeHTML(track.title)}</div>
         <div class="now-playing-panel-artist">${this.escapeHTML(track.artist)}</div>
@@ -679,6 +684,8 @@ export class UIController {
         </div>
       </div>
     `;
+    mountCover(container.querySelector('.now-playing-panel-cover'),track,true);
+    const artist=container.querySelector('.now-playing-panel-artist');artist.tabIndex=0;artist.setAttribute('role','link');artist.onclick=()=>this.navigateTo({type:'artist',id:track.artist,title:track.artist});artist.onkeydown=e=>{if(e.key==='Enter')artist.click();};
   }
 
   renderRightQueue(...args) { return renderRightQueue.apply(this, args); }
@@ -695,49 +702,7 @@ export class UIController {
     return showTrackMenu(this,track,{x,y,playlistContext});
   }
 
-  showPlaylistContextMenu(x, y, playlist) {
-    const menu = document.getElementById("appContextMenu");
-    menu.innerHTML = `
-      <div class="context-menu-item" id="ctxPlPlay">
-        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Воспроизвести
-      </div>
-      <div class="context-menu-item" id="ctxPlRename">
-        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/></svg> Переименовать
-      </div>
-      <div class="context-divider"></div>
-      <div class="context-menu-item" id="ctxPlDelete" style="color: var(--sp-red);">
-        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Удалить плейлист
-      </div>
-    `;
-
-    menu.style.display = "block";
-    const w = 200;
-    menu.style.left = Math.min(x, window.innerWidth - w - 10) + "px";
-    menu.style.top = y + "px";
-    menu.classList.add("active");
-
-    menu.querySelector("#ctxPlPlay").addEventListener("click", () => {
-      const tracks = this.library.getPlaylistTracks(playlist.id);
-      if (tracks.length > 0) this.player.playTrack(tracks[0], 0, tracks, playlist);
-      this.closeContextMenu();
-    });
-
-    menu.querySelector("#ctxPlRename").addEventListener("click", () => {
-      this.closeContextMenu();
-      const newName = prompt("Новое название плейлиста:", playlist.name);
-      if (newName && newName.trim()) {
-        this.library.renamePlaylist(playlist.id, newName.trim());
-      }
-    });
-
-    menu.querySelector("#ctxPlDelete").addEventListener("click", async () => {
-      this.closeContextMenu();
-      if (confirm(`Удалить плейлист «${playlist.name}»?`)) {
-        await this.library.deletePlaylist(playlist.id);
-        this.showToast("Плейлист удален");
-      }
-    });
-  }
+  showPlaylistContextMenu(x,y,playlist) {return collectionMenu(this,{playlist,tracks:this.library.getPlaylistTracks(playlist.id),anchor:{getBoundingClientRect:()=>({left:x,bottom:y})}});}
 
   closeContextMenu() {
     const menu = document.getElementById("appContextMenu");
@@ -747,33 +712,12 @@ export class UIController {
 
   // --- Modals & Pickers ---
 
-  showCreatePlaylistModal() {
-    const overlay = document.getElementById("modalCreatePlaylist");
-    const input = document.getElementById("inputPlaylistName");
-    const descInput = document.getElementById("inputPlaylistDesc");
-    input.value = `Мой плейлист #${this.library.getPlaylists().length + 1}`;
-    descInput.value = "";
-    overlay.classList.add("active");
-    input.focus();
-    input.select();
-
-    const btnCreate = document.getElementById("btnConfirmCreatePlaylist");
-    const handler = async () => {
-      const name = input.value.trim();
-      if (name) {
-        const pl = await this.library.createPlaylist(name, descInput.value.trim());
-        this.closeModals();
-        this.navigateTo({ type: "playlist", id: pl.id, title: pl.name });
-        this.showToast(`Плейлист «${pl.name}» создан`, "success");
-      }
-      btnCreate.removeEventListener("click", handler);
-    };
-    btnCreate.addEventListener("click", handler);
-  }
+  showCreatePlaylistModal() {return editPlaylist(this);}
 
   showUpdateModal(info) { this.pendingUpdateInfo = info; }
 
   closeModals() {
+    this.dismissSurface?.();
     document.querySelectorAll(".modal-overlay").forEach((m) => { if (m.dataset.busy !== 'true') m.classList.remove("active"); });
   }
 

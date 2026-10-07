@@ -147,7 +147,7 @@ for (const mobile of [false, true]) {
       {name:'Artist - First.wav',mimeType:'audio/wav',buffer:wav(60)},
       {name:'Other - Second.wav',mimeType:'audio/wav',buffer:wav(60)}
     ]);
-    await expect(page.locator('.shelf-title')).toHaveCount(2);
+    await expect(page.locator('.home-shelf').first().locator('.shelf-title')).toHaveCount(2);
     const id=await page.evaluate(async()=>{
       const app=window.playerApp, pl=await app.library.createPlaylist('Test playlist');
       for(const t of app.library.getTracks()) await app.library.addTrackToPlaylist(pl.id,t.id);
@@ -243,7 +243,7 @@ test('changing track keeps an open queue visible and queue rows work with keyboa
     {name:'Artist - First.wav',mimeType:'audio/wav',buffer:wav(60)},
     {name:'Artist - Second.wav',mimeType:'audio/wav',buffer:wav(60)}
   ]);
-  await expect(page.locator('.shelf-title')).toHaveCount(2);
+  await expect(page.locator('.home-shelf').first().locator('.shelf-title')).toHaveCount(2);
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));
   await page.locator('.track-name').first().click();await page.waitForFunction(()=>window.playerApp.player.isPlaying);
   await page.locator('#btnToggleQueue').click();

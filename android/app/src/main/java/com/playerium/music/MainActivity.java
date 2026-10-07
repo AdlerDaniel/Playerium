@@ -464,7 +464,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         if (webView == null) { super.onBackPressed(); return; }
-        webView.evaluateJavascript("(function(){const ui=window.playerApp&&window.playerApp.ui;if(ui&&ui.dismissTrackMenu){ui.dismissTrackMenu();return true;}return false;})()", result -> {
+        webView.evaluateJavascript("(function(){const ui=window.playerApp&&window.playerApp.ui;return !!(ui&&ui.handleBack());})()", result -> {
             if ("true".equals(result)) return;
             if (webView != null && webView.canGoBack()) webView.goBack();
             else MainActivity.super.onBackPressed();
