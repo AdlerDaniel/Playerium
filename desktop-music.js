@@ -5,7 +5,7 @@ const PROVIDERS=new Set(['youtubeMusic','youtubeAudio','soundcloud']);
 function sourceURL(value) {
   const u=new URL(value);
   const h=u.hostname.toLowerCase();
-  if(u.protocol!=='https:'||u.username||u.password||u.port || !(h==='www.youtube.com'||h==='music.youtube.com'||h==='youtube.com'||h==='youtu.be'||h==='soundcloud.com'||h.endsWith('.bandcamp.com')||h==='audius.co'||h==='archive.org'))throw Error('Недопустимая запись');
+  if(u.protocol!=='https:'||u.username||u.password||u.port || !(h==='www.youtube.com'||h==='music.youtube.com'||h==='youtube.com'||h==='youtu.be'||h==='soundcloud.com'||h.endsWith('.bandcamp.com')||h==='audius.co'||h==='archive.org'||(h==='muzend.net'&&/^\/uploads\/music\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search)))throw Error('Недопустимая запись');
   return u.href;
 }
 function catalogURL(provider,query) {
@@ -17,6 +17,7 @@ function catalogURL(provider,query) {
     case 'musicbrainz':return `https://musicbrainz.org/ws/2/recording/?query=${q}&fmt=json&limit=20`;
     case 'audius':return `https://discoveryprovider.audius.co/v1/tracks/search?query=${q}&limit=20&app_name=Playerium`;
     case 'bandcamp':return `https://bandcamp.com/search?q=${q}&item_type=t`;
+    case 'muzend':return `https://muzend.net/index.php?do=search&subaction=search&story=${q}`;
     default:throw Error('Недопустимый запрос');
   }
 }
@@ -64,7 +65,7 @@ class DesktopMusic {
         const response=await this.fetcher(catalogURL(payload.provider,query),{signal:controller.signal,headers:{'User-Agent':'Playerium/1.6.0 (https://github.com/AdlerDaniel/Playerium)'}});
         if(!response.ok)throw Error('Не удалось получить результаты');
         const text=await response.text();if(text.length>4*1024*1024)throw Error('Некорректный ответ');
-        return payload.provider==='bandcamp'?text:JSON.parse(text);
+        return ['bandcamp','muzend'].includes(payload.provider)?text:JSON.parse(text);
       }finally{clearTimeout(timer);this.requests.delete(id);}
     }
     if(operation==='search') {
@@ -133,7 +134,8 @@ class DesktopMusic {
           for(const file of await fs.readdir(staging))await fs.rm(path.join(staging,file),{recursive:true,force:true});
           this.onProgress({id:track.id,state:'downloading'});
           const url=sourceURL(source.url);
-          const info=JSON.parse(await this.run(['--dump-single-json','--skip-download','-f','bestaudio[ext=m4a]/bestaudio/best','--',url],id,60000));
+          const info=source.provider==='muzend'?{id:path.basename(new URL(url).pathname,'.mp3'),title:source.title,artist:source.artist,duration:source.duration,url,ext:'mp3',extractor:'generic',webpage_url:url}:JSON.parse(await this.run(['--dump-single-json','--skip-download','-f','bestaudio[ext=m4a]/bestaudio/best','--',url],id,60000));
+          if(source.provider==='muzend'&&new URL(url).hostname!=='muzend.net')throw Error('Недопустимая запись');
           const actual=audioCandidate(info,source.provider);
           if(!actual || isVariant(info.title) || !sameRecording(track,actual))continue;
           // Metadata chosen from the recording catalog is embedded into the audio.

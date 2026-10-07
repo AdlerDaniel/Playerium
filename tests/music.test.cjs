@@ -43,6 +43,9 @@ test('native requests cannot turn a catalog search into arbitrary file/network a
   for(const url of ['file:///C:/secret','https://localhost/audio','https://soundcloud.com.evil.test/a','https://user:pass@youtube.com/a'])assert.throws(()=>sourceURL(url));
   assert.throws(()=>catalogURL('https://evil.test','song'));
   assert.ok(sourceURL('https://artist.bandcamp.com/track/song'));
+  assert.equal(sourceURL('https://muzend.net/uploads/music/2026/08/Dorofeeva_747.mp3'),'https://muzend.net/uploads/music/2026/08/Dorofeeva_747.mp3');
+  for(const url of ['https://muzend.net/323-song.html','https://muzend.net/uploads/music/song.mp3?url=https://localhost','https://muzend.net.evil.test/uploads/music/song.mp3'])assert.throws(()=>sourceURL(url));
+  assert.ok(catalogURL('muzend','Dorofeeva 747').endsWith('story=Dorofeeva%20747'));
 });
 
 test('catalog-only songs download through Audius when video services are unavailable, with duplicate clicks coalesced',async()=>{

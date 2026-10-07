@@ -16,6 +16,14 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class MusicRuntimeTest {
+    @Test public void muzendAcceptsOnlyPublicAudioFiles() throws Exception {
+        Method validate=MusicEngine.class.getDeclaredMethod("source",String.class);validate.setAccessible(true);
+        String audio="https://muzend.net/uploads/music/2026/08/Dorofeeva_747.mp3";
+        assertEquals(audio,validate.invoke(null,audio));
+        for(String url:new String[]{"https://muzend.net/song.html","https://muzend.net/uploads/music/a.mp3?url=https://localhost","https://muzend.net.evil.test/uploads/music/a.mp3"}) {
+            try{validate.invoke(null,url);fail("Unexpected source accepted");}catch(java.lang.reflect.InvocationTargetException error){assertTrue(error.getCause() instanceof SecurityException);}
+        }
+    }
     @Test public void downloadErrorsDistinguishProtectionAndNetworkFailures() throws Exception {
         Method diagnostic=MusicEngine.class.getDeclaredMethod("downloadError",Exception.class);diagnostic.setAccessible(true);
         String protectedMessage=(String)diagnostic.invoke(null,new IOException("This video is DRM protected"));

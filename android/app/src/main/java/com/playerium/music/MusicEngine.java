@@ -85,9 +85,10 @@ final class MusicEngine {
                 case "musicbrainz":url="https://musicbrainz.org/ws/2/recording/?query="+q+"&fmt=json&limit=20";break;
                 case "audius":url="https://discoveryprovider.audius.co/v1/tracks/search?query="+q+"&limit=20&app_name=Playerium";break;
                 case "bandcamp":url="https://bandcamp.com/search?q="+q+"&item_type=t";break;
+                case "muzend":url="https://muzend.net/index.php?do=search&subaction=search&story="+q;break;
                 default:throw new SecurityException("Недопустимый запрос");
             }
-            String text=get(url);return payload.getString("provider").equals("bandcamp")?text:new JSONObject(text);
+            String text=get(url);return Arrays.asList("bandcamp","muzend").contains(payload.getString("provider"))?text:new JSONObject(text);
         }
         if(operation.equals("search")) {
             if(payload.getString("provider").equals("youtubeMusic")) {
@@ -180,8 +181,8 @@ final class MusicEngine {
         return norm(title).equals(norm(track.optString("title")))&&artist(who).equals(artist(track.optString("artist")))&&(! (duration>0&&actual>0)||Math.abs(duration-actual)<=Math.max(8,duration*.04));
     }
     private static String source(String value) throws Exception {
-        URL url=new URL(value);String h=url.getHost();
-        if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||url.getPort()!=-1||!(h.equals("www.youtube.com")||h.equals("music.youtube.com")||h.equals("youtube.com")||h.equals("youtu.be")||h.equals("soundcloud.com")||h.endsWith(".bandcamp.com")||h.equals("audius.co")||h.equals("archive.org")))throw new SecurityException("Недопустимая запись");return value;
+        URL url=new URL(value);String h=url.getHost().toLowerCase(Locale.ROOT);
+        if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||url.getPort()!=-1||!(h.equals("www.youtube.com")||h.equals("music.youtube.com")||h.equals("youtube.com")||h.equals("youtu.be")||h.equals("soundcloud.com")||h.endsWith(".bandcamp.com")||h.equals("audius.co")||h.equals("archive.org")||(h.equals("muzend.net")&&url.getPath().matches("(?i)/uploads/music/[^?#]+\\.mp3")&&url.getQuery()==null)))throw new SecurityException("Недопустимая запись");return value;
     }
     private JSONObject download(JSONObject payload,String requestId) throws Exception {
         JSONObject track=payload.getJSONObject("track");String key=track.getString("id");if(!key.matches("song_[0-9a-f]+"))throw new SecurityException("Недопустимая запись");
@@ -193,7 +194,12 @@ final class MusicEngine {
             for(int i=0;i<Math.min(8,sources.length());i++) {
                 try {
                     clear(staging);staging.mkdirs();
-                    JSONObject info=new JSONObject(run(Arrays.asList("--dump-single-json","--skip-download","-f","bestaudio[ext=m4a]/bestaudio/best","--",source(sources.getJSONObject(i).getString("url"))),requestId,60000));
+                    JSONObject candidate=sources.getJSONObject(i);String audioUrl=source(candidate.getString("url"));
+                    JSONObject info;
+                    if(candidate.optString("provider").equals("muzend")) {
+                        if(!new URL(audioUrl).getHost().equals("muzend.net"))throw new SecurityException("Недопустимая запись");
+                        info=new JSONObject().put("id",new File(new URL(audioUrl).getPath()).getName()).put("title",candidate.getString("title")).put("artist",candidate.getString("artist")).put("duration",candidate.optDouble("duration",0)).put("url",audioUrl).put("ext","mp3").put("extractor","generic").put("webpage_url",audioUrl);
+                    }else info=new JSONObject(run(Arrays.asList("--dump-single-json","--skip-download","-f","bestaudio[ext=m4a]/bestaudio/best","--",audioUrl),requestId,60000));
                     if(!matches(track,info))continue;
                     for(String field:new String[]{"title","artist","album","genre","isrc"})if(!track.optString(field).isEmpty()){info.put(field,track.getString(field));info.put("meta_"+field,track.getString(field));}
                     if(track.has("artist"))info.put("artists",new JSONArray().put(track.getString("artist")));

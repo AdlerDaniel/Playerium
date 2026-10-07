@@ -1,8 +1,17 @@
 import {audioCandidate,mergeSongs,sameRecording,isVariant} from './music-match.js';
 import {youtubeMusicEntries} from './music-youtube.js';
 const searchProviders=['youtubeMusic','soundcloud','youtubeAudio'];
-const catalogProviders=['itunes','itunesUA','deezer','musicbrainz','audius','bandcamp'];
+const catalogProviders=['itunes','itunesUA','deezer','musicbrainz','audius','bandcamp','muzend'];
 function catalogTracks(provider,data) {
+  if(provider==='muzend') {
+    const dom=new DOMParser().parseFromString(data,'text/html');
+    return [...dom.querySelectorAll('[data-track][data-title][data-artist]')].flatMap(item=>{
+      const url=item.getAttribute('data-track'),title=item.getAttribute('data-title'),artist=item.getAttribute('data-artist');
+      if(!/^https:\/\/muzend\.net\/uploads\/music\/[^?#]+\.mp3$/i.test(url||'')||!title||!artist)return [];
+      const time=item.querySelector('.track-time')?.textContent?.trim().split(':').map(Number),duration=time?.length===2?time[0]*60+time[1]:0;
+      return [{title,artist,duration,catalog:true,official:false,sources:[{provider,url,title,artist,duration,official:false}]}];
+    });
+  }
   if(provider.startsWith('itunes'))return (data.results||[]).map(t=>({title:t.trackName,artist:t.artistName,album:t.collectionName,year:t.releaseDate?.slice(0,4),duration:t.trackTimeMillis/1000,trackNo:t.trackNumber,genre:t.primaryGenreName,pictureUrl:t.artworkUrl100?.replace('100x100bb','600x600bb'),pictureUrls:[t.artworkUrl100?.replace('100x100bb','600x600bb'),t.artworkUrl100].filter(Boolean),official:true,catalog:true,sources:[]}));
   if(provider==='deezer')return (data.data||[]).map(t=>({title:t.title,artist:t.artist?.name,album:t.album?.title,duration:t.duration,pictureUrl:t.album?.cover_big,pictureUrls:[t.album?.cover_big,t.album?.cover_medium,t.album?.cover].filter(Boolean),isrc:t.isrc,official:true,catalog:true,sources:[]}));
   if(provider==='musicbrainz')return (data.recordings||[]).filter(t=>t['artist-credit']?.length).map(t=>({title:t.title,artist:t['artist-credit'].map(a=>a.name+(a.joinphrase||'')).join(''),album:t.releases?.[0]?.title||'',year:t['first-release-date']?.slice(0,4)||'',duration:(t.length||0)/1000,isrc:t.isrcs?.[0]||'',official:true,catalog:true,sources:[]}));
@@ -77,7 +86,7 @@ export class MusicCatalog {
     const task=(async()=>{
       let sources=[...(track.sources||[])],saved,lastError,discoveryError;
       const attempted=new Set();
-      const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4};
+      const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4,muzend:5};
       const folder=this.library.folders.findLast(f=>!f.source.startsWith('web:') && f.source!=='android-files');
       const save=async()=>{
         sources=[...new Map(sources.filter(s=>!attempted.has(s.url)).map(s=>[s.url,s])).values()].sort((a,b)=>(priority[a.provider]??9)-(priority[b.provider]??9)||Number(b.official)-Number(a.official));
@@ -97,7 +106,7 @@ export class MusicCatalog {
       };
       // Prefer independent artist catalogs before waiting for restricted video services.
       if(sources.length)await save();
-      if(!saved){await resolve(['audius','bandcamp']);await save();}
+      if(!saved){await resolve(['audius','bandcamp','muzend']);await save();}
       if(!saved){await resolve(searchProviders);await save();}
       if(!saved)throw lastError||discoveryError||Error('Не удалось найти доступную полную запись.');
       const added=await this.library.addDownloaded(saved,track);
