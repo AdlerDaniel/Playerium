@@ -1,5 +1,6 @@
 import {audioCandidate,mergeSongs,sameRecording,isVariant} from './music-match.js';
 import {youtubeMusicEntries} from './music-youtube.js';
+import {recordingSources} from './music-recordings.js';
 const searchProviders=['youtubeMusic','soundcloud','youtubeAudio'];
 const catalogProviders=['itunes','itunesUA','deezer','musicbrainz','audius','bandcamp','muzend','musify','topmusicua','miyzvuk'];
 export function catalogTracks(provider,data) {
@@ -97,9 +98,10 @@ export class MusicCatalog {
     if(!query || query.length<2 || !this.available){onResults(local,false,null);return;}
     const cached=this.cache.get(query.toLocaleLowerCase());
     if(cached && Date.now()-cached.time<300000){onResults(mergeSongs(cached.groups,query,local),false,null);return;}
-    onResults(local,true,null);
+    const known=recordingSources(query);
+    onResults(mergeSongs([known],query,local),true,null);
     this.timer=setTimeout(async()=>{
-      const groups=[];let successes=0;
+      const groups=[known];let successes=known.length?1:0;
       const providers=[...catalogProviders,...searchProviders];
       await Promise.allSettled(providers.map(async provider=>{
         try {
@@ -126,7 +128,7 @@ export class MusicCatalog {
         track={...track};
         for(const result of metadata)if(result.status==='fulfilled'&&result.value)for(const field of ['album','year','trackNo','genre','isrc','pictureUrl','duration'])if(!track[field]&&result.value[field])track[field]=result.value[field];
       }
-      let sources=[...(track.sources||[])],saved,lastError,discoveryError;
+      let sources=[...(track.sources||[]),...recordingSources(`${track.artist} ${track.title}`).filter(t=>sameRecording(track,t)).flatMap(t=>t.sources)],saved,lastError,discoveryError;
       const attempted=new Set();
       const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4,muzend:5,musify:6,topmusicua:7,miyzvuk:8};
       const folder=this.library.folders.findLast(f=>!f.source.startsWith('web:') && f.source!=='android-files');

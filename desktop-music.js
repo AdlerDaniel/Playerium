@@ -4,7 +4,7 @@ const {isInside}=require('./desktop-files');
 const PROVIDERS=new Set(['youtubeMusic','youtubeAudio','soundcloud']);
 const FULL_AUDIO='bestaudio[format_id!*=preview][ext=m4a]/bestaudio[format_id!*=preview]/best[format_id!*=preview]';
 // Electron's request stream also settles errors that can leave net.fetch pending.
-function createAudioFetcher(net) {
+function createNativeFetcher(net,page=false) {
   return (url,{signal}={})=>new Promise((resolve,reject)=>{
     const request=net.request({url,redirect:'manual',credentials:'omit'});let response,failed=false,redirects=0;
     const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);};
@@ -20,19 +20,33 @@ function createAudioFetcher(net) {
     });
     request.on('response',incoming=>{
       response=incoming;clearTimeout(timer);incoming.on('error',()=>{});
-      if(incoming.statusCode!==200||!/^audio\//i.test(incoming.headers['content-type']||''))return fail(Error('Не удалось получить полную запись.'));
-      resolve({ok:incoming.statusCode===200,status:incoming.statusCode,headers:{get:name=>incoming.headers[name.toLowerCase()]||null},body:incoming});
+      if(incoming.statusCode!==200||!(page?/^text\/html\b/i:/^audio\//i).test(incoming.headers['content-type']||''))return fail(Error('Не удалось получить полную запись.'));
+      resolve({ok:true,status:incoming.statusCode,headers:{get:name=>incoming.headers[name.toLowerCase()]||null},body:incoming,text:async()=>{const chunks=[];let size=0;for await(const chunk of incoming){size+=chunk.length;if(size>4*1024*1024){fail(Error('Некорректный ответ'));throw Error('Некорректный ответ');}chunks.push(chunk);}return Buffer.concat(chunks).toString('utf8');}});
     });
     signal?.addEventListener('abort',abort,{once:true});
     if(signal?.aborted)abort();else request.end();
   });
 }
+function createAudioFetcher(net){return createNativeFetcher(net);}
+function createPageFetcher(net){return createNativeFetcher(net,true);}
 function sourceURL(value) {
   const u=new URL(value);
   const h=u.hostname.toLowerCase();
+  if(h==='hit.music2019.su'&&u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&/^\/track\/\d+$/.test(u.pathname))return u.href;
   if(['muzend.net','musify.club','topmusicua.com','miyzvuk.net'].includes(h)&&(u.search||u.hash))throw Error('Недопустимая запись');
   if(u.protocol!=='https:'||u.username||u.password||u.port || !(h==='www.youtube.com'||h==='music.youtube.com'||h==='youtube.com'||h==='youtu.be'||h==='soundcloud.com'||h.endsWith('.bandcamp.com')||h==='audius.co'||h==='archive.org'||(h==='muzend.net'&&/^\/uploads\/music\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search)||(h==='musify.club'&&/^\/track\/pl\/\d+\/[^/?#]+\.mp3$/i.test(u.pathname)&&!u.search)||(h==='miyzvuk.net'&&/^\/uploads\/public_files\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search&&!u.hash)||(h==='topmusicua.com'&&/^\/uploads\/files\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search)))throw Error('Недопустимая запись');
   return u.href;
+}
+async function hitMusicInfo(page,fetcher) {
+  const response=await fetcher(page,{signal:AbortSignal.timeout(15000)});
+  if(!response.ok)throw Error('Не удалось получить запись.');
+  const text=await response.text();if(text.length>4*1024*1024)throw Error('Некорректный ответ');
+  const raw=text.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1];
+  const decode=value=>String(value||'').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#(?:x([\da-f]+)|(\d+));/gi,(_,hex,decimal)=>String.fromCodePoint(parseInt(hex||decimal,hex?16:10)));
+  const label=decode(raw).replace(/\s+-\s+Скачать.*$/i,'');const split=label.match(/^(.*?)\s[-–—]\s(.+)$/);
+  const value=decode(text.match(/\bmp3source="([^"]+)"/i)?.[1]);let url;try{url=new URL(value);}catch{throw Error('Не удалось получить полную запись.');}
+  if(!split||url.origin!=='https://cdn.music2019.su'||!/^\/{1,2}$/.test(url.pathname)||url.hash||[...url.searchParams.keys()].some(key=>key!=='h')||!/^[-\w]{32,1024}(?:\\{2})?$/.test(url.searchParams.get('h')||''))throw Error('Недопустимая запись');
+  return {id:new URL(page).pathname.split('/').at(-1),title:split[2],artist:split[1],url:url.href,ext:'mp3',extractor:'generic',webpage_url:page};
 }
 function catalogURL(provider,query) {
   const q=encodeURIComponent(query);
@@ -62,8 +76,8 @@ function downloadError(error) {
   return 'Полная версия этой записи недоступна для скачивания. Попробуйте позже.';
 }
 class DesktopMusic {
-  constructor({app,fetcher=fetch,audioFetcher=fetcher,authorize,onRoot=async()=>{},onProgress=()=>{}}) {
-    Object.assign(this,{app,fetcher,audioFetcher,authorize,onRoot,onProgress});this.active=new Map();this.pending=new Map();this.requests=new Map();
+  constructor({app,fetcher=fetch,audioFetcher=fetcher,pageFetcher=fetcher,authorize,onRoot=async()=>{},onProgress=()=>{}}) {
+    Object.assign(this,{app,fetcher,audioFetcher,pageFetcher,authorize,onRoot,onProgress});this.active=new Map();this.pending=new Map();this.requests=new Map();
     this.tools=app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools');
     this.manifestFile=path.join(app.getPath('userData'),'music-downloads.json');this.manifest=null;this.storeChain=Promise.resolve();
   }
@@ -162,13 +176,14 @@ class DesktopMusic {
         try {
           for(const file of await fs.readdir(staging))await fs.rm(path.join(staging,file),{recursive:true,force:true});
           this.onProgress({id:track.id,state:'downloading'});
-          const url=sourceURL(source.url);
-          const directHosts={muzend:'muzend.net',musify:'musify.club',topmusicua:'topmusicua.com',miyzvuk:'miyzvuk.net'};
-          const info=directHosts[source.provider]?{id:path.basename(new URL(url).pathname,'.mp3'),title:source.title,artist:source.artist,duration:source.duration,url,ext:'mp3',extractor:'generic',webpage_url:url}:JSON.parse(await this.run(['--dump-single-json','--skip-download','-f',FULL_AUDIO,'--',url],id,60000));
+          let url=sourceURL(source.url);
+          const directHosts={muzend:'muzend.net',musify:'musify.club',topmusicua:'topmusicua.com',miyzvuk:'miyzvuk.net',hitmusic:'cdn.music2019.su'};
+          const info=source.provider==='hitmusic'?await hitMusicInfo(url,this.pageFetcher):directHosts[source.provider]?{id:path.basename(new URL(url).pathname,'.mp3'),title:source.title,artist:source.artist,duration:source.duration,url,ext:'mp3',extractor:'generic',webpage_url:url}:JSON.parse(await this.run(['--dump-single-json','--skip-download','-f',FULL_AUDIO,'--',url],id,60000));
+          if(source.provider==='hitmusic')url=info.url;
           if(directHosts[source.provider]&&new URL(url).hostname!==directHosts[source.provider])throw Error('Недопустимая запись');
           const actual=audioCandidate(info,source.provider);
           if(!actual || isVariant(info.title,track.title) || !sameRecording(track,actual))continue;
-          if(['musify','miyzvuk'].includes(source.provider)) {
+          if(['musify','miyzvuk','hitmusic'].includes(source.provider)) {
             // This host serves the full public audio to native requests; its site
             // extractor handles pages rather than the player MP3 endpoint.
             const controller=new AbortController();this.requests.set(id,controller);const timer=setTimeout(()=>controller.abort(),180000);
@@ -177,6 +192,9 @@ class DesktopMusic {
               if(!response.ok||!/^audio\//i.test(response.headers.get('content-type')||''))throw Error('Не удалось получить полную запись.');
               const input=path.join(staging,'source.mp3');const handle=await fs.open(input,'wx');let size=0;
               try{for await(const chunk of response.body){size+=chunk.length;if(size>256*1024*1024)throw Error('Некорректный файл');await handle.write(chunk);}}finally{await handle.close();}
+              // Public players can label an MP4/AAC recording as audio/mpeg.
+              const header=Buffer.alloc(12),reader=await fs.open(input,'r');try{await reader.read(header,0,12,0);}finally{await reader.close();}
+              if(header.toString('ascii',4,8)==='ftyp')info.ext='m4a';
               info.url=require('node:url').pathToFileURL(input).href;
             }finally{clearTimeout(timer);this.requests.delete(id);}
           }
@@ -189,7 +207,7 @@ class DesktopMusic {
           const audioFormat=['wav','aac'].includes(info.ext)?'m4a':'best';
           const downloadArgs=['--load-info-json',meta,'--no-playlist','--quiet','--no-progress','--max-filesize','256M','-f',FULL_AUDIO,'-x','--audio-format',audioFormat,'--audio-quality','0','--embed-metadata','--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail','-o',path.join(staging,'audio.%(ext)s'),'--print','after_move:filepath'];
           if(directHosts[source.provider])downloadArgs.unshift('--force-generic-extractor');
-          if(['musify','miyzvuk'].includes(source.provider))downloadArgs.unshift('--enable-file-urls');
+          if(['musify','miyzvuk','hitmusic'].includes(source.provider))downloadArgs.unshift('--enable-file-urls');
           let output;
           try{output=await this.run(downloadArgs,id,600000);}catch(error){
             if(!/thumbnail|image|cover|convert.*jpg/i.test(error.message))throw error;
@@ -214,4 +232,4 @@ class DesktopMusic {
     finally{await fs.rm(staging,{recursive:true,force:true});}
   }
 }
-module.exports={DesktopMusic,sourceURL,catalogURL,downloadError,createAudioFetcher};
+module.exports={DesktopMusic,sourceURL,catalogURL,downloadError,createAudioFetcher,createPageFetcher,hitMusicInfo};

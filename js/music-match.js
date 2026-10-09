@@ -15,6 +15,14 @@ export const normalizeSearch=value=>{
 const presentation = /\s*[\[(]?(?:official\s+(?:audio|lyric(?:s)?(?:\s+video)?)|audio\s+only|visuali[sz]er|lyric(?:s)?(?:\s+video)?|provided to youtube)[\])]?\s*/gi;
 const unwanted = /\b(?:cover|karaoke|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts|behind the scenes)\b|[\[(]\s*live\b|\blive\s+(?:at|from|in|on|version|performance|session)\b|\blive\s*[\])]|кавер|концерт|ремикс|караоке|наживо|кліп|клип/i;
 export const cleanTitle = title => String(title || '').replace(presentation,' ').replace(/\s+/g,' ').trim();
+// This label-issued recording uses a localized title across music catalogs.
+const recordingTitles=new Map([['the pinballs|blues of shichiten battou',normalize('七転八倒のブルース')]]);
+const titleKey=track=>{const title=normalize(cleanTitle(track.title));return recordingTitles.get(`${artistKey(track.artist)}|${title}`)||title;};
+const featured=/\s*[\[(]\s*(?:feat\.?|ft\.?|featuring)\s+([^\])]+)[\])]/gi;
+const artistsKey=track=>{
+  const credits=[String(track.artist||''),...[...String(track.title||'').matchAll(featured)].map(m=>m[1])].join(',');
+  return [...new Set(credits.split(/\s+(?:feat\.?|ft\.?|featuring|x)\s+|\s*[,\u0026]\s*/i).map(artistKey).filter(Boolean))].sort().join('|');
+};
 export function isVariant(title, query='') {
   const found=String(title).match(new RegExp(unwanted.source,'gi'))||[];
   return found.some(word=>!normalize(query).includes(normalize(word)));
@@ -25,10 +33,11 @@ export function artistKey(artist) {
 }
 export const songKey = track => `${artistKey(track.artist)}|${normalize(cleanTitle(track.title))}`;
 export function sameRecording(a,b) {
-  const titleA=normalize(cleanTitle(a.title)),titleB=normalize(cleanTitle(b.title));
-  if(!titleA || titleA!==titleB)return false;
+  const titleA=titleKey(a),titleB=titleKey(b),creditsA=artistsKey(a),creditsB=artistsKey(b);
+  const sameCredits=!!creditsA&&creditsA===creditsB;
+  if(!titleA || (titleA!==titleB&&!(sameCredits&&normalize(cleanTitle(a.title).replace(featured,''))===normalize(cleanTitle(b.title).replace(featured,'')))))return false;
   const aa=artistKey(a.artist),bb=artistKey(b.artist);
-  if(!aa||!bb||aa!==bb)return false;
+  if(!aa||!bb||(aa!==bb&&!sameCredits))return false;
   return !a.duration || !b.duration || Math.abs(a.duration-b.duration)<=Math.max(8,a.duration*.04);
 }
 export function audioCandidate(entry, provider) {

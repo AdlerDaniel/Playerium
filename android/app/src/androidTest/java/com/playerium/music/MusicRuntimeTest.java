@@ -16,6 +16,17 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class MusicRuntimeTest {
+    @Test public void localizedTitlesAndReorderedCreditsKeepTheExactRecording() throws Exception {
+        Method matches=MusicEngine.class.getDeclaredMethod("matches",JSONObject.class,JSONObject.class);matches.setAccessible(true);
+        JSONObject requested=new JSONObject().put("title","Blues of Shichiten Battou").put("artist","THE PINBALLS").put("duration",190);
+        JSONObject actual=new JSONObject().put("title","七転八倒のブルース").put("artist","The Pinballs").put("duration",190);
+        assertEquals(true,matches.invoke(null,requested,actual));
+        actual.put("title","七転八倒のブルース (Live)");assertEquals(false,matches.invoke(null,requested,actual));
+        actual.put("title","七転八倒のブルース").put("duration",92);assertEquals(false,matches.invoke(null,requested,actual));
+        requested.put("title","Give Me Everything (feat. Nayer)").put("artist","Pitbull, AFROJACK, Ne-Yo, Nayer").put("duration",253);
+        actual.put("title","Give Me Everything").put("artist","Ne-Yo, Pitbull, Afrojack, Nayer").put("duration",253);assertEquals(true,matches.invoke(null,requested,actual));
+        actual.put("artist","Ne-Yo, Pitbull, Other");assertEquals(false,matches.invoke(null,requested,actual));
+    }
     @Test public void relocatingTheActiveSongKeepsItsPlaybackPosition() {
         assertEquals(42000,MediaNotificationService.retainedPosition(false,"saved","saved",42000));
         assertEquals(0,MediaNotificationService.retainedPosition(true,"saved","saved",42000));

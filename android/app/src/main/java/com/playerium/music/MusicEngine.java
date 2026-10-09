@@ -178,21 +178,40 @@ final class MusicEngine {
     }
     private static String norm(String value){return Normalizer.normalize(value,Normalizer.Form.NFKD).replaceAll("\\p{M}","").toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]+"," ").trim();}
     private static String artist(String value){String key=norm(value.replaceAll("(?i)\\s*-\\s*Topic$","").split("(?i)\\s+(?:feat\\.?|ft\\.?|featuring|x)\\s+|\\s*[,&]\\s*")[0]);switch(key){case "лилу45":case "лілу45":case "lilu45":return "lely45";case "виталии козловскии":case "віталіи козловськии":return "vitaliy kozlovskiy";case "діти інженерів":return "dity inzheneriv";case "саша чемеров":return "sasha chemerov";default:return key;}}
+    private static final java.util.regex.Pattern FEATURED=java.util.regex.Pattern.compile("(?i)\\s*[\\[(]\\s*(?:feat\\.?|ft\\.?|featuring)\\s+([^\\])]+)[\\])]");
+    private static String recordingTitle(String title,String who){String key=norm(title);return artist(who).equals("the pinballs")&&key.equals("blues of shichiten battou")?norm("七転八倒のブルース"):key;}
+    private static String credits(String title,String who){
+        StringBuilder names=new StringBuilder(who);java.util.regex.Matcher featured=FEATURED.matcher(title);while(featured.find())names.append(",").append(featured.group(1));
+        java.util.Set<String> keys=new java.util.TreeSet<>();for(String name:names.toString().split("(?i)\\s+(?:feat\\.?|ft\\.?|featuring|x)\\s+|\\s*[,&]\\s*")){String key=artist(name);if(!key.isEmpty())keys.add(key);}return String.join("|",keys);
+    }
     private static boolean matches(JSONObject track,JSONObject info) {
         String title=info.optString("track",info.optString("title")),who=info.optString("artist",info.optString("uploader",info.optString("channel")));
         JSONArray credits=info.optJSONArray("artists");boolean credited=!info.optString("artist").isEmpty()||credits!=null&&credits.length()>0;
-        if(info.optString("artist").isEmpty()&&credits!=null&&credits.length()>0){who=credits.optString(0);}
+        if(info.optString("artist").isEmpty()&&credits!=null&&credits.length()>0){StringBuilder names=new StringBuilder();for(int i=0;i<credits.length();i++){if(i>0)names.append(", ");names.append(credits.optString(i));}who=names.toString();}
         if(title.matches(".*\\s[-–—]\\s.*")){String[] parts=title.split("\\s[-–—]\\s",2);if(!credited){who=parts[0];title=parts[1];}else if(artist(parts[0]).equals(artist(who)))title=parts[1];}
         String raw=info.optString("title").toLowerCase(Locale.ROOT);
         java.util.regex.Matcher variant=java.util.regex.Pattern.compile("\\b(?:cover|karaoke|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts|live)\\b|кавер|концерт|ремикс|караоке|наживо|кліп|клип").matcher(raw);
         while(variant.find())if(!norm(track.optString("title")).contains(norm(variant.group())))return false;
         title=title.replaceAll("(?i)\\s*[\\[(]?(?:official\\s+(?:audio|lyric(?:s)?(?:\\s+video)?)|audio\\s+only|visuali[sz]er|lyric(?:s)?(?:\\s+video)?)[\\])]?\\s*"," ").trim();
         double duration=track.optDouble("duration",0),actual=info.optDouble("duration",0);
-        return norm(title).equals(norm(track.optString("title")))&&artist(who).equals(artist(track.optString("artist")))&&(! (duration>0&&actual>0)||Math.abs(duration-actual)<=Math.max(8,duration*.04));
+        String requested=track.optString("title"),requestedArtist=track.optString("artist"),keys=credits(title,who);boolean sameCredits=!keys.isEmpty()&&keys.equals(credits(requested,requestedArtist));
+        String baseTitle=norm(FEATURED.matcher(title).replaceAll(""));
+        String requestedBase=norm(FEATURED.matcher(requested).replaceAll(""));
+        boolean sameTitle=recordingTitle(title,who).equals(recordingTitle(requested,requestedArtist))||(sameCredits&&baseTitle.equals(requestedBase));
+        return sameTitle&&(artist(who).equals(artist(requestedArtist))||sameCredits)&&(! (duration>0&&actual>0)||Math.abs(duration-actual)<=Math.max(8,duration*.04));
     }
     private static String source(String value) throws Exception {
         URL url=new URL(value);String h=url.getHost().toLowerCase(Locale.ROOT);
+        if(h.equals("hit.music2019.su")&&url.getProtocol().equals("https")&&url.getUserInfo()==null&&url.getPort()==-1&&url.getQuery()==null&&url.getRef()==null&&url.getPath().matches("/track/\\d+"))return value;
         if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||url.getPort()!=-1||!(h.equals("www.youtube.com")||h.equals("music.youtube.com")||h.equals("youtube.com")||h.equals("youtu.be")||h.equals("soundcloud.com")||h.endsWith(".bandcamp.com")||h.equals("audius.co")||h.equals("archive.org")||(h.equals("muzend.net")&&url.getPath().matches("(?i)/uploads/music/[^?#]+\\.mp3")&&url.getQuery()==null)||(h.equals("musify.club")&&url.getPath().matches("(?i)/track/pl/\\d+/[^/?#]+\\.mp3")&&url.getQuery()==null&&url.getRef()==null)||(h.equals("miyzvuk.net")&&url.getPath().matches("(?i)/uploads/public_files/[^?#]+\\.mp3")&&url.getQuery()==null&&url.getRef()==null)||(h.equals("topmusicua.com")&&url.getPath().matches("(?i)/uploads/files/[^?#]+\\.mp3")&&url.getQuery()==null&&url.getRef()==null)))throw new SecurityException("Недопустимая запись");return value;
+    }
+    private JSONObject hitMusicInfo(String page) throws Exception {
+        String text=get(page);java.util.regex.Matcher title=java.util.regex.Pattern.compile("(?i)<meta\\s+property=\"og:title\"\\s+content=\"([^\"]+)\"").matcher(text),audio=java.util.regex.Pattern.compile("(?i)\\bmp3source=\"([^\"]+)\"").matcher(text);
+        if(!title.find()||!audio.find())throw new IOException("Не удалось получить полную запись.");
+        String label=android.text.Html.fromHtml(title.group(1),0).toString().replaceAll("(?i)\\s+-\\s+Скачать.*$","");String[] parts=label.split("\\s[-–—]\\s",2);
+        String value=android.text.Html.fromHtml(audio.group(1),0).toString();URL url=new URL(value);
+        if(parts.length!=2||!url.getProtocol().equals("https")||!url.getHost().equals("cdn.music2019.su")||url.getUserInfo()!=null||url.getPort()!=-1||url.getRef()!=null||!url.getPath().matches("/{1,2}")||url.getQuery()==null||!url.getQuery().matches("h=[\\w-]{32,1024}(?:\\\\{2})?"))throw new SecurityException("Недопустимая запись");
+        return new JSONObject().put("id",new URL(page).getPath().substring(7)).put("title",parts[1]).put("artist",parts[0]).put("url",value).put("ext","mp3").put("extractor","generic").put("webpage_url",page);
     }
     private JSONObject download(JSONObject payload,String requestId) throws Exception {
         JSONObject track=payload.getJSONObject("track");String key=track.getString("id");if(!key.matches("song_[0-9a-f]+"))throw new SecurityException("Недопустимая запись");
@@ -207,18 +226,20 @@ final class MusicEngine {
                     JSONObject candidate=sources.getJSONObject(i);String audioUrl=source(candidate.getString("url"));
                     JSONObject info;
                     String directHost=candidate.optString("provider").equals("muzend")?"muzend.net":candidate.optString("provider").equals("musify")?"musify.club":candidate.optString("provider").equals("topmusicua")?"topmusicua.com":candidate.optString("provider").equals("miyzvuk")?"miyzvuk.net":null;
-                    if(directHost!=null) {
+                    if(candidate.optString("provider").equals("hitmusic")){info=hitMusicInfo(audioUrl);audioUrl=info.getString("url");directHost="cdn.music2019.su";}
+                    else if(directHost!=null) {
                         if(!new URL(audioUrl).getHost().equals(directHost))throw new SecurityException("Недопустимая запись");
                         info=new JSONObject().put("id",new File(new URL(audioUrl).getPath()).getName()).put("title",candidate.getString("title")).put("artist",candidate.getString("artist")).put("duration",candidate.optDouble("duration",0)).put("url",audioUrl).put("ext","mp3").put("extractor","generic").put("webpage_url",audioUrl);
                     }else info=new JSONObject(run(Arrays.asList("--dump-single-json","--skip-download","-f",FULL_AUDIO,"--",audioUrl),requestId,60000));
                     if(!matches(track,info))continue;
-                    if(Arrays.asList("musify","miyzvuk").contains(candidate.optString("provider"))) {
+                    if(Arrays.asList("musify","miyzvuk","hitmusic").contains(candidate.optString("provider"))) {
                         HttpURLConnection connection=(HttpURLConnection)new URL(audioUrl).openConnection();connection.setConnectTimeout(15000);connection.setReadTimeout(30000);
                         File input=new File(staging,"source.mp3");
                         try {
                             if(connection.getResponseCode()!=200||!String.valueOf(connection.getContentType()).startsWith("audio/")||!connection.getURL().getProtocol().equals("https"))throw new IOException("Не удалось получить полную запись.");
                             try(InputStream in=connection.getInputStream();OutputStream out=new FileOutputStream(input)){byte[] buffer=new byte[65536];long size=0;int n;while((n=in.read(buffer))!=-1){if(Thread.currentThread().isInterrupted())throw new InterruptedIOException();size+=n;if(size>256L*1024*1024)throw new IOException("Invalid audio");out.write(buffer,0,n);}}
                         }finally{connection.disconnect();}
+                        byte[] header=new byte[12];try(InputStream in=new FileInputStream(input)){if(in.read(header)==12&&new String(header,4,4,StandardCharsets.US_ASCII).equals("ftyp"))info.put("ext","m4a");}
                         info.put("url",input.toURI().toString());
                     }
                     for(String field:new String[]{"title","artist","album","genre","isrc"})if(!track.optString(field).isEmpty()){info.put(field,track.getString(field));info.put("meta_"+field,track.getString(field));}
@@ -229,7 +250,7 @@ final class MusicEngine {
                     String audioFormat=Arrays.asList("wav","aac").contains(info.optString("ext"))?"m4a":"best";
                     List<String> downloadArgs=new ArrayList<>(Arrays.asList("--load-info-json",meta.getAbsolutePath(),"--no-playlist","--quiet","--no-progress","--max-filesize","256M","-f",FULL_AUDIO,"-x","--audio-format",audioFormat,"--audio-quality","0","--embed-metadata","--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail","-o",new File(staging,"audio.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"));
                     if(directHost!=null)downloadArgs.add(0,"--force-generic-extractor");
-                    if(Arrays.asList("musify","miyzvuk").contains(candidate.optString("provider")))downloadArgs.add(0,"--enable-file-urls");
+                    if(Arrays.asList("musify","miyzvuk","hitmusic").contains(candidate.optString("provider")))downloadArgs.add(0,"--enable-file-urls");
                     String result;
                     try{result=run(downloadArgs,requestId,600000);}catch(Exception e){
                         if(!String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT).matches("(?s).*(thumbnail|image|cover|convert.*jpg).*"))throw e;

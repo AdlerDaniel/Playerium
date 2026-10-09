@@ -1,5 +1,42 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {indexedDB}=require('fake-indexeddb');
+test('verified fallback recordings appear immediately and remain usable when live search fails',async(t)=>{
+ global.window={electronAPI:{musicRequest:async()=>{throw Error('Network unavailable');}}};global.document={querySelectorAll:()=>[]};
+ const {MusicCatalog}=await import('../js/music-catalog.js');const catalog=new MusicCatalog({search:()=>[]},{});let immediate;
+ t.mock.timers.enable({apis:['setTimeout']});let finish;const done=new Promise(resolve=>finish=resolve);
+ catalog.schedule('Schmalgauzen Jessica',(rows,busy,error)=>{immediate=rows;if(!busy){assert.equal(error,null);assert.equal(rows[0].sources[0].provider,'hitmusic');finish();}});
+ assert.equal(immediate[0].title,'Jessica - Single Version');t.mock.timers.tick(600);await done;
+});
+test('localized recording titles and reordered full credits preserve exact versions',async()=>{
+ const {sameRecording}=await import('../js/music-match.js');
+ const pinballs={title:'Blues of Shichiten Battou',artist:'THE PINBALLS',duration:190};
+ assert.ok(sameRecording(pinballs,{title:'七転八倒のブルース',artist:'The Pinballs',duration:190}));
+ assert.ok(!sameRecording(pinballs,{title:'七転八倒のブルース (short ver.)',artist:'The Pinballs',duration:92}));
+ assert.ok(!sameRecording(pinballs,{title:'七転八倒のブルース (Live)',artist:'The Pinballs',duration:190}));
+ assert.ok(!sameRecording(pinballs,{title:'七転八倒のブルース',artist:'Other',duration:190}));
+ const pitbull={title:'Give Me Everything (feat. Nayer)',artist:'Pitbull, AFROJACK, Ne-Yo, Nayer',duration:253};
+ assert.ok(sameRecording(pitbull,{title:'Give Me Everything',artist:'Ne-Yo, Pitbull, Afrojack, Nayer',duration:253}));
+ assert.ok(!sameRecording(pitbull,{title:'Give Me Everything',artist:'Ne-Yo, Pitbull, Other',duration:253}));
+ assert.ok(!sameRecording(pitbull,{title:'Give Me Everything (Remix)',artist:pitbull.artist,duration:253}));
+});
+test('confirmed source registry supplements search without replacing live or alternate masters',async()=>{
+ const {recordingSources}=await import('../js/music-recordings.js');
+ assert.equal(recordingSources('Schmalgauzen Jessica')[0].sources[0].provider,'hitmusic');
+ assert.equal(recordingSources('THE PINBALLS Blues of Shichiten Battou')[0].album,'Number Seven');
+ assert.equal(recordingSources('Pixies Where Is My Mind Live').length,0);
+ assert.equal(recordingSources('Other Jessica').length,0);
+});
+test('page-backed audio refreshes public CDN tokens and rejects arbitrary hosts and parameters',async()=>{
+ const {hitMusicInfo,sourceURL}=require('../desktop-music');const page='https://hit.music2019.su/track/3158';
+ assert.equal(sourceURL(page),page);
+ for(const url of [page+'?redirect=https://localhost',page+'#fragment','https://hit.music2019.su/track/3158.mp3'])assert.throws(()=>sourceURL(url));
+ const html=url=>`<meta property="og:title" content="Schmalgauzen - Jessica (Single Version) - Скачать бесплатно"><div mp3source="${url}">`;
+ const fetcher=text=>async()=>({ok:true,text:async()=>text});const token='a'.repeat(64);
+ const info=await hitMusicInfo(page,fetcher(html('https://cdn.music2019.su//?h='+token)));
+ assert.equal(info.artist,'Schmalgauzen');assert.equal(info.title,'Jessica (Single Version)');assert.equal(info.webpage_url,page);
+ assert.ok(await hitMusicInfo(page,fetcher(html('https://cdn.music2019.su//?h='+token+'\\\\'))));
+ for(const url of ['https://localhost//?h='+token,'http://cdn.music2019.su//?h='+token,'https://cdn.music2019.su//?h='+token+'&url=https://localhost','https://cdn.music2019.su//?h=short'])await assert.rejects(hitMusicInfo(page,fetcher(html(url))));
+});
 test('one original recording combines providers, metadata and offline copy without covers or clips',async()=>{
   const {mergeSongs,audioCandidate}=await import('../js/music-match.js');
   const official=audioCandidate({id:'abcdefghijk',title:'Повільне диско',artist:'KLER x OTOY',duration:253,uploader:'KLER - Topic'},'youtubeMusic');

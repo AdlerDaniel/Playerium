@@ -9,7 +9,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
 const { DesktopUpdater } = require('./desktop-updater');
-const { DesktopMusic, downloadError, createAudioFetcher } = require('./desktop-music');
+const { DesktopMusic, downloadError, createAudioFetcher, createPageFetcher } = require('./desktop-music');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
@@ -132,7 +132,7 @@ app.whenReady().then(async () => {
       picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null };
   });
   handle('shell:openExternal', openExternal);
-  const music=new DesktopMusic({app,fetcher:(url,options)=>net.fetch(url,options),audioFetcher:createAudioFetcher(net),authorize,
+  const music=new DesktopMusic({app,fetcher:(url,options)=>net.fetch(url,options),audioFetcher:createAudioFetcher(net),pageFetcher:createPageFetcher(net),authorize,
     onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));},
     onProgress:state=>mainWindow?.webContents.send('music:progress',state)});
   handle('music:request',async(operation,payload,id)=>{

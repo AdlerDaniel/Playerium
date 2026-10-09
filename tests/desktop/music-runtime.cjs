@@ -19,11 +19,17 @@ const {DesktopMusic}=require('../../desktop-music');
     const result=await engine.request('download',{track,folderSource:root},'fixture-save');
     const {parseFile}=await import('music-metadata');const embedded=await parseFile(result.fullPath);
     assert.equal(embedded.common.title,track.title);assert.equal(embedded.common.artist,track.artist);assert.equal(embedded.common.album,track.album);assert.equal(embedded.common.genre[0],track.genre);assert.equal(embedded.common.year,2026);assert.equal(embedded.common.track.no,2);assert.ok(embedded.common.picture?.[0]?.data.length);assert.ok(embedded.format.duration>1.9);
+    const mp4=await fs.readFile(result.fullPath);
     assert.equal((await engine.request('restore',{},'fixture-restore')).length,1);
     await engine.request('delete',{downloadId:track.id},'fixture-delete');assert.equal(await fs.stat(result.fullPath).catch(()=>null),null);assert.equal((await engine.request('restore',{},'fixture-restored')).length,0);
     const noCover=await engine.request('download',{track:{...track,id:'song_f5678',sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/no-cover'}]},folderSource:root},'fixture-no-cover');
     const withoutCover=await parseFile(noCover.fullPath);assert.equal(withoutCover.common.title,track.title);assert.ok(withoutCover.format.duration>1.9);
     await engine.request('delete',{downloadId:'song_f5678'},'fixture-delete-no-cover');
+    engine.pageFetcher=async()=>({ok:true,text:async()=>`<meta property="og:title" content="Playerium - Studio song - Скачать бесплатно"><div mp3source="https://cdn.music2019.su//?h=${'a'.repeat(64)}">`});
+    engine.audioFetcher=async()=>({ok:true,headers:{get:()=> 'audio/mpeg'},body:[mp4]});
+    const mislabeled=await engine.request('download',{track:{...track,id:'song_f9012',sources:[{provider:'hitmusic',url:'https://hit.music2019.su/track/3158',official:false}]},folderSource:root},'fixture-mislabeled');
+    const actual=await parseFile(mislabeled.fullPath);assert.equal(path.extname(mislabeled.fullPath),'.m4a');assert.equal(actual.common.album,track.album);assert.ok(actual.format.duration>1.9);
+    await engine.request('delete',{downloadId:'song_f9012'},'fixture-delete-mislabeled');
     console.log('Bundled audio transfer, fallback, tags, cover, restore and deletion passed');
   }finally{await new Promise(resolve=>server.close(resolve));await fs.rm(root,{recursive:true,force:true});}
 })().catch(error=>{console.error(error);process.exitCode=1;});
