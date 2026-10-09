@@ -354,4 +354,7 @@ input:checked + .slider-toggle:before {
 .update-status { margin-top: 16px; font-size: 13px; color: var(--sp-text-secondary); font-variant-numeric: tabular-nums; }
 .update-progress { height: 4px; margin-top: 10px; overflow: hidden; border-radius: 4px; background: var(--sp-dark-700); }
 #updateProgressBarFill { height: 100%; width: 0; background: var(--sp-green); transition: width 150ms ease-out; }
+.update-progress.indeterminate #updateProgressBarFill { width: 40% !important; animation: update-installing 1.4s ease-in-out infinite; }
+@keyframes update-installing { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { .update-progress.indeterminate #updateProgressBarFill { animation: none; width: 100% !important; } }
 @media (prefers-reduced-motion: reduce) { #updateProgressBarFill { transition: none; } }

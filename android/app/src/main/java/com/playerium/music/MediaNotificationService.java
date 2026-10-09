@@ -2,6 +2,9 @@ package com.playerium.music;
 
 import android.content.Intent;
 import android.content.Context;
+import android.app.PendingIntent;
+import android.content.SharedPreferences;
+import android.os.SystemClock;
 import java.util.concurrent.atomic.AtomicReference;
 import android.media.audiofx.Equalizer;
 import android.net.Uri;
@@ -17,6 +20,8 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -27,6 +32,10 @@ import java.util.List;
 public class MediaNotificationService extends MediaSessionService {
     private static volatile String stateSnapshot = "{}";
     private static final AtomicReference<String> pendingQueue = new AtomicReference<>();
+    static void resumeIfSaved(Context context) {
+        if("{}".equals(stateSnapshot)&&!context.getSharedPreferences("playerium_playback",MODE_PRIVATE).getString("queue","").isEmpty())
+            context.startService(new Intent(context,MediaNotificationService.class));
+    }
     public static void submitQueue(Context context, String queue) {
         pendingQueue.set(queue);
         // Large libraries must not be serialized into Binder Intent extras.
@@ -37,13 +46,16 @@ public class MediaNotificationService extends MediaSessionService {
     private Equalizer equalizer;
     private String equalizerSettings;
     private String error;
+    private SharedPreferences playbackPrefs;
+    private long lastSaved;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable publishState = new Runnable() {
         @Override public void run() {
             MainActivity activity = MainActivity.getInstance();
             JSONObject data = state();
             stateSnapshot = data.toString();
-            if (activity != null) activity.sendPlayerState(data);
+            if (activity != null && activity.isForeground()) activity.sendPlayerState(data);
+            if (SystemClock.elapsedRealtime()-lastSaved>5000) savePlayback();
             error = null;
             handler.postDelayed(this, 500);
         }
@@ -51,6 +63,7 @@ public class MediaNotificationService extends MediaSessionService {
 
     @Override public void onCreate() {
         super.onCreate();
+        playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
 
         player = new ExoPlayer.Builder(this).build();
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true);
@@ -62,8 +75,24 @@ public class MediaNotificationService extends MediaSessionService {
                 player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
             @Override public void onAudioSessionIdChanged(int id) { configureEqualizer(id); }
+            @Override public void onEvents(Player ignored,Player.Events events) {
+                savePlayback();JSONObject data=state();stateSnapshot=data.toString();
+                MainActivity activity=MainActivity.getInstance();if(activity!=null&&activity.isForeground())activity.sendPlayerState(data);
+            }
         });
-        session = new MediaSession.Builder(this, player).build();
+        PendingIntent activityIntent=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        session = new MediaSession.Builder(this, player).setSessionActivity(activityIntent)
+            .setCallback(new MediaSession.Callback() {
+                @Override public ListenableFuture<MediaSession.MediaItemsWithStartPosition> onPlaybackResumption(MediaSession ignored,MediaSession.ControllerInfo controller) {
+                    if(player.getMediaItemCount()==0)restorePlayback();
+                    List<MediaItem> items=new ArrayList<>();
+                    for(int i=0;i<player.getMediaItemCount();i++)items.add(player.getMediaItemAt(i));
+                    if(items.isEmpty())return Futures.immediateFailedFuture(new IllegalStateException("Нет сохранённой очереди"));
+                    return Futures.immediateFuture(new MediaSession.MediaItemsWithStartPosition(items,player.getCurrentMediaItemIndex(),Math.max(0,player.getCurrentPosition())));
+                }
+            }).build();
+        if(pendingQueue.get()==null)restorePlayback();
         handler.post(publishState);
     }
 
@@ -81,7 +110,7 @@ public class MediaNotificationService extends MediaSessionService {
                 if (intent.hasExtra("equalizer")) { equalizerSettings = intent.getStringExtra("equalizer"); configureEqualizer(player.getAudioSessionId()); }
             } catch (Exception e) { error = "Не удалось обновить очередь воспроизведения"; }
         }
-        return result;
+        return player.getPlayWhenReady()&&player.getMediaItemCount()>0?START_STICKY:result;
     }
 
     private void setQueue(JSONObject data) throws Exception {
@@ -112,13 +141,40 @@ public class MediaNotificationService extends MediaSessionService {
             player.addMediaItems(items.subList(index + 1, items.size()));
             player.replaceMediaItem(index, items.get(index));
         } else {
-            long position=retainedPosition(data.optBoolean("reset"),currentId,items.get(index).mediaId,player.getCurrentPosition());
+            long position=data.has("position")?Math.max(0,data.optLong("position")):retainedPosition(data.optBoolean("reset"),currentId,items.get(index).mediaId,player.getCurrentPosition());
             player.setMediaItems(items, index, position);
             player.prepare();
             player.setPlayWhenReady(play);
         }
         player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
         player.setVolume((float)data.optDouble("volume", 0.8));
+        savePlayback();
+    }
+
+    private void restorePlayback() {
+        try {
+            String saved=playbackPrefs.getString("queue","");
+            if(!saved.isEmpty())setQueue(new JSONObject(saved));
+        }catch(Exception ignored){playbackPrefs.edit().remove("queue").apply();}
+    }
+
+    private void savePlayback() {
+        if(player==null||playbackPrefs==null)return;
+        try {
+            if(player.getMediaItemCount()==0){playbackPrefs.edit().remove("queue").apply();return;}
+            JSONArray tracks=new JSONArray();
+            for(int i=0;i<player.getMediaItemCount();i++){
+                MediaItem item=player.getMediaItemAt(i);if(item.localConfiguration==null)continue;
+                tracks.put(new JSONObject().put("id",item.mediaId).put("uri",item.localConfiguration.uri.toString())
+                    .put("title",String.valueOf(item.mediaMetadata.title==null?"":item.mediaMetadata.title))
+                    .put("artist",String.valueOf(item.mediaMetadata.artist==null?"":item.mediaMetadata.artist))
+                    .put("album",String.valueOf(item.mediaMetadata.albumTitle==null?"":item.mediaMetadata.albumTitle)));
+            }
+            JSONObject data=new JSONObject().put("tracks",tracks).put("index",player.getCurrentMediaItemIndex())
+                .put("play",player.getPlayWhenReady()).put("position",Math.max(0,player.getCurrentPosition()))
+                .put("volume",player.getVolume()).put("repeat",player.getRepeatMode()==Player.REPEAT_MODE_ONE?"one":player.getRepeatMode()==Player.REPEAT_MODE_ALL?"all":"off");
+            playbackPrefs.edit().putString("queue",data.toString()).apply();lastSaved=SystemClock.elapsedRealtime();
+        }catch(Exception ignored){}
     }
 
     static long retainedPosition(boolean reset,String currentId,String nextId,long position) {
@@ -176,9 +232,11 @@ public class MediaNotificationService extends MediaSessionService {
     public static String currentState() { return stateSnapshot; }
 
     @Override public void onTaskRemoved(Intent rootIntent) {
+        savePlayback();
         if (!player.getPlayWhenReady() || player.getMediaItemCount() == 0) stopSelf();
     }
     @Override public void onDestroy() {
+        savePlayback();
         handler.removeCallbacksAndMessages(null);
         if (equalizer != null) equalizer.release();
         session.release(); player.release(); stateSnapshot = "{}";

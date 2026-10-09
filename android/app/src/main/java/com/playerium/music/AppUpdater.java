@@ -179,6 +179,7 @@ final class AppUpdater {
             params.setAppPackageName(activity.getPackageName()); params.setSize(apkFile().length());
             if (Build.VERSION.SDK_INT >= 31) params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
             sessionId = installer.createSession(params);
+            prefs.edit().putBoolean("restart_after_update",true).putInt("install_session",sessionId).commit();
             try (PackageInstaller.Session session = installer.openSession(sessionId)) {
                 try (InputStream input = new java.io.FileInputStream(apkFile()); OutputStream out = session.openWrite("base.apk", 0, apkFile().length())) {
                     byte[] buffer = new byte[65536]; int n; while ((n = input.read(buffer)) != -1) out.write(buffer, 0, n);
@@ -207,6 +208,6 @@ final class AppUpdater {
     private void fail(String message) {
         long id = prefs.getLong("download", -1);
         if (id > 0) ((DownloadManager)activity.getSystemService(Context.DOWNLOAD_SERVICE)).remove(id);
-        prefs.edit().remove("download").remove("permission_pending").remove("permission_opened").apply();busy.set(false);state("failed", 0, message);
+        prefs.edit().remove("download").remove("permission_pending").remove("permission_opened").remove("restart_after_update").remove("install_session").apply();busy.set(false);state("failed", 0, message);
     }
 }

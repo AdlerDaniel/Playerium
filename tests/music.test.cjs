@@ -86,6 +86,61 @@ test('download diagnostics distinguish access restrictions, networking and stora
   assert.match(protectedError,/защищена/);assert.equal(downloadError(Error(protectedError)),protectedError);
   assert.ok(!downloadError(Error('HTTP Error 403 https://secret.invalid/token')).includes('https://'));
 });
+test('exact requested live and remaster versions survive while additional covers are excluded',async()=>{
+  const {isVariant,sameRecording}=await import('../js/music-match.js');
+  assert.equal(isVariant('About A Girl (Live)','About A Girl - Live'),false);
+  assert.equal(isVariant('About A Girl (Live Cover)','About A Girl - Live'),true);
+  assert.equal(isVariant('About A Girl (Live)','About A Girl'),true);
+  assert.equal(sameRecording({title:'Song - 2023 Remaster',artist:'Artist'},{title:'Song (2023 Remaster)',artist:'Artist'}),true);
+  assert.equal(sameRecording({title:'Song - 2023 Remaster',artist:'Artist'},{title:'Song',artist:'Artist'}),false);
+});
+test('verified alternate artist names match without accepting a different performer',async()=>{
+  const {sameRecording,normalizeSearch}=await import('../js/music-match.js');
+  assert.equal(sameRecording({title:'Морфін',artist:'Лилу45, МУЛЬТИТРЕК'},{title:'Морфін',artist:'Lely45 & МУЛЬТИТРЕК'}),true);
+  assert.equal(sameRecording({title:'Пінаколада',artist:'Виталий Козловский'},{title:'Пінаколада',artist:'Віталій Козловський'}),true);
+  assert.equal(sameRecording({title:'Song',artist:'Лилу45'},{title:'Song',artist:'Other'}),false);
+  assert.equal(normalizeSearch('Лилу45 Морфін'),normalizeSearch('Lely45 Морфін'));
+});
+test('new direct sources accept only their fixed audio paths',()=>{
+  const {sourceURL,catalogURL}=require('../desktop-music');
+  assert.equal(sourceURL('https://musify.club/track/pl/2115/nirvana.mp3'),'https://musify.club/track/pl/2115/nirvana.mp3');
+  assert.equal(sourceURL('https://topmusicua.com/uploads/files/2025-07/song.mp3'),'https://topmusicua.com/uploads/files/2025-07/song.mp3');
+  assert.equal(sourceURL('https://miyzvuk.net/uploads/public_files/2024-11/song.mp3'),'https://miyzvuk.net/uploads/public_files/2024-11/song.mp3');
+  for(const url of ['https://miyzvuk.net/engine/go.php?url=file:///private','https://miyzvuk.net/uploads/public_files/song.mp3?url=https://localhost','https://miyzvuk.net.evil.test/uploads/public_files/song.mp3'])assert.throws(()=>sourceURL(url));
+  assert.throws(()=>sourceURL('https://musify.club/track/pl/123/song.mp3#other'));
+  for(const url of ['https://musify.club/track/dl/2115/song.mp3','https://musify.club/track/pl/2115/song.mp3?url=https://localhost','https://musify.club.evil.test/track/pl/2115/song.mp3','https://topmusicua.com/search/song.mp3'])assert.throws(()=>sourceURL(url));
+  assert.match(catalogURL('musify','Nirvana Song'),/SearchText=Nirvana%20Song$/);
+  assert.match(catalogURL('topmusicua','Song'),/story=Song$/);
+});
+test('fallback tries candidates beyond the native eight-source limit',async()=>{
+  global.window={};global.document={querySelectorAll:()=>[]};const batches=[];
+  const {MusicCatalog}=await import('../js/music-catalog.js');
+  const song={id:'song_ab17',title:'Song',artist:'Artist',catalog:true,sources:Array.from({length:10},(_,i)=>({provider:'musify',url:`https://musify.club/track/pl/${i}/song.mp3`}))};
+  window.electronAPI={musicRequest:async(op,p)=>{assert.equal(op,'download');batches.push(p.track.sources);if(batches.length===1)throw Error('Аудиосервис ограничил доступ');return {};}};
+  const lib={getTracks:()=>[],folders:[],addDownloaded:async()=>song};await new MusicCatalog(lib,{renderSidebar:()=>{}}).ensureTrack(song);
+  assert.deepEqual(batches.map(b=>b.length),[8,2]);assert.equal(batches.flat().length,10);
+});
+test('reopening cached multi-provider search keeps the results',async()=>{
+  global.window={electronAPI:{musicRequest:async()=>assert.fail('cached results must not request providers')}};
+  const {MusicCatalog}=await import('../js/music-catalog.js');const lib={search:()=>[]};const catalog=new MusicCatalog(lib,{});
+  catalog.cache.set('song',{time:Date.now(),groups:[[{title:'Song',artist:'Artist',sources:[],catalog:true}],[{title:'Song',artist:'Artist',album:'Album',sources:[],catalog:true}]]});
+  let rows;catalog.schedule('Song',(results,busy)=>{rows=results;assert.equal(busy,false);});assert.equal(rows.length,1);assert.equal(rows[0].album,'Album');
+});
+test('decoded short previews are rejected before any download is published',async()=>{
+  const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');const {DesktopMusic}=require('../desktop-music');
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'playerium-duration-test-'));
+  try {
+    const engine=new DesktopMusic({app:{getPath:()=>root,isPackaged:false},authorize:async p=>p});
+    engine.run=async args=>{
+      const metadata=args[args.indexOf('--load-info-json')+1],file=path.join(path.dirname(metadata),'audio.wav');
+      const pcm=Buffer.alloc(16000),header=Buffer.alloc(44);header.write('RIFF');header.writeUInt32LE(36+pcm.length,4);header.write('WAVEfmt ',8);header.writeUInt32LE(16,16);header.writeUInt16LE(1,20);header.writeUInt16LE(1,22);header.writeUInt32LE(8000,24);header.writeUInt32LE(16000,28);header.writeUInt16LE(2,32);header.writeUInt16LE(16,34);header.write('data',36);header.writeUInt32LE(pcm.length,40);
+      await fs.writeFile(file,Buffer.concat([header,pcm]));return file;
+    };
+    const track={id:'song_ab19',title:'Song',artist:'Artist',duration:180,sources:[{provider:'topmusicua',url:'https://topmusicua.com/uploads/files/song.mp3',title:'Song',artist:'Artist',duration:180}]};
+    await assert.rejects(engine.request('download',{track,folderSource:path.join(root,'downloads')},'test-preview'),/не совпадает/);
+    assert.deepEqual(await fs.readdir(path.join(root,'downloads')),[]);assert.deepEqual(await engine.records(),{});
+  }finally{await fs.rm(root,{recursive:true,force:true});}
+});
 
 test('music search retains official audio credits, album and duration while excluding videos',async()=>{
   const {youtubeMusicEntries}=await import('../js/music-youtube.js');
@@ -105,12 +160,36 @@ test('music search retains official audio credits, album and duration while excl
 test('known song audio is attempted before discovery, and discovery network errors reach the user',async()=>{
   global.window={};global.document={querySelectorAll:()=>[]};global.DOMParser=class {parseFromString(){return {querySelectorAll:()=>[]};}};
   const {MusicCatalog}=await import('../js/music-catalog.js');
-  const song={id:'song_ab14',title:'747',artist:'DOROFEEVA',duration:174,catalog:true,sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/watch?v=abcdefghijk'}]};
+  const song={id:'song_ab14',title:'747',artist:'DOROFEEVA',album:'747 - Single',pictureUrl:'https://is1-ssl.mzstatic.com/image.jpg',duration:174,catalog:true,sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/watch?v=abcdefghijk'}]};
   const lib={getTracks:()=>[],folders:[],addDownloaded:async()=>song};
   window.electronAPI={musicRequest:async(op)=>{assert.equal(op,'download');return {};}};
   const catalog=new MusicCatalog(lib,{renderSidebar:()=>{}});await catalog.ensureTrack(song);
   window.electronAPI.musicRequest=async()=>{throw Error('Не удалось соединиться с аудиосервисом.');};
   await assert.rejects(catalog.ensureTrack({...song,sources:[]}),/соединиться/);
+});
+test('direct audio receives missing album and cover metadata before saving, while catalog failures do not prevent a known download',async()=>{
+  global.window={};global.document={querySelectorAll:()=>[]};
+  const {MusicCatalog}=await import('../js/music-catalog.js');const calls=[];
+  const song={id:'song_ab20',title:'Song',artist:'Artist',catalog:true,sources:[{provider:'musify',url:'https://musify.club/track/pl/123/song.mp3',title:'Song',artist:'Artist'}]};
+  const lib={getTracks:()=>[],folders:[],addDownloaded:async(record,track)=>track};
+  window.electronAPI={musicRequest:async(op,payload)=>{calls.push({op,payload});if(op==='download')return {};return {results:[{trackName:'Song',artistName:'Artist',collectionName:'Album',artworkUrl100:'https://is1-ssl.mzstatic.com/100x100bb.jpg',trackTimeMillis:180000,releaseDate:'2025-01-01'}]};}};
+  const catalog=new MusicCatalog(lib,{renderSidebar:()=>{}});const saved=await catalog.ensureTrack(song);
+  assert.equal(saved.album,'Album');assert.equal(saved.duration,180);assert.match(saved.pictureUrl,/600x600bb/);
+  assert.equal(calls.at(-1).op,'download');assert.equal(calls.at(-1).payload.track.album,'Album');
+  window.electronAPI.musicRequest=async(op)=>{if(op==='catalog')throw Error('Catalog unavailable');return {};};
+  assert.equal((await catalog.ensureTrack(song)).title,'Song');
+});
+test('native audio transport streams the full body, rejects HTML and unsafe redirects, and settles stalled or cancelled requests',async(t)=>{
+  const {EventEmitter}=require('node:events'),{PassThrough}=require('node:stream'),{createAudioFetcher}=require('../desktop-music');let request;
+  const net={request:()=>{request=new EventEmitter();request.end=()=>{};request.abort=()=>{request.aborted=true;request.emit('abort');request.emit('close');};request.followRedirect=()=>{request.followed=true;};return request;}};
+  const fetcher=createAudioFetcher(net);
+  let response=fetcher('https://musify.club/track/pl/1/song.mp3');const stream=new PassThrough();stream.statusCode=200;stream.headers={'content-type':'audio/mpeg'};request.emit('response',stream);stream.end(Buffer.from('complete audio'));
+  let body='';for await(const chunk of (await response).body)body+=chunk;assert.equal(body,'complete audio');request.emit('close');
+  response=fetcher('https://musify.club/track/pl/1/song.mp3');const html=new PassThrough();html.statusCode=200;html.headers={'content-type':'text/html'};request.emit('response',html);await assert.rejects(response,/полную запись/);assert.equal(request.aborted,true);
+  response=fetcher('https://musify.club/track/pl/1/song.mp3');request.emit('redirect',302,'GET','file:///private.mp3');await assert.rejects(response,/Недопустимый/);
+  const controller=new AbortController();response=fetcher('https://musify.club/track/pl/1/song.mp3',{signal:controller.signal});controller.abort();await assert.rejects(response,/загрузку/);assert.equal(request.aborted,true);
+  const bodyController=new AbortController();response=fetcher('https://musify.club/track/pl/1/song.mp3',{signal:bodyController.signal});const stalledBody=new PassThrough();stalledBody.statusCode=200;stalledBody.headers={'content-type':'audio/mpeg'};request.emit('response',stalledBody);const bodyRead=(async()=>{for await(const chunk of (await response).body){void chunk;}})();bodyController.abort();await assert.rejects(bodyRead,/загрузку/);assert.equal(request.aborted,true);
+  t.mock.timers.enable({apis:['setTimeout']});response=fetcher('https://musify.club/track/pl/1/song.mp3');t.mock.timers.tick(15001);await assert.rejects(response,/Время ожидания/);assert.equal(request.aborted,true);
 });
 test('Cyrillic artist searches retain original Latin-script catalog recordings and find saved artist/title queries',async()=>{
   const {mergeSongs}=await import('../js/music-match.js');

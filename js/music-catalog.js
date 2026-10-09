@@ -1,8 +1,42 @@
 import {audioCandidate,mergeSongs,sameRecording,isVariant} from './music-match.js';
 import {youtubeMusicEntries} from './music-youtube.js';
 const searchProviders=['youtubeMusic','soundcloud','youtubeAudio'];
-const catalogProviders=['itunes','itunesUA','deezer','musicbrainz','audius','bandcamp','muzend'];
-function catalogTracks(provider,data) {
+const catalogProviders=['itunes','itunesUA','deezer','musicbrainz','audius','bandcamp','muzend','musify','topmusicua','miyzvuk'];
+export function catalogTracks(provider,data) {
+  if(provider==='miyzvuk') {
+    const dom=new DOMParser().parseFromString(data,'text/html');
+    return [...dom.querySelectorAll('[data-src][data-title][data-subtitle][data-duration]')].flatMap(item=>{
+      let url;try {
+        const player=new URL(item.getAttribute('data-src'),'https://miyzvuk.net');
+        if(player.origin!=='https://miyzvuk.net'||player.pathname!=='/engine/go.php')return [];
+        url=new URL(atob(player.searchParams.get('url')||''));
+      }catch{return [];}
+      if(url.origin!=='https://miyzvuk.net'||url.username||url.password||url.search||url.hash||!/^\/uploads\/public_files\/[^?#]+\.mp3$/i.test(url.pathname))return [];
+      const title=item.getAttribute('data-title'),artist=item.getAttribute('data-subtitle'),time=item.getAttribute('data-duration');
+      if(!title||!artist||!/^\d+:\d{2}$/.test(time))return [];
+      const duration=time.split(':').reduce((n,v)=>n*60+Number(v),0);
+      return [{title,artist,duration,catalog:true,official:false,sources:[{provider,url:url.href,title,artist,duration,official:false}]}];
+    });
+  }
+  if(provider==='musify'||provider==='topmusicua') {
+    const dom=new DOMParser().parseFromString(data,'text/html');
+    const items=provider==='musify'?[...dom.querySelectorAll('.tracklist__row[data-artist][data-name]')]:[...dom.querySelectorAll('main .ua-play[data-src][data-title]')].filter(item=>!item.closest('aside'));
+    return items.flatMap(item=>{
+      let artist,title,rawURL,time;
+      if(provider==='musify') {
+        artist=item.getAttribute('data-artist');title=item.getAttribute('data-name');rawURL=item.querySelector('[data-url]')?.getAttribute('data-url');time=item.querySelector('[data-duration]')?.getAttribute('data-duration');
+      }else {
+        const label=item.getAttribute('data-title')||'',split=label.match(/^(.*?)\s[-–—]\s(.+)$/);if(!split)return [];
+        artist=split[1];title=split[2];rawURL=item.getAttribute('data-src');
+        time=item.closest('.music')?.querySelector('.info')?.textContent?.match(/\b\d+:\d{2}\b/)?.[0];
+      }
+      let url;try{url=new URL(rawURL,provider==='musify'?'https://musify.club':'https://topmusicua.com');}catch{return [];}
+      const valid=provider==='musify'?url.hostname==='musify.club'&&/^\/track\/pl\/\d+\/[^/?#]+\.mp3$/i.test(url.pathname):url.hostname==='topmusicua.com'&&/^\/uploads\/files\/[^?#]+\.mp3$/i.test(url.pathname);
+      if(!valid||url.protocol!=='https:'||url.search||url.hash||url.username||url.password||url.port||!artist||!title)return [];
+      const duration=time?time.split(':').reduce((n,v)=>n*60+Number(v),0):0;
+      return [{title,artist,duration,catalog:true,official:false,sources:[{provider,url:url.href,title,artist,duration,official:false}]}];
+    });
+  }
   if(provider==='muzend') {
     const dom=new DOMParser().parseFromString(data,'text/html');
     return [...dom.querySelectorAll('[data-track][data-title][data-artist]')].flatMap(item=>{
@@ -62,7 +96,7 @@ export class MusicCatalog {
     const local=this.library.search(query);
     if(!query || query.length<2 || !this.available){onResults(local,false,null);return;}
     const cached=this.cache.get(query.toLocaleLowerCase());
-    if(cached && Date.now()-cached.time<300000){onResults(mergeSongs([cached.groups],query,local),false,null);return;}
+    if(cached && Date.now()-cached.time<300000){onResults(mergeSongs(cached.groups,query,local),false,null);return;}
     onResults(local,true,null);
     this.timer=setTimeout(async()=>{
       const groups=[];let successes=0;
@@ -84,29 +118,44 @@ export class MusicCatalog {
     const existing=this.library.getTracks().find(t=>sameRecording(t,track));if(existing)return existing;
     if(this.downloads.has(track.id))return this.downloads.get(track.id);
     const task=(async()=>{
+      if(!track.pictureUrl||!track.album) {
+        const metadata=await Promise.allSettled(['itunes','itunesUA'].map(async provider=>{
+          const data=await this.request('catalog',{provider,query:`${track.artist} ${track.title}`});
+          return catalogTracks(provider,data).find(t=>sameRecording(track,t));
+        }));
+        track={...track};
+        for(const result of metadata)if(result.status==='fulfilled'&&result.value)for(const field of ['album','year','trackNo','genre','isrc','pictureUrl','duration'])if(!track[field]&&result.value[field])track[field]=result.value[field];
+      }
       let sources=[...(track.sources||[])],saved,lastError,discoveryError;
       const attempted=new Set();
-      const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4,muzend:5};
+      const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4,muzend:5,musify:6,topmusicua:7,miyzvuk:8};
       const folder=this.library.folders.findLast(f=>!f.source.startsWith('web:') && f.source!=='android-files');
       const save=async()=>{
         sources=[...new Map(sources.filter(s=>!attempted.has(s.url)).map(s=>[s.url,s])).values()].sort((a,b)=>(priority[a.provider]??9)-(priority[b.provider]??9)||Number(b.official)-Number(a.official));
         if(!sources.length)return;
-        try{saved=await this.request('download',{track:{...track,sources},folderSource:folder?.source||null});}
-        catch(error){lastError=error;if(/папк|доступ к папке|места|компонент|Android 7/i.test(error.message))throw error;}
-        finally{for(const source of sources)attempted.add(source.url);}
+        for(let offset=0;offset<sources.length&&!saved;offset+=8) {
+          const batch=sources.slice(offset,offset+8);
+          try{saved=await this.request('download',{track:{...track,sources:batch},folderSource:folder?.source||null});}
+          catch(error){lastError=error;if(/папк|доступ к папке|места|компонент|Android 7/i.test(error.message))throw error;}
+          finally{for(const source of batch)attempted.add(source.url);}
+        }
       };
       const resolve=async providers=>{
         const results=await Promise.allSettled(providers.map(async provider=>{
           const catalog=!searchProviders.includes(provider);
-          const data=await this.request(catalog?'catalog':'search',{provider,query:`${track.artist} ${track.title}`});
-          const candidates=catalog?catalogTracks(provider,data):(provider==='youtubeMusic'?youtubeMusicEntries(data):(data.entries||[])).map(e=>audioCandidate(e,provider)).filter(Boolean);
-          return candidates.filter(t=>!isVariant(t.rawTitle||t.title)&&sameRecording(track,t)).flatMap(t=>t.sources);
+          const find=async query=>{
+            const data=await this.request(catalog?'catalog':'search',{provider,query});
+            const candidates=catalog?catalogTracks(provider,data):(provider==='youtubeMusic'?youtubeMusicEntries(data):(data.entries||[])).map(e=>audioCandidate(e,provider)).filter(Boolean);
+            return candidates.filter(t=>!isVariant(t.rawTitle||t.title,track.title)&&sameRecording(track,t)).flatMap(t=>t.sources);
+          };
+          const sources=await find(`${track.artist} ${track.title}`);
+          return sources.length?sources:find(track.title);
         }));
         for(const r of results)if(r.status==='fulfilled')sources.push(...r.value);else discoveryError||=r.reason;
       };
       // Prefer independent artist catalogs before waiting for restricted video services.
       if(sources.length)await save();
-      if(!saved){await resolve(['audius','bandcamp','muzend']);await save();}
+      if(!saved){await resolve(['audius','bandcamp','muzend','musify','topmusicua','miyzvuk']);await save();}
       if(!saved){await resolve(searchProviders);await save();}
       if(!saved)throw lastError||discoveryError||Error('Не удалось найти доступную полную запись.');
       const added=await this.library.addDownloaded(saved,track);

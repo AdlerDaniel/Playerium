@@ -23,7 +23,7 @@ export function bindUpdateController() {
     for(const change of releaseChanges(info.releaseNotes)) {
       const li=document.createElement('li');li.textContent=change;list.append(li);
     }
-    status.hidden=true;button.disabled=false;button.textContent='Обновить';ignore.disabled=false;
+    status.hidden=true;button.hidden=false;ignore.hidden=false;button.disabled=false;button.textContent='Обновить';ignore.disabled=false;
     modal.classList.add('active');
   };
   this.onUpdateState=data=>{
@@ -31,16 +31,20 @@ export function bindUpdateController() {
     const labels={downloading:'Скачивание',verifying:'Проверка обновления',installing:'Установка',permission:'Подтвердите установку',complete:'Обновление установлено'};
     status.hidden=false;text.textContent=data.message||labels[data.state]||'';
     const percent=Math.max(0,Math.min(100,Number(data.percent)||0));
-    progress.hidden=data.state!=='downloading';fill.style.width=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
+    progress.hidden=['failed','complete','permission'].includes(data.state);fill.style.width=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
+    const indeterminate=data.state!=='downloading';progress.classList.toggle('indeterminate',indeterminate);
+    if(indeterminate)progress.removeAttribute('aria-valuenow');
     if(data.state==='downloading')text.textContent=`Скачивание ${percent}%`;
     busy=!['failed','complete'].includes(data.state);
     button.disabled=busy;ignore.disabled=busy;button.textContent=data.state==='failed'?'Обновить':busy?(labels[data.state]||'Обновление'):'Обновить';
+    button.hidden=busy||data.state==='complete';ignore.hidden=busy;
     modal.dataset.busy=String(busy);
     if(!busy)localStorage.removeItem('playerium_pending_update');
   };
   this.onUpdateDownloadFailed=message=>this.onUpdateState({state:'failed',message});
   this.ui.handleDownloadUpdate=async(info=this.lastUpdateInfo)=>{
     if(busy)return;
+    if(!info)return;
     localStorage.setItem('playerium_pending_update',JSON.stringify(info));
     this.onUpdateState({state:'downloading',percent:0});
     try {

@@ -2,10 +2,36 @@ const fs=require('node:fs/promises'),path=require('node:path'),{spawn}=require('
 const {constants}=require('node:fs');
 const {isInside}=require('./desktop-files');
 const PROVIDERS=new Set(['youtubeMusic','youtubeAudio','soundcloud']);
+const FULL_AUDIO='bestaudio[format_id!*=preview][ext=m4a]/bestaudio[format_id!*=preview]/best[format_id!*=preview]';
+// Electron's request stream also settles errors that can leave net.fetch pending.
+function createAudioFetcher(net) {
+  return (url,{signal}={})=>new Promise((resolve,reject)=>{
+    const request=net.request({url,redirect:'manual',credentials:'omit'});let response,failed=false,redirects=0;
+    const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);};
+    const fail=error=>{if(failed)return;failed=true;cleanup();reject(error);if(response)response.destroy(error);request.abort();};
+    const abort=()=>fail(Error('Не удалось завершить загрузку.'));
+    const timer=setTimeout(()=>fail(Error('Не удалось соединиться с аудиосервисом. Время ожидания истекло.')),15000);
+    request.on('close',cleanup);request.on('error',fail);request.on('abort',abort);
+    request.on('login',(_details,callback)=>callback());
+    request.on('redirect',(_status,_method,target)=>{
+      let next;try{next=new URL(target);}catch{return fail(Error('Недопустимый адрес записи'));}
+      if(++redirects>10||next.protocol!=='https:'||next.username||next.password||next.port)return fail(Error('Недопустимый адрес записи'));
+      request.followRedirect();
+    });
+    request.on('response',incoming=>{
+      response=incoming;clearTimeout(timer);incoming.on('error',()=>{});
+      if(incoming.statusCode!==200||!/^audio\//i.test(incoming.headers['content-type']||''))return fail(Error('Не удалось получить полную запись.'));
+      resolve({ok:incoming.statusCode===200,status:incoming.statusCode,headers:{get:name=>incoming.headers[name.toLowerCase()]||null},body:incoming});
+    });
+    signal?.addEventListener('abort',abort,{once:true});
+    if(signal?.aborted)abort();else request.end();
+  });
+}
 function sourceURL(value) {
   const u=new URL(value);
   const h=u.hostname.toLowerCase();
-  if(u.protocol!=='https:'||u.username||u.password||u.port || !(h==='www.youtube.com'||h==='music.youtube.com'||h==='youtube.com'||h==='youtu.be'||h==='soundcloud.com'||h.endsWith('.bandcamp.com')||h==='audius.co'||h==='archive.org'||(h==='muzend.net'&&/^\/uploads\/music\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search)))throw Error('Недопустимая запись');
+  if(['muzend.net','musify.club','topmusicua.com','miyzvuk.net'].includes(h)&&(u.search||u.hash))throw Error('Недопустимая запись');
+  if(u.protocol!=='https:'||u.username||u.password||u.port || !(h==='www.youtube.com'||h==='music.youtube.com'||h==='youtube.com'||h==='youtu.be'||h==='soundcloud.com'||h.endsWith('.bandcamp.com')||h==='audius.co'||h==='archive.org'||(h==='muzend.net'&&/^\/uploads\/music\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search)||(h==='musify.club'&&/^\/track\/pl\/\d+\/[^/?#]+\.mp3$/i.test(u.pathname)&&!u.search)||(h==='miyzvuk.net'&&/^\/uploads\/public_files\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search&&!u.hash)||(h==='topmusicua.com'&&/^\/uploads\/files\/[^?#]+\.mp3$/i.test(u.pathname)&&!u.search)))throw Error('Недопустимая запись');
   return u.href;
 }
 function catalogURL(provider,query) {
@@ -18,6 +44,9 @@ function catalogURL(provider,query) {
     case 'audius':return `https://discoveryprovider.audius.co/v1/tracks/search?query=${q}&limit=20&app_name=Playerium`;
     case 'bandcamp':return `https://bandcamp.com/search?q=${q}&item_type=t`;
     case 'muzend':return `https://muzend.net/index.php?do=search&subaction=search&story=${q}`;
+    case 'musify':return `https://musify.club/en/search?SearchText=${q}`;
+    case 'miyzvuk':return `https://miyzvuk.net/index.php?do=search&subaction=search&story=${q}`;
+    case 'topmusicua':return `https://topmusicua.com/index.php?do=search&subaction=search&story=${q}`;
     default:throw Error('Недопустимый запрос');
   }
 }
@@ -33,8 +62,8 @@ function downloadError(error) {
   return 'Полная версия этой записи недоступна для скачивания. Попробуйте позже.';
 }
 class DesktopMusic {
-  constructor({app,fetcher=fetch,authorize,onRoot=async()=>{},onProgress=()=>{}}) {
-    Object.assign(this,{app,fetcher,authorize,onRoot,onProgress});this.active=new Map();this.pending=new Map();this.requests=new Map();
+  constructor({app,fetcher=fetch,audioFetcher=fetcher,authorize,onRoot=async()=>{},onProgress=()=>{}}) {
+    Object.assign(this,{app,fetcher,audioFetcher,authorize,onRoot,onProgress});this.active=new Map();this.pending=new Map();this.requests=new Map();
     this.tools=app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools');
     this.manifestFile=path.join(app.getPath('userData'),'music-downloads.json');this.manifest=null;this.storeChain=Promise.resolve();
   }
@@ -65,7 +94,7 @@ class DesktopMusic {
         const response=await this.fetcher(catalogURL(payload.provider,query),{signal:controller.signal,headers:{'User-Agent':'Playerium/1.6.0 (https://github.com/AdlerDaniel/Playerium)'}});
         if(!response.ok)throw Error('Не удалось получить результаты');
         const text=await response.text();if(text.length>4*1024*1024)throw Error('Некорректный ответ');
-        return ['bandcamp','muzend'].includes(payload.provider)?text:JSON.parse(text);
+        return ['bandcamp','muzend','musify','topmusicua','miyzvuk'].includes(payload.provider)?text:JSON.parse(text);
       }finally{clearTimeout(timer);this.requests.delete(id);}
     }
     if(operation==='search') {
@@ -134,10 +163,23 @@ class DesktopMusic {
           for(const file of await fs.readdir(staging))await fs.rm(path.join(staging,file),{recursive:true,force:true});
           this.onProgress({id:track.id,state:'downloading'});
           const url=sourceURL(source.url);
-          const info=source.provider==='muzend'?{id:path.basename(new URL(url).pathname,'.mp3'),title:source.title,artist:source.artist,duration:source.duration,url,ext:'mp3',extractor:'generic',webpage_url:url}:JSON.parse(await this.run(['--dump-single-json','--skip-download','-f','bestaudio[ext=m4a]/bestaudio/best','--',url],id,60000));
-          if(source.provider==='muzend'&&new URL(url).hostname!=='muzend.net')throw Error('Недопустимая запись');
+          const directHosts={muzend:'muzend.net',musify:'musify.club',topmusicua:'topmusicua.com',miyzvuk:'miyzvuk.net'};
+          const info=directHosts[source.provider]?{id:path.basename(new URL(url).pathname,'.mp3'),title:source.title,artist:source.artist,duration:source.duration,url,ext:'mp3',extractor:'generic',webpage_url:url}:JSON.parse(await this.run(['--dump-single-json','--skip-download','-f',FULL_AUDIO,'--',url],id,60000));
+          if(directHosts[source.provider]&&new URL(url).hostname!==directHosts[source.provider])throw Error('Недопустимая запись');
           const actual=audioCandidate(info,source.provider);
-          if(!actual || isVariant(info.title) || !sameRecording(track,actual))continue;
+          if(!actual || isVariant(info.title,track.title) || !sameRecording(track,actual))continue;
+          if(['musify','miyzvuk'].includes(source.provider)) {
+            // This host serves the full public audio to native requests; its site
+            // extractor handles pages rather than the player MP3 endpoint.
+            const controller=new AbortController();this.requests.set(id,controller);const timer=setTimeout(()=>controller.abort(),180000);
+            try {
+              const response=await this.audioFetcher(url,{signal:controller.signal});
+              if(!response.ok||!/^audio\//i.test(response.headers.get('content-type')||''))throw Error('Не удалось получить полную запись.');
+              const input=path.join(staging,'source.mp3');const handle=await fs.open(input,'wx');let size=0;
+              try{for await(const chunk of response.body){size+=chunk.length;if(size>256*1024*1024)throw Error('Некорректный файл');await handle.write(chunk);}}finally{await handle.close();}
+              info.url=require('node:url').pathToFileURL(input).href;
+            }finally{clearTimeout(timer);this.requests.delete(id);}
+          }
           // Metadata chosen from the recording catalog is embedded into the audio.
           for(const key of ['title','artist','album','genre','isrc'])if(track[key]){info[key]=String(track[key]).slice(0,500);info['meta_'+key]=info[key];}
           if(track.artist)info.artists=[info.artist];
@@ -145,26 +187,31 @@ class DesktopMusic {
           if(track.pictureUrl && /^https:\/\/(?:[^/]+\.)?(?:mzstatic\.com|dzcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|bcbits\.com|audius\.co|sndcdn\.com)\//i.test(track.pictureUrl)){info.thumbnail=track.pictureUrl;info.thumbnails=[{url:track.pictureUrl,id:'cover'}];}
           const meta=path.join(staging,'recording.json');await fs.writeFile(meta,JSON.stringify(info));
           const audioFormat=['wav','aac'].includes(info.ext)?'m4a':'best';
-          const downloadArgs=['--load-info-json',meta,'--no-playlist','--quiet','--no-progress','--max-filesize','256M','-f','bestaudio[ext=m4a]/bestaudio/best','-x','--audio-format',audioFormat,'--audio-quality','0','--embed-metadata','--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail','-o',path.join(staging,'audio.%(ext)s'),'--print','after_move:filepath'];
+          const downloadArgs=['--load-info-json',meta,'--no-playlist','--quiet','--no-progress','--max-filesize','256M','-f',FULL_AUDIO,'-x','--audio-format',audioFormat,'--audio-quality','0','--embed-metadata','--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail','-o',path.join(staging,'audio.%(ext)s'),'--print','after_move:filepath'];
+          if(directHosts[source.provider])downloadArgs.unshift('--force-generic-extractor');
+          if(['musify','miyzvuk'].includes(source.provider))downloadArgs.unshift('--enable-file-urls');
           let output;
           try{output=await this.run(downloadArgs,id,600000);}catch(error){
             if(!/thumbnail|image|cover|convert.*jpg/i.test(error.message))throw error;
             output=await this.run(downloadArgs.filter(arg=>!['--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail'].includes(arg)),id,600000);
           }
           const audio=output.split(/\r?\n/).at(-1);if(!isInside(staging,audio)||!/^audio\.(m4a|mp3|opus|ogg|flac|aac|wav)$/i.test(path.basename(audio)))throw Error('Некорректный файл');
+          const {parseFile}=await import('music-metadata');const decoded=await parseFile(audio);
+          const expected=track.duration||source.duration;
+          if(!(decoded.format.duration>0)||(expected&&Math.abs(decoded.format.duration-expected)>Math.max(8,expected*.04)))throw Error('Полная запись не совпадает с выбранной версией.');
           const name=`${track.artist} - ${track.title}`.replace(/[<>:"/\\|?*\x00-\x1f]/g,'').slice(0,120).trim();
           const fullPath=path.join(root,`${name} [${track.id.slice(5)}]${path.extname(audio)}`);
           await fs.copyFile(audio,fullPath,constants.COPYFILE_EXCL);committed=fullPath;
-          const metadata={title:info.title,artist:info.artist,album:info.album||'',year:info.release_year||'',trackNo:info.track_number||0,genre:info.genre||'',isrc:info.isrc||'',duration:info.duration||track.duration};
+          const metadata={title:info.title,artist:info.artist,album:info.album||'',year:info.release_year||'',trackNo:info.track_number||0,genre:info.genre||'',isrc:info.isrc||'',duration:decoded.format.duration};
           await fs.writeFile(fullPath+'.playerium.json',JSON.stringify(metadata));
           const cover=(await fs.readdir(staging)).find(f=>/^audio.*\.jpg$/i.test(f));if(cover)await fs.copyFile(path.join(staging,cover),fullPath+'.jpg',constants.COPYFILE_EXCL);
           records[track.id]={fullPath,folderSource:root,folderName:path.basename(root),downloadId:track.id,metadata};await this.saveRecords();
           return this.descriptor(records[track.id]);
         }catch(error){if(committed)throw error;lastError=error;}
       }
-      throw Error(downloadError(lastError));
+      throw Error(downloadError(lastError),{cause:lastError});
     }catch(error){if(committed){for(const suffix of ['','.playerium.json','.jpg'])await fs.rm(committed+suffix,{force:true}).catch(()=>{});}throw error;}
     finally{await fs.rm(staging,{recursive:true,force:true});}
   }
 }
-module.exports={DesktopMusic,sourceURL,catalogURL,downloadError};
+module.exports={DesktopMusic,sourceURL,catalogURL,downloadError,createAudioFetcher};

@@ -1,4 +1,19 @@
 const {test,expect}=require('@playwright/test');
+test('direct catalogs retain exact recordings, durations and reject off-site files and sidebar suggestions',async({page})=>{
+  await page.goto('/');
+  const results=await page.evaluate(async()=>{
+    const {catalogTracks}=await import('/js/music-catalog.js');
+    return {
+      musify:catalogTracks('musify',`<div class="tracklist__row" data-artist="Nirvana" data-name="About A Girl (Live)"><button data-url="/track/pl/123/nirvana-about-a-girl-live.mp3"></button><span data-duration="3:38"></span></div><div class="tracklist__row" data-artist="Nirvana" data-name="Song"><button data-url="https://evil.test/song.mp3"></button></div>`),
+      topmusicua:catalogTracks('topmusicua',`<main><div class="music"><span class="ua-play" data-src="/uploads/files/2025-07/song.mp3" data-title="Саша Чемеров - Згоривниз"></span><table class="info"><tr><td>2:35</td></tr></table></div><aside><span class="ua-play" data-src="/uploads/files/unrelated.mp3" data-title="Other - Suggested"></span></aside><span class="ua-play" data-src="https://evil.test/song.mp3" data-title="Other - Song"></span></main>`),
+      miyzvuk:catalogTracks('miyzvuk',['https://miyzvuk.net/uploads/public_files/2024-11/song.mp3','https://evil.test/song.mp3','https://miyzvuk.net/private/song.mp3'].map(url=>`<div data-src="/engine/go.php?url=${encodeURIComponent(btoa(url))}&amp;user_id=" data-title="ОМГ (Оболонь - Мінська - Героїв Дніпра)" data-subtitle="діти інженерів" data-duration="03:06"></div>`).join(''))
+    };
+  });
+  expect(results.musify).toHaveLength(1);expect(results.musify[0].title).toBe('About A Girl (Live)');expect(results.musify[0].duration).toBe(218);
+  expect(results.musify[0].sources[0].provider).toBe('musify');expect(results.musify[0].official).toBe(false);
+  expect(results.topmusicua).toHaveLength(1);expect(results.topmusicua[0].duration).toBe(155);expect(results.topmusicua[0].title).toBe('Згоривниз');
+  expect(results.miyzvuk).toHaveLength(1);expect(results.miyzvuk[0].duration).toBe(186);expect(results.miyzvuk[0].artist).toBe('діти інженерів');
+});
 for(const android of [false,true])test(`search, save, metadata persistence and deletion on ${android?'Android':'Windows'}`,async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));if(android)await page.setViewportSize({width:390,height:844});
   await page.addInitScript(android=>{

@@ -128,6 +128,8 @@ export class AudioPlayer {
   }
 
   setupMediaSession() {
+    // Android's service owns the system media session, including notification controls.
+    if(window.AndroidBridge?.setPlaybackQueue)return;
     if (!("mediaSession" in navigator)) return;
 
     navigator.mediaSession.setActionHandler("play", () => this.play());
@@ -140,6 +142,7 @@ export class AudioPlayer {
   }
 
   updateMediaSessionMetadata(track) {
+    if(window.AndroidBridge?.setPlaybackQueue)return;
     if (!("mediaSession" in navigator) || !track) return;
     const artwork = [];
     if (track.pictureUrl) {

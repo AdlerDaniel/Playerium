@@ -146,7 +146,9 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
+        MediaNotificationService.resumeIfSaved(this);
         if (updater != null) updater.onResume();
+        if(webView!=null)webView.evaluateJavascript("window.onNativePlayerState && window.onNativePlayerState("+MediaNotificationService.currentState()+");",null);
         if (webView != null) webView.evaluateJavascript("window.playerApp && window.playerApp.library && window.playerApp.library.db && window.playerApp.library.initFolderWatchers();", null);
     }
 

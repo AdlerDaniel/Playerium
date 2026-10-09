@@ -38,7 +38,9 @@ public class UpdateInstallReceiver extends BroadcastReceiver {
         } else if (status == PackageInstaller.STATUS_SUCCESS) {
             state = "complete";
             new java.io.File(context.getCacheDir(),"Playerium-update.apk").delete();
-        } else { state = "failed"; message = "Обновление не установлено. Попробуйте снова."; }
+        } else { state = "failed"; message = "Обновление не установлено. Попробуйте снова.";
+            context.getSharedPreferences("playerium_update",Context.MODE_PRIVATE).edit().remove("restart_after_update").remove("install_session").apply();
+        }
         if (!"permission".equals(state)) context.getSharedPreferences("playerium_update",Context.MODE_PRIVATE).edit().remove("confirmation").apply();
         try {
             JSONObject data = new JSONObject().put("state", state).put("message", message);

@@ -3,16 +3,25 @@ export const normalize = value => String(value || '').normalize('NFKD').replace(
 // Search accepts Cyrillic spelling of artist names stored in Latin script.
 // Recording identity stays strict: spelling similarity alone cannot replace audio.
 const cyrillic={а:'a',б:'b',в:'v',г:'g',ґ:'g',д:'d',е:'e',ё:'e',є:'ye',ж:'zh',з:'z',и:'i',і:'i',ї:'yi',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'kh',ц:'ts',ч:'ch',ш:'sh',щ:'shch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
-export const normalizeSearch=value=>normalize(String(value||'').toLocaleLowerCase().replace(/[а-яёіїєґ]/gu,c=>cyrillic[c]));
+const artistAliases=new Map([
+  ['лилу45','lely45'],['лілу45','lely45'],['lilu45','lely45'],
+  ['виталий козловский','vitaliy kozlovskiy'],['віталій козловський','vitaliy kozlovskiy'],
+  ['діти інженерів','dity inzheneriv'],['саша чемеров','sasha chemerov']
+].map(([alias,canonical])=>[normalize(alias),normalize(canonical)]));
+export const normalizeSearch=value=>{
+  let text=normalize(value);for(const [alias,canonical]of artistAliases)text=text.replaceAll(alias,canonical);
+  return normalize(text.replace(/[а-яёіїєґ]/gu,c=>cyrillic[c]));
+};
 const presentation = /\s*[\[(]?(?:official\s+(?:audio|lyric(?:s)?(?:\s+video)?)|audio\s+only|visuali[sz]er|lyric(?:s)?(?:\s+video)?|provided to youtube)[\])]?\s*/gi;
 const unwanted = /\b(?:cover|karaoke|concert|remix|bootleg|mashup|flip|demo|nightcore|sped up|slowed|reaction|instrumental|music video|official video|bts|behind the scenes)\b|[\[(]\s*live\b|\blive\s+(?:at|from|in|on|version|performance|session)\b|\blive\s*[\])]|кавер|концерт|ремикс|караоке|наживо|кліп|клип/i;
 export const cleanTitle = title => String(title || '').replace(presentation,' ').replace(/\s+/g,' ').trim();
 export function isVariant(title, query='') {
-  const found=String(title).match(unwanted);
-  return !!found && !normalize(query).includes(normalize(found[0]));
+  const found=String(title).match(new RegExp(unwanted.source,'gi'))||[];
+  return found.some(word=>!normalize(query).includes(normalize(word)));
 }
 export function artistKey(artist) {
-  return normalize(String(artist || '').replace(/\s*-\s*Topic$/i,'').split(/\s+(?:feat\.?|ft\.?|featuring|x)\s+|\s*[,\u0026]\s*/i)[0]);
+  const key=normalize(String(artist || '').replace(/\s*-\s*Topic$/i,'').split(/\s+(?:feat\.?|ft\.?|featuring|x)\s+|\s*[,\u0026]\s*/i)[0]);
+  return artistAliases.get(key)||key;
 }
 export const songKey = track => `${artistKey(track.artist)}|${normalize(cleanTitle(track.title))}`;
 export function sameRecording(a,b) {

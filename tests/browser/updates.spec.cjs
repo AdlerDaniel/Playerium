@@ -19,10 +19,15 @@ for(const android of [false,true])test(`one update button uses the native ${andr
   await modal.getByRole('button',{name:'Обновить',exact:true}).click();
   expect(await page.evaluate(()=>window.updateCalls)).toEqual([{latestVersion:'9.0.0',repo:'AdlerDaniel/Playerium'}]);
   await expect(page.locator('#btnDownloadUpdate')).toBeDisabled();
+  await expect(page.locator('#btnDownloadUpdate')).toBeHidden();
+  await expect(page.locator('#btnUpdateLater')).toBeHidden();
   await page.evaluate(()=>window.playerApp.onUpdateState({state:'downloading',percent:47}));
   await expect(page.locator('#updateStatusText')).toHaveText('Скачивание 47%');
   await page.evaluate(()=>window.playerApp.onUpdateState({state:'installing'}));
   await expect(page.locator('#updateStatusText')).toHaveText('Установка');
+  await expect(page.locator('#updateProgress')).toBeVisible();
+  await expect(page.locator('#updateProgress')).not.toHaveAttribute('aria-valuenow');
+  await expect(page.locator('#btnDownloadUpdate')).toBeHidden();
   expect(await page.evaluate(()=>window.externalCalls)).toBe(0);
   await page.keyboard.press('Escape');await expect(modal).toBeVisible();
   await page.evaluate(()=>window.playerApp.onUpdateState({state:'failed',message:'Не удалось скачать обновление'}));

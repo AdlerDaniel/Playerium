@@ -1,11 +1,15 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Tray, Menu, nativeImage } = require('electron');
+const helperIndex=process.argv.indexOf('--playerium-update-helper');
+if(helperIndex!==-1){
+  require('./desktop-update-helper').startHelper(process.argv[helperIndex+1]).catch(error=>{console.error(error);app.exit(1);});
+}else{
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
 const { DesktopUpdater } = require('./desktop-updater');
-const { DesktopMusic, downloadError } = require('./desktop-music');
+const { DesktopMusic, downloadError, createAudioFetcher } = require('./desktop-music');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
@@ -13,6 +17,21 @@ let roots = new Set();
 let rootsFile;
 const sources = new Map();
 let mainWindow;
+let tray,quitting=false;
+const userDataArgument=process.argv.find(arg=>arg.startsWith('--user-data-dir='));
+if(userDataArgument){const directory=path.resolve(userDataArgument.slice('--user-data-dir='.length));fs.mkdirSync(directory,{recursive:true});app.setPath('userData',directory);}
+app.on('before-quit',()=>{quitting=true;});
+if(!app.requestSingleInstanceLock()){app.quit();}
+else{
+app.on('second-instance',()=>{if(mainWindow){mainWindow.show();if(mainWindow.isMinimized())mainWindow.restore();mainWindow.focus();}});
+function showWindow(){mainWindow?.show();if(mainWindow?.isMinimized())mainWindow.restore();mainWindow?.focus();}
+function createTray(){
+  const iconFile=path.join(__dirname,'build/icon.ico');
+  const icon=fs.existsSync(iconFile)?nativeImage.createFromPath(iconFile):nativeImage.createFromPath(path.join(__dirname,'assets/icon.png'));
+  tray=new Tray(icon.resize({width:16,height:16}));tray.setToolTip('Playerium');
+  tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть Playerium',click:showWindow},{type:'separator'},{label:'Выйти',click:()=>app.quit()}]));
+  tray.on('double-click',showWindow);tray.on('click',showWindow);
+}
 
 async function authorize(filePath) {
   if (typeof filePath !== 'string') throw new Error('Invalid file path');
@@ -58,6 +77,7 @@ function createWindow() {
     icon: fs.existsSync(path.join(__dirname, 'build/icon.ico')) ? path.join(__dirname, 'build/icon.ico') : undefined,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   mainWindow.loadFile('index.html');
+  mainWindow.on('close',event=>{if(!quitting&&tray){event.preventDefault();mainWindow.hide();}});
   mainWindow.webContents.on('will-navigate', event => event.preventDefault());
   mainWindow.webContents.on('will-attach-webview', event => event.preventDefault());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { openExternal(url).catch(() => {}); return { action: 'deny' }; });
@@ -112,7 +132,7 @@ app.whenReady().then(async () => {
       picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null };
   });
   handle('shell:openExternal', openExternal);
-  const music=new DesktopMusic({app,fetcher:(url,options)=>net.fetch(url,options),authorize,
+  const music=new DesktopMusic({app,fetcher:(url,options)=>net.fetch(url,options),audioFetcher:createAudioFetcher(net),authorize,
     onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));},
     onProgress:state=>mainWindow?.webContents.send('music:progress',state)});
   handle('music:request',async(operation,payload,id)=>{
@@ -127,10 +147,13 @@ app.whenReady().then(async () => {
   handle('update:install', info => updater.install(info));
   handle('update:status', () => updater.getStatus());
   createWindow();
+  createTray();
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
-app.on('window-all-closed', () => {
+app.on('will-quit', () => {
   for (const watcher of watchers.values()) watcher.close();
   watchers.clear(); sources.clear();
-  if (process.platform !== 'darwin') app.quit();
+  tray?.destroy();
 });
+}
+}

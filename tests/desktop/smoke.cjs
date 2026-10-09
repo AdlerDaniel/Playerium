@@ -44,6 +44,11 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
       return {audible,context:player.audioCtx.state,volume:player.volume,position:player.audio.currentTime};
     });
     assert.equal(sound.audible,true,`Streaming audio must reach Web Audio: ${JSON.stringify(sound)}`);
+    const backgroundPosition=await win.evaluate(()=>window.playerApp.player.audio.currentTime);
+    await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    assert.ok(await win.evaluate(position=>window.playerApp.player.isPlaying&&window.playerApp.player.audio.currentTime>position,backgroundPosition),'Audio must continue after the main window is closed');
+    await app.evaluate(({app})=>app.emit('second-instance'));
     const denied=await win.evaluate(async()=>{try{await window.electronAPI.getMetadata('/etc/passwd');return false;}catch{return true;}});
     assert.equal(denied,true);
     await win.reload();await win.waitForFunction(()=>window.playerApp?.library.db);
