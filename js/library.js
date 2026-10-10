@@ -89,7 +89,9 @@ export class Library {
         try {
           const file = stored?.blob || (stored?.handle && await stored.handle.queryPermission({mode:'read'}) === 'granted' ? await stored.handle.getFile() : null);
           if (file) {
-            const metadata = await ID3Parser.parseFile(file);
+            // Some storage/structured-clone implementations return a plain Blob.
+            const namedFile = typeof file.name === 'string' ? file : new File([file],t.fileName,{type:file.type});
+            const metadata = await ID3Parser.parseFile(namedFile);
             for (const key of ['title','artist','year','genre','trackNo','duration']) if (metadata[key]) t[key] = metadata[key];
             if (metadata.pictureBlob) t.pictureBlob = await resizeArtwork(metadata.pictureBlob);
             t.metadataVersion = 2; reparsed = true;

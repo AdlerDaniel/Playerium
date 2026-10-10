@@ -8,7 +8,7 @@ test('M4A metadata after audio restores exact title and artwork without importin
 test('existing M4A records repair stored metadata and delete collection information without changing identity or likes',async()=>{
  global.indexedDB=require('fake-indexeddb').indexedDB;global.window={};
  const {Library}=await import('../js/library.js');const lib=new Library();await lib.init();await lib.clearAll();
- await lib.putInStore('tracks',{id:'existing-m4a',title:'Любила [fe10a9]',artist:'Саша Чемеров',album:'Ignored',fileName:recording().name,folderSource:'web:Music',liked:true,metadataVersion:1});await lib.putInStore('files',{id:'existing-m4a',blob:recording()});
+ await lib.putInStore('tracks',{id:'existing-m4a',title:'Любила [fe10a9]',artist:'Саша Чемеров',album:'Ignored',fileName:recording().name,folderSource:'web:Music',liked:true,metadataVersion:1});await lib.putInStore('files',{id:'existing-m4a',blob:new Blob([recording()],{type:'audio/mp4'})});
  const next=new Library();await next.init();const track=next.getTrackById('existing-m4a');assert.equal(track.title,'Любила');assert.equal(track.liked,true);assert.equal(track.id,'existing-m4a');assert.ok(track.pictureBlob);assert.equal('album' in track,false);assert.equal('album' in await next.getFromStore('tracks',track.id),false);assert.equal(next.db.transaction('tracks').objectStore('tracks').indexNames.contains('album'),false);lib.db.close();next.db.close();
 });
 test('cover verification rejects a different artist, version, duration and unofficial pictures',async()=>{
