@@ -1,3 +1,4 @@
+import {catalogArtists,artistResults,belongsToArtist,popularityScore} from './music-artists.js';
 import {audioCandidate,mergeSongs,sameRecording,isVariant} from './music-match.js';
 import {youtubeMusicEntries} from './music-youtube.js';
 import {recordingSources} from './music-recordings.js';
@@ -47,8 +48,8 @@ export function catalogTracks(provider,data) {
       return [{title,artist,duration,catalog:true,official:false,sources:[{provider,url,title,artist,duration,official:false}]}];
     });
   }
-  if(provider.startsWith('itunes'))return (data.results||[]).map(t=>({title:t.trackName,artist:t.artistName,album:t.collectionName,year:t.releaseDate?.slice(0,4),duration:t.trackTimeMillis/1000,trackNo:t.trackNumber,genre:t.primaryGenreName,pictureUrl:t.artworkUrl100?.replace('100x100bb','600x600bb'),pictureUrls:[t.artworkUrl100?.replace('100x100bb','600x600bb'),t.artworkUrl100].filter(Boolean),official:true,catalog:true,sources:[]}));
-  if(provider==='deezer')return (data.data||[]).map(t=>({title:t.title,artist:t.artist?.name,album:t.album?.title,duration:t.duration,pictureUrl:t.album?.cover_big,pictureUrls:[t.album?.cover_big,t.album?.cover_medium,t.album?.cover].filter(Boolean),isrc:t.isrc,official:true,catalog:true,sources:[]}));
+  if(provider.startsWith('itunes'))return (data?.results||[]).filter(t=>t.trackName).map(t=>({title:t.trackName,artist:t.artistName,itunesArtistId:t.artistId,album:t.collectionName,year:t.releaseDate?.slice(0,4),duration:t.trackTimeMillis/1000,trackNo:t.trackNumber,genre:t.primaryGenreName,pictureUrl:t.artworkUrl100?.replace('100x100bb','600x600bb'),pictureUrls:[t.artworkUrl100?.replace('100x100bb','600x600bb'),t.artworkUrl100].filter(Boolean),official:true,catalog:true,sources:[]}));
+  if(provider==='deezer'||provider==='deezerArtistTop')return (data?.data||[]).map(t=>({title:t.title,artist:t.artist?.name,deezerArtistId:t.artist?.id,contributors:t.contributors||[],popularity:popularityScore(t),album:t.album?.title,duration:t.duration,pictureUrl:t.album?.cover_big,pictureUrls:[t.album?.cover_big,t.album?.cover_medium,t.album?.cover].filter(Boolean),isrc:t.isrc,official:true,catalog:true,sources:[]}));
   if(provider==='musicbrainz')return (data.recordings||[]).filter(t=>t['artist-credit']?.length).map(t=>({title:t.title,artist:t['artist-credit'].map(a=>a.name+(a.joinphrase||'')).join(''),album:t.releases?.[0]?.title||'',year:t['first-release-date']?.slice(0,4)||'',duration:(t.length||0)/1000,isrc:t.isrcs?.[0]||'',official:true,catalog:true,sources:[]}));
   if(provider==='audius')return (data.data||[]).map(t=>({title:t.title,artist:t.user?.name,album:'',duration:t.duration,genre:t.genre,pictureUrl:t.artwork?.['480x480'],pictureUrls:Object.values(t.artwork||{}).filter(url=>typeof url==='string'),official:!!t.user?.is_verified,catalog:true,sources:t.permalink?[{provider,url:`https://audius.co${t.permalink.startsWith('/')?'':'/'}${t.permalink}`,official:!!t.user?.is_verified}]:[]}));
   if(provider==='bandcamp') {
@@ -97,23 +98,49 @@ export class MusicCatalog {
     const local=this.library.search(query);
     if(!query || query.length<2 || !this.available){onResults(local,false,null);return;}
     const cached=this.cache.get(query.toLocaleLowerCase());
-    if(cached && Date.now()-cached.time<300000){onResults(mergeSongs(cached.groups,query,local),false,null);return;}
+    if(cached && Date.now()-cached.time<300000){const tracks=mergeSongs(cached.groups,query,local);onResults(tracks,false,null,artistResults(cached.artists||[],tracks,query));return;}
     const known=recordingSources(query);
     onResults(mergeSongs([known],query,local),true,null);
     this.timer=setTimeout(async()=>{
-      const groups=[known];let successes=known.length?1:0;
-      const providers=[...catalogProviders,...searchProviders];
+      const groups=[known],artists=[];let successes=known.length?1:0;
+      const providers=[...catalogProviders,...searchProviders,'deezerArtists','itunesArtists'];
       await Promise.allSettled(providers.map(async provider=>{
         try {
           const data=await this.request(searchProviders.includes(provider)?'search':'catalog',{provider,query},true);
+          if(provider.endsWith('Artists')){artists.push(catalogArtists(provider,data));successes++;if(version===this.searchVersion){const tracks=mergeSongs(groups,query,this.library.search(query));onResults(tracks,true,null,artistResults(artists,tracks,query));}return;}
           const tracks=searchProviders.includes(provider)?(provider==='youtubeMusic'?youtubeMusicEntries(data):(data.entries||[])).map(e=>audioCandidate(e,provider)).filter(Boolean):catalogTracks(provider,data).map(t=>({...t,metadataScore:['itunes','itunesUA','deezer'].includes(provider)?3:2}));
           groups.push(tracks);successes++;
-          if(version===this.searchVersion)onResults(mergeSongs(groups,query,this.library.search(query)),true,null);
+          if(version===this.searchVersion)onResults(mergeSongs(groups,query,this.library.search(query)),true,null,artistResults(artists,groups.flat(),query));
         }catch{}
       }));
-      if(successes)this.cache.set(query.toLocaleLowerCase(),{time:Date.now(),groups});
-      if(version===this.searchVersion)onResults(mergeSongs(groups,query,this.library.search(query)),false,successes?null:'Не удалось получить результаты. Попробуйте снова.');
+      if(successes)this.cache.set(query.toLocaleLowerCase(),{time:Date.now(),groups,artists});
+      if(version===this.searchVersion)onResults(mergeSongs(groups,query,this.library.search(query)),false,successes?null:'Не удалось получить результаты. Попробуйте снова.',artistResults(artists,groups.flat(),query));
     },600);
+  }
+  async artistProfile(artist) {
+    const local=this.library.getTracks().filter(t=>belongsToArtist(t,artist));
+    if(!this.available)return {artist,tracks:local,offline:true};
+    const key='artist:'+String(artist.deezerId||artist.itunesId||artist.name);
+    const cached=this.cache.get(key);if(cached&&Date.now()-cached.time<300000)return cached.profile;
+    let detail={...artist};
+    if(!detail.deezerId||!detail.itunesId){
+      const missing=[...(!detail.deezerId?['deezerArtists']:[]),...(!detail.itunesId?['itunesArtists']:[])];
+      const found=await Promise.allSettled(missing.map(async provider=>artistResults([catalogArtists(provider,await this.request('catalog',{provider,query:artist.name}))],[],artist.name).find(a=>a.name.toLocaleLowerCase()===artist.name.toLocaleLowerCase())));
+      for(const r of found)if(r.status==='fulfilled'&&r.value)detail={...detail,...r.value};
+    }
+    const requests=[['itunes',detail.name],['itunesUA',detail.name],['deezer',`artist:"${detail.name.replaceAll('"','')}"`]];
+    if(detail.deezerId)requests.push(['deezerArtistTop',String(detail.deezerId)]);
+    if(detail.itunesId)requests.push(['itunesArtistTracks',String(detail.itunesId)]);
+    const responses=await Promise.allSettled(requests.map(async([provider,query])=>catalogTracks(provider,await this.request('catalog',{provider,query})).map(t=>({...t,metadataScore:3}))));
+    const groups=responses.filter(r=>r.status==='fulfilled').map(r=>r.value.filter(t=>belongsToArtist(t,detail)));
+    const tracks=mergeSongs(groups,detail.name,local,true).sort((a,b)=>(b.popularity||0)-(a.popularity||0)),offline=!responses.some(r=>r.status==='fulfilled');
+    let albums=[];if(detail.itunesId)try{const data=await this.request('catalog',{provider:'itunesArtistAlbums',query:String(detail.itunesId)});albums=(data?.results||[]).filter(a=>a.collectionId&&a.collectionName).map(a=>({name:a.collectionName,artist:a.artistName,year:a.releaseDate?.slice(0,4),pictureUrl:a.artworkUrl100?.replace('100x100bb','600x600bb'),itunesId:a.collectionId}));}catch{}
+    const profile={artist:detail,tracks,albums,offline};if(!offline)this.cache.set(key,{time:Date.now(),profile});return profile;
+  }
+  async albumTracks(album) {
+    if(!album.itunesId)return album.tracks||[];
+    const data=await this.request('catalog',{provider:'itunesArtistTracks',query:String(album.itunesId)});
+    return mergeSongs([catalogTracks('itunesArtistTracks',data)],'',this.library.getTracks().filter(t=>t.album===album.name&&t.artist===album.artist),true).sort((a,b)=>(a.trackNo||0)-(b.trackNo||0));
   }
   async ensureTrack(track) {
     if(!track?.catalog)return track;

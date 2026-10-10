@@ -44,6 +44,15 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
       return {audible,context:player.audioCtx.state,volume:player.volume,position:player.audio.currentTime};
     });
     assert.equal(sound.audible,true,`Streaming audio must reach Web Audio: ${JSON.stringify(sound)}`);
+    const range=await app.evaluate(async({net},src)=>{const r=await net.fetch(src,{headers:{Range:'bytes=44-63'}});return {status:r.status,range:r.headers.get('content-range'),bytes:(await r.arrayBuffer()).byteLength};},await win.evaluate(()=>window.playerApp.player.audio.src));
+    assert.deepEqual(range,{status:206,range:'bytes 44-63/320044',bytes:20},'Audio protocol must deliver the requested byte interval for seeking');
+    await win.evaluate(()=>window.playerApp.player.seekToTime(12));
+    await win.waitForFunction(()=>window.playerApp.player.audio.currentTime>=12&&window.playerApp.player.audio.currentTime<15);
+    assert.equal(await win.evaluate(()=>window.playerApp.player.isPlaying),true);
+    await win.evaluate(()=>{window.playerApp.player.pause();window.playerApp.player.seekToTime(5);});
+    await win.waitForFunction(()=>Math.abs(window.playerApp.player.audio.currentTime-5)<.1);
+    assert.equal(await win.evaluate(()=>window.playerApp.player.isPlaying),false);
+    await win.evaluate(()=>window.playerApp.player.play());
     const backgroundPosition=await win.evaluate(()=>window.playerApp.player.audio.currentTime);
     await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());
     await new Promise(resolve=>setTimeout(resolve,1200));
@@ -81,6 +90,7 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
         return {status,bytes:await final.text()};
       },`http://127.0.0.1:${server.address().port}/redirect`);
       assert.deepEqual(result,{status:302,bytes:'verified update bytes'});
+      console.log('Update redirect verified');
     }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
     await app.evaluate(() => {
       const {createRequire}=process.getBuiltinModule('module');
@@ -93,8 +103,9 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     });
     await win.evaluate(()=>window.playerApp.ui.showUpdateModal({latestVersion:'9.0.0',releaseNotes:'- Исправлено обновление'}));
     await win.locator('#btnDownloadUpdate').click();
+    console.log('Update button clicked');
     await win.waitForFunction(()=>document.getElementById('updateStatusText').textContent==='Установка');
     assert.equal(await app.evaluate(()=>global.updateTestInfo.latestVersion),'9.0.0');
-  } finally { if(app)await app.close();await fs.rm(folder,{recursive:true,force:true}); }
+  } finally { if(app){console.log('Closing test application');await app.close();}await fs.rm(folder,{recursive:true,force:true}); }
   await require('./update-helper.cjs')();
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(() => clearInterval(watchdog));

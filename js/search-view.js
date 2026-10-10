@@ -1,3 +1,4 @@
+import {artistResults} from './music-artists.js';
 import {icons} from './design-icons.js';
 import {mountCover} from './artwork.js';
 import {playRow} from './playback-controls.js';
@@ -34,7 +35,7 @@ export function renderSearchView(container) {
   wrapper.append(tabs,results);
   const filters=[['all','Все'],['songs','Песни'],['artists','Исполнители'],['albums','Альбомы'],['playlists','Плейлисты']];
   if(!filters.some(([key])=>key===ui.searchFilter))ui.searchFilter='all';
-  let tracks=[],loading=true,error=null,first=true;
+  let tracks=[],artists=[],loading=true,error=null,first=true;
   const render=()=>{
     const focused=document.activeElement,focusedRow=focused?.closest('.track-row'),focusedClass=focused?.className;
     results.replaceChildren();
@@ -47,6 +48,9 @@ export function renderSearchView(container) {
       const top=document.createElement('section');top.className='search-top-result';top.innerHTML='<h2>Лучший результат</h2>';
       const card=document.createElement('div');card.className='search-top-card';card.innerHTML=`<div class="search-top-cover"></div><h3>${ui.escapeHTML(tracks[0].title)}</h3><p>Песня <span>•</span> ${ui.escapeHTML(tracks[0].artist)}</p><button class="search-top-play" aria-label="Воспроизвести ${ui.escapeHTML(tracks[0].title)}">${icons.play}</button>`;
       mountCover(card.firstElementChild,tracks[0],true);card.querySelector('button').onclick=()=>{remember(query);playRow(ui,tracks[0],tracks,{...ui.currentView},true);};top.append(card);
+      const bestArtist=artists.find(a=>normalize(a.name)===normalize(query));
+      if(bestArtist){card.classList.add('search-top-artist');card.replaceChildren();const cover=document.createElement('div');cover.className='search-top-cover';mountCover(cover,bestArtist,true);const open=document.createElement('button');open.className='search-artist-open';open.innerHTML=`<h3>${ui.escapeHTML(bestArtist.name)}</h3><p>Исполнитель</p>`;open.onclick=()=>ui.navigateTo({type:'artist',id:bestArtist.name,title:bestArtist.name,artist:bestArtist});card.append(cover,open);}
+
       const songs=document.createElement('section');songs.className='search-song-section';songs.innerHTML='<h2>Песни</h2>';songs.append(table(tracks.slice(0,4),true));if(tracks.length>4){const all=document.createElement('button');all.className='search-show-all';all.textContent='Все песни';all.onclick=()=>tabs.children[1].click();songs.append(all);}columns.append(top,songs);results.append(columns);
     }
     if(ui.searchFilter!=='songs'){
@@ -59,7 +63,8 @@ export function renderSearchView(container) {
         }section.append(grid);results.append(section);
       };
       const artistMap=new Map(),albumMap=new Map();
-      for(const t of tracks){if(!artistMap.has(t.artist))artistMap.set(t.artist,{name:t.artist,subtitle:'Исполнитель',pictureUrl:t.pictureUrl,action:()=>setQuery(t.artist)});
+      for(const artist of artistResults([artists],tracks,query))artistMap.set(artist.name,{...artist,subtitle:'Исполнитель',action:()=>ui.navigateTo({type:'artist',id:artist.name,title:artist.name,artist})});
+      for(const t of tracks){
         if(t.album){const key=t.album+'|'+t.artist;if(!albumMap.has(key))albumMap.set(key,{name:t.album,subtitle:`${t.year?t.year+' • ':''}${t.artist}`,pictureUrl:t.pictureUrl,action:()=>{if(!t.catalog)ui.navigateTo({type:'album',id:t.album,extra:t.artist,title:t.album});else {ui.searchFilter='songs';setQuery(t.album+' '+t.artist);}}});}}
       makeCards('artists','Исполнители',[...artistMap.values()]);makeCards('albums','Альбомы',[...albumMap.values()]);
       makeCards('playlists','Плейлисты',ui.library.getPlaylists().filter(p=>normalize(p.name).includes(normalize(query))).map(p=>({name:p.name,subtitle:'Плейлист',pictureUrl:p.pictureUrl,action:()=>ui.navigateTo({type:'playlist',id:p.id,title:p.name})})));
@@ -72,7 +77,7 @@ export function renderSearchView(container) {
     button.onclick=()=>{ui.searchFilter=key;for(const b of tabs.children){const selected=b===button;b.classList.toggle('active',selected);b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;}render();};
     button.onkeydown=e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();const next=tabs.children[(index+(e.key==='ArrowRight'?1:filters.length-1))%filters.length];next.click();next.focus();}};tabs.append(button);
   });
-  const receive=(list,busy,failure)=>{if(!first&&(!wrapper.isConnected||ui.searchQuery!==raw))return;first=false;tracks=list;loading=busy;error=failure;render();};
+  const receive=(list,busy,failure,foundArtists=[])=>{if(!first&&(!wrapper.isConnected||ui.searchQuery!==raw))return;first=false;tracks=list;artists=foundArtists;loading=busy;error=failure;render();};
   if(ui.music)ui.music.schedule(query,receive);else receive(ui.library.search(query),false,null);
   // Remember selected recordings, not every partially typed character.
   results.addEventListener('click',e=>{if(e.target.closest('.track-row'))remember(query);});

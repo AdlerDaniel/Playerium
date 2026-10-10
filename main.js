@@ -10,6 +10,7 @@ const { pathToFileURL } = require('node:url');
 const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
 const { DesktopUpdater } = require('./desktop-updater');
 const { DesktopMusic, downloadError, createAudioFetcher, createPageFetcher } = require('./desktop-music');
+const {audioResponse}=require('./desktop-audio');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
@@ -89,10 +90,7 @@ app.whenReady().then(async () => {
     const id = new URL(request.url).hostname;
     if (!sources.has(id)) return new Response('Not found', { status: 404 });
     try {
-      const response = await net.fetch(pathToFileURL(await authorize(sources.get(id))).href, { headers: request.headers });
-      const headers = new Headers(response.headers);
-      headers.set('Access-Control-Allow-Origin', '*');
-      return new Response(response.body, { status: response.status, headers });
+      return await audioResponse(await authorize(sources.get(id)),request);
     }
     catch { return new Response('Unavailable', { status: 403 }); }
   });

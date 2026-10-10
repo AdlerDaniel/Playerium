@@ -86,6 +86,11 @@ final class MusicEngine {
             String q=URLEncoder.encode(query,"UTF-8"),url;
             switch(payload.getString("provider")) {
                 case "itunes":url="https://itunes.apple.com/search?term="+q+"&entity=song&limit=35&country=US";break;
+                case "deezerArtists":url="https://api.deezer.com/search/artist?q="+q+"&limit=25";break;
+                case "itunesArtists":url="https://itunes.apple.com/search?term="+q+"&entity=musicArtist&limit=25&country=US";break;
+                case "deezerArtistTop":if(!query.matches("\\d{1,20}"))throw new SecurityException("Недопустимый запрос");url="https://api.deezer.com/artist/"+query+"/top?limit=100";break;
+                case "itunesArtistTracks":if(!query.matches("\\d{1,20}"))throw new SecurityException("Недопустимый запрос");url="https://itunes.apple.com/lookup?id="+query+"&entity=song&limit=200&country=US";break;
+                case "itunesArtistAlbums":if(!query.matches("\\d{1,20}"))throw new SecurityException("Недопустимый запрос");url="https://itunes.apple.com/lookup?id="+query+"&entity=album&limit=200&country=US";break;
                 case "itunesUA":url="https://itunes.apple.com/search?term="+q+"&entity=song&limit=35&country=UA";break;
                 case "deezer":url="https://api.deezer.com/search?q="+q+"&limit=35";break;
                 case "musicbrainz":url="https://musicbrainz.org/ws/2/recording/?query="+q+"&fmt=json&limit=20";break;

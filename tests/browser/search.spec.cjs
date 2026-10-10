@@ -70,3 +70,31 @@ test('Дорофеева 747 shows its catalog cover before a song has been down
   await page.locator('.mobile-search-input').fill('Дорофеева 747');await expect(page.locator('.song-search-results .track-row')).toHaveCount(1);await expect(page.locator('.track-name')).toHaveText('747');await expect(page.locator('.track-artist')).toHaveText('DOROFEEVA');
   await expect.poll(()=>page.locator('.track-mini-thumb img').evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);expect(await page.evaluate(()=>window.musicCalls.some(c=>c.op==='download'))).toBe(false);
 });
+
+for(const mobile of [false,true])test(`artist profile, guest credits, popularity and complete album navigation on ${mobile?'phone':'desktop'}`,async({page})=>{
+  const errors=await setup(page,mobile);
+  await page.evaluate(()=>{
+    const original=window.electronAPI.musicRequest;
+    const track=(title,rank,artist='DOROFEEVA')=>({title,rank,duration:180,artist:{id:1,name:artist},album:{title:'Album',cover_big:'https://covers.example.test/artist.jpg'},contributors:artist==='Guest'?[{id:1,name:'DOROFEEVA'},{id:2,name:'Guest'}]:[]});
+    window.electronAPI.musicRequest=async(op,p)=>{
+      if(op==='catalog'){
+        if(p.provider==='deezerArtists')return {data:[{id:1,name:'DOROFEEVA',picture_big:'https://covers.example.test/artist.jpg',nb_fan:100}]};
+        if(p.provider==='itunesArtists')return {results:[{artistId:123,artistName:'DOROFEEVA'}]};
+        if(p.provider==='itunesArtistAlbums')return {results:[{collectionId:456,collectionName:'Full Album',artistName:'DOROFEEVA',releaseDate:'2025-01-01',artworkUrl100:'https://covers.example.test/artist.jpg'}]};
+        if(p.provider==='itunesArtistTracks')return {results:p.query==='456'?[{trackName:'Album track',artistName:'DOROFEEVA',collectionName:'Full Album',trackTimeMillis:180000,trackNumber:1}]:[]};
+        if(p.provider==='deezer'||p.provider==='deezerArtistTop')return {data:[track('Rare song',100),track('Hit song',900000),track('Together (feat. DOROFEEVA)',500000,'Guest'),track('Unrelated',999999,'Other')]};
+        return {};
+      }
+      return original(op,p);
+    };
+  });
+  await page.locator(mobile?'.mobile-search-input':'#mainSearchInput').fill('DOROFEEVA');
+  await expect(page.locator('.search-compact-table .track-name').first()).toHaveText('Hit song');
+  await page.getByRole('tab',{name:'Исполнители',exact:true}).click();await page.locator('.search-entity-card.artists').filter({hasText:'DOROFEEVA'}).click();
+  await expect(page.locator('.artist-profile .view-title')).toHaveText('DOROFEEVA');
+  await expect(page.locator('.artist-profile .track-name').first()).toHaveText('Hit song');
+  await expect(page.locator('.artist-profile')).toContainText('Совместные записи');await expect(page.locator('.artist-profile')).not.toContainText('Unrelated');
+  await expect(page.locator('.artist-discography')).toContainText('Full Album');await page.locator('.artist-discography .shelf-card').filter({hasText:'Full Album'}).click();
+  await expect(page.locator('.view-title')).toHaveText('Full Album');await expect(page.locator('.track-name')).toHaveText('Album track');
+  expect(await page.evaluate(()=>window.musicCalls.some(c=>c.op==='download'))).toBe(false);expect(errors).toEqual([]);
+});

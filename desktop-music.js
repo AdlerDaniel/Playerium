@@ -51,6 +51,11 @@ async function hitMusicInfo(page,fetcher) {
 function catalogURL(provider,query) {
   const q=encodeURIComponent(query);
   switch(provider) {
+    case 'deezerArtists':return `https://api.deezer.com/search/artist?q=${q}&limit=25`;
+    case 'itunesArtists':return `https://itunes.apple.com/search?term=${q}&entity=musicArtist&limit=25&country=US`;
+    case 'deezerArtistTop':if(!/^\d{1,20}$/.test(query))throw Error('Недопустимый запрос');return `https://api.deezer.com/artist/${query}/top?limit=100`;
+    case 'itunesArtistTracks':if(!/^\d{1,20}$/.test(query))throw Error('Недопустимый запрос');return `https://itunes.apple.com/lookup?id=${query}&entity=song&limit=200&country=US`;
+    case 'itunesArtistAlbums':if(!/^\d{1,20}$/.test(query))throw Error('Недопустимый запрос');return `https://itunes.apple.com/lookup?id=${query}&entity=album&limit=200&country=US`;
     case 'itunes':return `https://itunes.apple.com/search?term=${q}&entity=song&limit=35&country=US`;
     case 'itunesUA':return `https://itunes.apple.com/search?term=${q}&entity=song&limit=35&country=UA`;
     case 'deezer':return `https://api.deezer.com/search?q=${q}&limit=35`;
@@ -102,7 +107,7 @@ class DesktopMusic {
   async request(operation,payload,id) {
     if(!/^[\w-]{1,100}$/.test(id))throw Error('Недопустимый запрос');
     if(operation==='catalog') {
-      const query=String(payload.query||'').trim().slice(0,200);if(query.length<2)return null;
+      const query=String(payload.query||'').trim().slice(0,200);if(!query)return null;
       const controller=new AbortController();this.requests.set(id,controller);const timer=setTimeout(()=>controller.abort(),15000);
       try {
         const response=await this.fetcher(catalogURL(payload.provider,query),{signal:controller.signal,headers:{'User-Agent':'Playerium/1.6.0 (https://github.com/AdlerDaniel/Playerium)'}});

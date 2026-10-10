@@ -60,18 +60,22 @@ export function audioCandidate(entry, provider) {
   if(provider==='youtubeAudio' && (!official || (!/- Topic$/i.test(entry.uploader || entry.channel || '') && !/official audio|audio only|visuali[sz]er|lyrics?/i.test(entry.title||''))))return null;
   return {title:cleanTitle(title),artist,album:entry.album || '',duration:Number(entry.duration)||0,
     year:entry.release_year || (entry.release_timestamp?new Date(entry.release_timestamp*1000).getUTCFullYear():''),trackNo:entry.track_number || 0,genre:entry.genre || entry.genres?.[0] || '',isrc:entry.isrc || '',
+    popularity:Number(entry.view_count)>0?Math.min(1,Math.log10(1+Number(entry.view_count))/10):0,
     pictureUrl:entry.thumbnail || entry.thumbnails?.at(-1)?.url || null,
     rawTitle:entry.title || title,official,metadataScore:1,sources:[{provider,url,official}],catalog:true};
 }
-export function mergeSongs(groups, query, local=[]) {
+export function mergeSongs(groups, query, local=[],allowVariants=false) {
   const tokens=normalizeSearch(query).split(' ').filter(Boolean),merged=[];
   for(const raw of groups.flat()) {
-    if(!raw?.title||!raw.artist||isVariant(raw.rawTitle||raw.title,query))continue;
+    if(!raw?.title||!raw.artist||(!allowVariants&&isVariant(raw.rawTitle||raw.title,query)))continue;
     if(raw.duration && (raw.duration<30||raw.duration>1800))continue;
     const text=normalizeSearch(`${raw.title} ${raw.artist}`);
     if(tokens.length && tokens.filter(t=>text.includes(t)).length/tokens.length<.65)continue;
     let existing=merged.find(t=>sameRecording(t,raw));
     if(existing) {
+      existing.popularity=Math.max(existing.popularity||0,raw.popularity||0);
+      existing.contributors=[...new Map([...(existing.contributors||[]),...(raw.contributors||[])].map(a=>[a.id||a.name,a])).values()];
+      for(const field of ['deezerArtistId','itunesArtistId'])if(!existing[field]&&raw[field])existing[field]=raw[field];
       const completeArtist=existing.artist.length>=raw.artist.length?existing.artist:raw.artist;
       existing.pictureUrls=[...new Set([...(existing.pictureUrls||[]),existing.pictureUrl,raw.pictureUrl,...(raw.pictureUrls||[])].filter(Boolean))];
       existing.sources=[...new Map([...(existing.sources||[]),...(raw.sources||[])].map(s=>[s.url,s])).values()];
@@ -84,13 +88,13 @@ export function mergeSongs(groups, query, local=[]) {
   for(const track of merged) {
     track.sources.sort((a,b)=>Number(b.official)-Number(a.official));
     const saved=local.find(t=>sameRecording(t,track));
-    if(saved)Object.assign(track,saved,{catalog:false});
+    if(saved)Object.assign(track,saved,{catalog:false,popularity:Math.max(track.popularity||0,saved.popularity||0)});
     else {
       let hash=14695981039346656037n;for(const c of songKey(track))hash=BigInt.asUintN(64,(hash^BigInt(c.codePointAt(0)))*1099511628211n);
       track.id=`song_${hash.toString(16)}`;
     }
   }
   const result=[...local.filter(t=>!merged.some(m=>m.id===t.id)),...merged];
-  const score=t => tokens.reduce((v,k)=>v+(normalizeSearch(t.title).includes(k)?3:0)+(normalizeSearch(t.artist).includes(k)?4:0),0)+(t.official?2:0)+(t.catalog?0:1);
-  return result.sort((a,b)=>score(b)-score(a)).slice(0,60);
+  const score=t => tokens.reduce((v,k)=>v+(normalizeSearch(t.title).includes(k)?3:0)+(normalizeSearch(t.artist).includes(k)?4:0),0);
+  return result.sort((a,b)=>score(b)-score(a)||(b.popularity||0)-(a.popularity||0)||Number(b.official)-Number(a.official)||Number(a.catalog)-Number(b.catalog)).slice(0,200);
 }

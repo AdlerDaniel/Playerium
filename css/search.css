@@ -1,4 +1,11 @@
 /* Search geometry and motion follow Spotify's public search interface. */
+.search-top-artist .search-top-cover {border-radius:50%}
+.search-artist-open {border:0;background:transparent;color:inherit;text-align:left;cursor:pointer;width:100%;padding:0}
+.search-artist-open:focus-visible {outline:2px solid #fff;outline-offset:4px;border-radius:4px}
+.artist-profile-status {color:#b3b3b3;margin:16px 24px;line-height:1.5}
+.artist-profile-status:empty {display:none}
+.artist-profile .artist-discography {padding:0 24px 24px}
+.artist-profile .shelf-cards {overflow-x:auto;scrollbar-width:none}
 .spotify-search { color:#fff; padding:24px; }
 .spotify-search h2 {font-size:24px;line-height:1.3;margin:20px 0 16px;font-weight:700;letter-spacing:-.5px}
 .search-active>.mobile-search-title {display:none}

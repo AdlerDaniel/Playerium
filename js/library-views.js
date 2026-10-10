@@ -1,4 +1,5 @@
 import {renderLibrary} from './library-view.js';
+import {renderArtistProfile} from './artist-profile.js';
 import {mountCover} from './artwork.js';
 import {collectionMenu,editPlaylist} from './collection-menu.js';
 import {showSurfaceMenu} from './surface-menu.js';
@@ -247,37 +248,11 @@ export function renderPlaylistView(container, playlistId) {
 }
 
 export function renderArtistView(container, artistName) {
-    const artistTracks = this.library.getTracks().filter((t) => t.artist === artistName);
-    const sorted = this.library.sortTracks(artistTracks, "title", true);
-
-    const coverUrl = sorted.find((t) => t.pictureUrl)?.pictureUrl;
-
-    const header = document.createElement("div");
-    header.className = "view-header";
-    header.innerHTML = `
-      <div class="view-header-cover artist-hero-art">${icons.artist}</div>
-      <div class="view-header-details">
-        <span class="view-type-badge">Исполнитель</span>
-        <h1 class="view-title">${this.escapeHTML(artistName)}</h1>
-        <div class="view-metadata">
-          <span>${sorted.length} треков</span>
-        </div>
-      </div>
-    `;
-
-    if(coverUrl) mountCover(header.querySelector('.view-header-cover'),{pictureUrl:coverUrl},true);
-    container.appendChild(header);
-    container.appendChild(this.createActionBar(sorted));
-    const heading=document.createElement('h2');heading.className='collection-section-heading';heading.textContent='Треки';container.append(heading);
-    container.appendChild(this.createTrackTable(sorted));
-    const albums=this.library.getAlbums().filter(a=>a.artist===artistName);
-    if(albums.length){const section=document.createElement('section');section.className='artist-discography';section.innerHTML='<h2>Дискография</h2><div class="shelf-cards"></div>';
-      for(const album of albums){const card=document.createElement('button');card.className='shelf-card';card.innerHTML=`<div class="shelf-art"></div><div class="shelf-title">${this.escapeHTML(album.name)}</div><div class="shelf-subtitle">Альбом</div>`;mountCover(card.firstElementChild,album);card.onclick=()=>this.navigateTo({type:'album',id:album.name,extra:artistName,title:album.name});section.lastElementChild.append(card);}container.append(section);}
-
+    return renderArtistProfile.call(this,container,artistName);
 }
 
 export function renderAlbumView(container, albumName, artistName) {
-    const albumTracks = this.library.getTracks().filter((t) => t.album === albumName && (!artistName || t.artist === artistName));
+    const albumTracks = this.currentView.tracks || this.library.getTracks().filter((t) => t.album === albumName && (!artistName || t.artist === artistName));
     const coverUrl = albumTracks.find((t) => t.pictureUrl)?.pictureUrl;
     const sorted = this.library.sortTracks(albumTracks, "trackNo", true);
     const totalDur = sorted.reduce((acc, t) => acc + (t.duration || 0), 0);
