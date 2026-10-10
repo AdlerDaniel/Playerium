@@ -86,6 +86,7 @@ class App {
       }
 
       console.log("Playerium initialized successfully.");
+      setTimeout(()=>this.music.repairCovers().catch(console.warn),1000);
     } catch (e) {
       console.error("Failed to start Playerium:", e);
     }

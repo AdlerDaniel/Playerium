@@ -9,7 +9,7 @@ function remember(query){if(query.trim().length<2)return;try{localStorage.setIte
 export function renderSearchView(container) {
   const ui=this,raw=ui.searchQuery||'',query=raw.trim();
   const wrapper=document.createElement('section');wrapper.className='mobile-search-view spotify-search'+(query?' search-active':'');
-  wrapper.innerHTML=`<h1 class="mobile-search-title">Поиск</h1><div class="search-input-line"><button class="search-back" aria-label="Назад">‹</button><div class="mobile-search-bar-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="2"/></svg><input class="mobile-search-input" type="search" inputmode="search" autocomplete="off" spellcheck="false" aria-label="Поиск песен, исполнителей и альбомов" placeholder="Что хотите послушать?" value="${ui.escapeHTML(raw)}"><button class="mobile-search-clear" aria-label="Очистить поиск">×</button></div></div>`;
+  wrapper.innerHTML=`<h1 class="mobile-search-title">Поиск</h1><div class="search-input-line"><button class="search-back" aria-label="Назад">‹</button><div class="mobile-search-bar-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="2"/></svg><input class="mobile-search-input" type="search" inputmode="search" autocomplete="off" spellcheck="false" aria-label="Поиск песен и исполнителей" placeholder="Что хотите послушать?" value="${ui.escapeHTML(raw)}"><button class="mobile-search-clear" aria-label="Очистить поиск">×</button></div></div>`;
   const input=wrapper.querySelector('input');
   const setQuery=q=>{ui.searchQuery=q;document.getElementById('mainSearchInput').value=q;ui.refreshCurrentView();};
   input.addEventListener('input',()=>setQuery(input.value));
@@ -27,13 +27,13 @@ export function renderSearchView(container) {
     }
     const heading=document.createElement('h2');heading.textContent='Все категории';wrapper.append(heading);
     const grid=document.createElement('div');grid.className='mobile-search-categories';
-    const categories=[['Любимые треки','cat-purple',icons.heart,()=>ui.navigateTo({type:'liked',title:'Любимые треки'})],['Исполнители','cat-blue',icons.artist,()=>ui.navigateTo({type:'library',tab:'artists',title:'Моя медиатека'})],['Альбомы','cat-orange',icons.music,()=>ui.navigateTo({type:'library',tab:'albums',title:'Моя медиатека'})],['Плейлисты','cat-green',icons.music,()=>ui.navigateTo({type:'library',tab:'playlists',title:'Моя медиатека'})],['Добавить файлы','cat-teal',icons.music,()=>ui.triggerMobileFileImport()],['Добавленные','cat-pink',icons.music,()=>ui.navigateTo({type:'allTracks',title:'Добавленные'})]];
+    const categories=[['Любимые треки','cat-purple',icons.heart,()=>ui.navigateTo({type:'liked',title:'Любимые треки'})],['Исполнители','cat-blue',icons.artist,()=>ui.navigateTo({type:'library',tab:'artists',title:'Моя медиатека'})],['Плейлисты','cat-green',icons.music,()=>ui.navigateTo({type:'library',tab:'playlists',title:'Моя медиатека'})],['Добавить файлы','cat-teal',icons.music,()=>ui.triggerMobileFileImport()],['Добавленные','cat-pink',icons.music,()=>ui.navigateTo({type:'allTracks',title:'Добавленные'})]];
     for(const [label,color,icon,action] of categories){const card=document.createElement('button');card.className=`mobile-cat-card ${color}`;card.innerHTML=`<span>${label}</span>${icon}`;card.onclick=action;grid.append(card);}wrapper.append(grid);return;
   }
   const tabs=document.createElement('div');tabs.className='search-filter-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Тип результатов');
   const results=document.createElement('div');results.className='song-search-results';results.id='searchResults';results.setAttribute('role','tabpanel');
   wrapper.append(tabs,results);
-  const filters=[['all','Все'],['songs','Песни'],['artists','Исполнители'],['albums','Альбомы'],['playlists','Плейлисты']];
+  const filters=[['all','Все'],['songs','Песни'],['artists','Исполнители'],['playlists','Плейлисты']];
   if(!filters.some(([key])=>key===ui.searchFilter))ui.searchFilter='all';
   let tracks=[],artists=[],loading=true,error=null,first=true;
   const render=()=>{
@@ -62,11 +62,9 @@ export function renderSearchView(container) {
           const card=document.createElement('button');card.className='search-entity-card '+kind;card.innerHTML=`<div class="search-entity-cover"></div><strong>${ui.escapeHTML(item.name)}</strong><span>${ui.escapeHTML(item.subtitle)}</span>`;mountCover(card.firstElementChild,item);card.onclick=item.action;grid.append(card);
         }section.append(grid);results.append(section);
       };
-      const artistMap=new Map(),albumMap=new Map();
+      const artistMap=new Map();
       for(const artist of artistResults([artists],tracks,query))artistMap.set(artist.name,{...artist,subtitle:'Исполнитель',action:()=>ui.navigateTo({type:'artist',id:artist.name,title:artist.name,artist})});
-      for(const t of tracks){
-        if(t.album){const key=t.album+'|'+t.artist;if(!albumMap.has(key))albumMap.set(key,{name:t.album,subtitle:`${t.year?t.year+' • ':''}${t.artist}`,pictureUrl:t.pictureUrl,action:()=>{if(!t.catalog)ui.navigateTo({type:'album',id:t.album,extra:t.artist,title:t.album});else {ui.searchFilter='songs';setQuery(t.album+' '+t.artist);}}});}}
-      makeCards('artists','Исполнители',[...artistMap.values()]);makeCards('albums','Альбомы',[...albumMap.values()]);
+      makeCards('artists','Исполнители',[...artistMap.values()]);
       makeCards('playlists','Плейлисты',ui.library.getPlaylists().filter(p=>normalize(p.name).includes(normalize(query))).map(p=>({name:p.name,subtitle:'Плейлист',pictureUrl:p.pictureUrl,action:()=>ui.navigateTo({type:'playlist',id:p.id,title:p.name})})));
     }
     if(!tracks.length&&loading){const skeleton=document.createElement('div');skeleton.className='search-skeleton';skeleton.setAttribute('aria-hidden','true');skeleton.innerHTML='<i></i><i></i><i></i><i></i>';results.append(skeleton);}

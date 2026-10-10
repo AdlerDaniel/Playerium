@@ -29,7 +29,7 @@ button:focus-visible, [role="button"]:focus-visible, [role="link"]:focus-visible
 .modal-header { min-width: 0; }
 .modal-overlay { overflow-y: auto; }
 .app-tooltip { overflow: hidden; }
-.time-hover-tooltip { position: fixed; transform: none; }
+.time-hover-tooltip { position: fixed; bottom: auto; right: auto; height: max-content; line-height: 16px; transform: none; z-index: 1700; }
 .surface-panel .context-menu-item { display: flex; align-items: center; width: 100%; min-height: 44px; text-align: left; gap: 12px; padding: 12px; color: var(--sp-text-primary); border-radius: 2px; }
 .surface-panel svg { width: 20px; height: 20px; fill: currentColor; flex-shrink: 0; }
 .surface-panel .context-menu-item span:first-of-type { flex: 1; }
@@ -64,7 +64,7 @@ button:focus-visible, [role="button"]:focus-visible, [role="link"]:focus-visible
 .library-grid .library-item-menu { position: absolute; right: 0; bottom: 0; background: var(--sp-dark-900); }
 .collection-header { background: linear-gradient(0deg,var(--sp-black)0,var(--collection-color,#343434)); }
 body[data-view="liked"] .collection-header { background: linear-gradient(180deg,#5038a0,#302060); }
-body[data-view="playlist"] .view-header, body[data-view="album"] .view-header { background: linear-gradient(180deg,var(--collection-color,#343434),var(--sp-black)0); }
+body[data-view="playlist"] .view-header { background: linear-gradient(180deg,var(--collection-color,#343434),var(--sp-black)0); }
 body[data-view="artist"] .collection-header { position: relative; overflow: hidden; min-height: 340px; align-items: flex-end; isolation: isolate; }
 body[data-view="artist"] .artist-hero-art { position: absolute; inset: 0; border-radius: 0 !important; width: 100%; height: 100%; box-shadow: none; z-index: -2; }
 body[data-view="artist"] .artist-hero-art img { object-fit: cover; filter: brightness(.65); }
@@ -77,8 +77,6 @@ body[data-view="artist"] .view-header-details { z-index: 1; }
 .artist-discography .shelf-card { color: var(--sp-text-primary); text-align: left; background: transparent; }
 .view-metadata [role="link"], .now-playing-panel-artist[role="link"] { cursor: pointer; }
 @media (min-width: 769px) {
-  body[data-view="album"] .track-row.no-album, body[data-view="album"] .track-table-header.no-album { grid-template-columns: 32px minmax(0,1fr) 112px !important; }
-  body[data-view="album"] .track-col-date, body[data-view="album"] .th-date { display: none; }
 }
 .view-metadata [role="link"]:hover, .now-playing-panel-artist[role="link"]:hover { text-decoration: underline; }
 .collection-tool { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; color: var(--sp-text-secondary); padding: 8px 12px; border-radius: 20px; background: var(--sp-text-primary)0d; }
@@ -134,7 +132,7 @@ body[data-view="artist"] .view-header-details { z-index: 1; }
   .mobile-lib-sub { font-size: 13px; margin-top: 4px; }
   .library-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .collection-header.view-header { padding: 16px 0 0; gap: 24px; }
-  body[data-view="album"] .view-header, body[data-view="playlist"] .view-header { background: linear-gradient(180deg,var(--collection-color,#343434),var(--sp-black)0); margin: 0 -16px; padding: 16px 16px 0; }
+  body[data-view="playlist"] .view-header { background: linear-gradient(180deg,var(--collection-color,#343434),var(--sp-black)0); margin: 0 -16px; padding: 16px 16px 0; }
   .collection-header .view-header-cover { width: min(64vw,280px); height: auto; aspect-ratio: 1; flex-shrink: 0; }
   .collection-header .view-header-details { padding: 0; width: 100%; }
   .collection-header .view-title { font-size: 24px; line-height: 1.2; margin: 0 0 12px; }

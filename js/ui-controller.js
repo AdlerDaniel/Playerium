@@ -4,7 +4,7 @@ import {showTrackMenu} from './track-menu.js';
 import {renderSearchView} from './search-view.js';
 import { bindSlider, syncPlaybackControls } from './playback-controls.js';
 import { saveIcon } from "./design-icons.js";
-import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, renderAlbumView, createActionBar } from "./library-views.js";
+import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, createActionBar } from "./library-views.js";
 import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
 import { renderRightQueue } from "./queue-view.js";
@@ -32,7 +32,7 @@ export class UIController {
     this.searchQuery = "";
     this.sortBy = "dateAdded";
     this.sortAsc = false;
-    this.sidebarFilter = "all"; // 'all' | 'playlists' | 'artists' | 'albums'
+    this.sidebarFilter = "all"; // 'all' | 'playlists' | 'artists'
 
     // UI state
     this.activeRightTab = "nowPlaying"; // 'nowPlaying' | 'queue'
@@ -357,8 +357,7 @@ export class UIController {
       document.getElementById("mobileFsArtist").textContent = track.artist || "Неизвестный исполнитель";
       document.getElementById("mobileFsContextTitle").textContent = this.player.playbackContext?.title || "Добавленные";
       const contextType=this.player.playbackContext?.type;
-      document.querySelector('.mobile-fs-context-subtitle').textContent=contextType==='album'?'Играет из альбома':contextType==='artist'?'Играет из исполнителя':contextType==='search'?'Играет из поиска':'Играет из плейлиста';
-      document.getElementById('mobileFsAlbum').textContent=track.album||'Добавленные';
+      document.querySelector('.mobile-fs-context-subtitle').textContent=contextType==='artist'?'Играет из исполнителя':contextType==='search'?'Играет из поиска':'Играет из плейлиста';
       document.getElementById('mobileFsAboutArtist').textContent=track.artist||'Неизвестный исполнитель';
 
       this.updateLikeButtons(track.id, track.liked);
@@ -463,6 +462,8 @@ export class UIController {
     this.library.onLibraryChanged = () => {
       this.renderSidebar();
       this.refreshCurrentView();
+      clearTimeout(this.coverRepairTimer);
+      this.coverRepairTimer=setTimeout(()=>this.music?.repairCovers().catch(console.warn),1500);
     };
   }
 
@@ -564,9 +565,6 @@ export class UIController {
       case "artist":
         this.renderArtistView(container, view.id);
         break;
-      case "album":
-        this.renderAlbumView(container, view.id, view.extra);
-        break;
       case "settings":
         this.renderSettingsView(container);
         break;
@@ -602,7 +600,6 @@ export class UIController {
 
   renderArtistView(...args) { return renderArtistView.apply(this, args); }
 
-  renderAlbumView(...args) { return renderAlbumView.apply(this, args); }
 
   renderSettingsView(...args) { return renderSettingsView.apply(this, args); }
 
@@ -659,10 +656,6 @@ export class UIController {
 
       <div class="now-playing-panel-card">
         <div class="panel-card-heading">Информация о треке</div>
-        <div class="panel-card-row">
-          <span class="panel-card-label">Альбом</span>
-          <span class="panel-card-val">${this.escapeHTML(track.album || "—")}</span>
-        </div>
         ${track.year ? `
         <div class="panel-card-row">
           <span class="panel-card-label">Год релиза</span>

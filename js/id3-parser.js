@@ -1,7 +1,8 @@
+import {readMP4Metadata} from './mp4-metadata.js';
 /**
  * Spotify Local Player - ID3 & Audio Metadata Parser
  * Pure JavaScript parser for ID3v2, ID3v1, and FLAC/Vorbis comments
- * Extracts: Title, Artist, Album, Year, Track Number, Embedded Album Art.
+ * Extracts: Title, Artist, Year, Track Number, Embedded Artwork.
  */
 
 import { normalizeTrackTitle } from "./track-title.js";
@@ -14,13 +15,12 @@ export class ID3Parser {
    */
   static async parseFile(file) {
     const filename = file.name;
-    const cleanName = filename.replace(/\.[^/.]+$/, "");
+    const cleanName = filename.replace(/\.[^/.]+$/, "").replace(/ \[[0-9a-f]{6,16}\]$/i, "");
     
     // Default fallback metadata from filename
     let metadata = {
       title: cleanName,
       artist: "Неизвестный исполнитель",
-      album: "Неизвестный альбом",
       year: "",
       trackNo: "",
       duration: 0,
@@ -43,6 +43,9 @@ export class ID3Parser {
       const buffer = await headerBlob.arrayBuffer();
       const view = new DataView(buffer);
 
+      if (view.byteLength >= 12 && String.fromCharCode(...new Uint8Array(buffer, 4, 4)) === 'ftyp') {
+        metadata = {...metadata, ...await readMP4Metadata(file)};
+      } else
       // Check for ID3v2 ('ID3')
       if (view.byteLength >= 10 &&
           view.getUint8(0) === 0x49 && // 'I'
@@ -199,7 +202,7 @@ export class ID3Parser {
       } else if (["TPE1", "TP1"].includes(frameId)) {
         result.artist = this.decodeText(data).trim() || result.artist;
       } else if (["TALB", "TAL"].includes(frameId)) {
-        result.album = this.decodeText(data).trim() || result.album;
+        // Ignore collection tags; artwork is parsed independently.
       } else if (["TYER", "TDRC", "TYE"].includes(frameId)) {
         result.year = this.decodeText(data).trim();
       } else if (["TRCK", "TRK"].includes(frameId)) {
@@ -289,7 +292,6 @@ export class ID3Parser {
     return {
       title: getStr(3, 30) || undefined,
       artist: getStr(33, 30) || undefined,
-      album: getStr(63, 30) || undefined,
       year: getStr(93, 4) || undefined
     };
   }
@@ -336,7 +338,7 @@ export class ID3Parser {
               const val = entry.slice(eqIdx + 1).trim();
               if (key === "TITLE") result.title = val;
               else if (key === "ARTIST") result.artist = val;
-              else if (key === "ALBUM") result.album = val;
+
               else if (key === "DATE") result.year = val;
               else if (key === "TRACKNUMBER") result.trackNo = val;
             }

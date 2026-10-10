@@ -95,30 +95,6 @@ export function renderSidebar() {
       });
     }
 
-    // 4. Albums
-    if (this.sidebarFilter === "albums") {
-      const albums = this.library.getAlbums();
-      albums.forEach((alb) => {
-        const item = document.createElement("div");
-        item.className = "sidebar-item" + (this.currentView.type === "album" && this.currentView.id === alb.name ? " active" : "");
-        const thumbHtml = alb.pictureUrl
-          ? `<img src="${alb.pictureUrl}" alt="Album" />`
-          : `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>`;
-
-        item.innerHTML = `
-          <div class="item-thumb">${thumbHtml}</div>
-          <div class="item-info">
-            <span class="item-title">${this.escapeHTML(alb.name)}</span>
-            <span class="item-subtitle">Альбом • ${this.escapeHTML(alb.artist)}</span>
-          </div>
-        `;
-
-        item.addEventListener("click", () => {
-          this.navigateTo({ type: "album", id: alb.name, title: alb.name, extra: alb.artist });
-        });
-        list.appendChild(item);
-      });
-    }
     list.querySelectorAll('.item-thumb img').forEach(img=>mountCover(img.parentElement,{pictureUrl:img.getAttribute('src')}));
     const query = (this.libraryQuery || "").toLocaleLowerCase();
     for (const item of list.children) {
@@ -251,37 +227,6 @@ export function renderArtistView(container, artistName) {
     return renderArtistProfile.call(this,container,artistName);
 }
 
-export function renderAlbumView(container, albumName, artistName) {
-    const albumTracks = this.currentView.tracks || this.library.getTracks().filter((t) => t.album === albumName && (!artistName || t.artist === artistName));
-    const coverUrl = albumTracks.find((t) => t.pictureUrl)?.pictureUrl;
-    const sorted = this.library.sortTracks(albumTracks, "trackNo", true);
-    const totalDur = sorted.reduce((acc, t) => acc + (t.duration || 0), 0);
-
-    const header = document.createElement("div");
-    header.className = "view-header";
-    header.innerHTML = `
-      <div class="view-header-cover">${icons.music}</div>
-      <div class="view-header-details">
-        <span class="view-type-badge">Альбом</span>
-        <h1 class="view-title">${this.escapeHTML(albumName)}</h1>
-        <div class="view-metadata">
-          <strong>${this.escapeHTML(artistName || sorted[0]?.artist || "")}</strong>
-          ${sorted[0]?.year ? `<span class="dot">•</span><span>${sorted[0].year}</span>` : ""}
-          <span class="dot">•</span>
-          <span>${sorted.length} треков</span>
-          <span class="dot">•</span>
-          <span>${this.formatDurationHours(totalDur)}</span>
-        </div>
-      </div>
-    `;
-
-    if(coverUrl)mountCover(header.querySelector('.view-header-cover'),{pictureUrl:coverUrl},true);
-    const artistLink=header.querySelector('.view-metadata strong');artistLink.tabIndex=0;artistLink.setAttribute('role','link');const openArtist=()=>this.navigateTo({type:'artist',id:artistName||sorted[0]?.artist,title:artistName||sorted[0]?.artist});artistLink.onclick=openArtist;artistLink.onkeydown=e=>{if(e.key==='Enter')openArtist();};
-    container.appendChild(header);
-    container.appendChild(this.createActionBar(sorted));
-    container.appendChild(this.createTrackTable(sorted, null, false));
-}
-
 export function createActionBar(tracks, playlist = null) {
     const bar=document.createElement('div');bar.className='view-actions';
     bar.innerHTML=`<div class="view-actions-left"><button class="btn-primary-play" id="btnHeroPlay" title="Воспроизвести все">${icons.play}</button><button class="action-icon-btn collection-shuffle" aria-label="Перемешать" aria-pressed="${this.player.isShuffle}">${icons.shuffle}</button><button class="action-icon-btn collection-more" aria-label="Действия с коллекцией">${icons.more}</button></div><div class="view-actions-right">${playlist?`<button class="collection-tool collection-add">${icons.plus}Добавить</button><button class="collection-tool collection-edit">${icons.edit}Изменить</button>`:''}<button class="collection-tool collection-sort">${icons.sort}Сортировать</button></div>`;
@@ -289,7 +234,7 @@ export function createActionBar(tracks, playlist = null) {
     bar.querySelector('.collection-shuffle').onclick=()=>{this.player.toggleShuffle();};
     bar.querySelector('.collection-more').onclick=e=>collectionMenu(this,{tracks,playlist,anchor:e.currentTarget});
     if(playlist){bar.querySelector('.collection-add').onclick=()=>this.navigateTo({type:'search',title:'Поиск'});bar.querySelector('.collection-edit').onclick=()=>editPlaylist(this,playlist);}
-    const labels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',album:'По альбому',duration:'По длительности'};
-    bar.querySelector('.collection-sort').onclick=e=>showSurfaceMenu(this,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(labels).map(([value,label])=>({label,selected:this.sortBy===value,icon:icons.sort,action:()=>{this.sortBy=value;this.sortAsc=['title','artist','album'].includes(value);this.refreshCurrentView();}}))});
+    const labels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',duration:'По длительности'};
+    bar.querySelector('.collection-sort').onclick=e=>showSurfaceMenu(this,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(labels).map(([value,label])=>({label,selected:this.sortBy===value,icon:icons.sort,action:()=>{this.sortBy=value;this.sortAsc=['title','artist'].includes(value);this.refreshCurrentView();}}))});
     return bar;
 }

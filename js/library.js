@@ -9,7 +9,7 @@ import { resizeArtwork } from "./artwork.js";
 import { ID3Parser } from "./id3-parser.js";
 
 const DB_NAME = "spotify_local_player_db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export class Library {
   constructor() {
@@ -60,9 +60,10 @@ export class Library {
           const trackStore = db.createObjectStore("tracks", { keyPath: "id" });
           trackStore.createIndex("title", "title", { unique: false });
           trackStore.createIndex("artist", "artist", { unique: false });
-          trackStore.createIndex("album", "album", { unique: false });
           trackStore.createIndex("liked", "liked", { unique: false });
         }
+        const tracks = request.transaction.objectStore("tracks");
+        if (tracks.indexNames.contains("album")) tracks.deleteIndex("album");
         if (!db.objectStoreNames.contains("playlists")) {
           db.createObjectStore("playlists", { keyPath: "id" });
         }
@@ -82,9 +83,22 @@ export class Library {
     const tracks = await this.getAllFromStore("tracks");
     const corrected = [];
     for (const t of tracks) {
+      let reparsed = false;
+      if (t.folderSource?.startsWith('web:') && /\.(m4a|mp4)$/i.test(t.fileName || '') && t.metadataVersion !== 2) {
+        const stored = await this.getFromStore('files', t.id);
+        try {
+          const file = stored?.blob || (stored?.handle && await stored.handle.queryPermission({mode:'read'}) === 'granted' ? await stored.handle.getFile() : null);
+          if (file) {
+            const metadata = await ID3Parser.parseFile(file);
+            for (const key of ['title','artist','year','genre','trackNo','duration']) if (metadata[key]) t[key] = metadata[key];
+            if (metadata.pictureBlob) t.pictureBlob = await resizeArtwork(metadata.pictureBlob);
+            t.metadataVersion = 2; reparsed = true;
+          }
+        } catch (error) { console.warn('Stored metadata repair failed', error); }
+      }
       const title = normalizeTrackTitle(t.title);
-      if (title !== t.title || "lyrics" in t || "lyricsModified" in t) {
-        t.title = title; delete t.lyrics; delete t.lyricsModified;
+      if (reparsed || title !== t.title || "album" in t || "lyrics" in t || "lyricsModified" in t) {
+        t.title = title; delete t.album; delete t.lyrics; delete t.lyricsModified;
         corrected.push({ ...t, pictureUrl: null });
       }
       t.pictureUrl = t.pictureBlob ? this.coverURL(t.id, t.pictureBlob) : null;
@@ -132,6 +146,7 @@ export class Library {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, "readwrite");
       const stored = storeName === "tracks" ? { ...item, pictureUrl: null } : item;
+      if(storeName === "tracks")delete stored.album;
       tx.objectStore(storeName).put(stored);
       tx.oncomplete = () => resolve();
       tx.onerror = tx.onabort = () => reject(tx.error || new Error("Не удалось сохранить библиотеку"));
@@ -183,6 +198,7 @@ export class Library {
     if(!track)throw Error('Не удалось добавить трек');
     const {pictureBase64,...metadata}=file.metadata || {};
     Object.assign(track,metadata,{downloadId:file.downloadId,catalog:false});
+    delete track.album;
     if(expected)track.recordingKey=`${expected.artist}|${expected.title}`;
     await this.putInStore('tracks',track);this.onLibraryChanged?.();return track;
   }
@@ -309,30 +325,6 @@ export class Library {
     return Array.from(artistMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  getAlbums() {
-    const albumMap = new Map();
-    this.getTracks().forEach((track) => {
-      const album = track.album || "Неизвестный альбом";
-      const key = `${album}___${track.artist}`;
-      if (!albumMap.has(key)) {
-        albumMap.set(key, {
-          name: album,
-          artist: track.artist || "Неизвестный исполнитель",
-          year: track.year || "",
-          trackCount: 0,
-          pictureUrl: track.pictureUrl || null,
-          tracks: []
-        });
-      }
-      const entry = albumMap.get(key);
-      entry.trackCount++;
-      entry.tracks.push(track);
-      if (!entry.pictureUrl && track.pictureUrl) {
-        entry.pictureUrl = track.pictureUrl;
-      }
-    });
-    return Array.from(albumMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }
 
   // --- Sorting & Searching ---
 
@@ -340,7 +332,7 @@ export class Library {
     if (!query || !query.trim()) return this.getTracks();
     const tokens=normalizeSearch(query).split(' ').filter(Boolean);
     return this.getTracks().filter(t=>{
-      const text=normalizeSearch(`${t.title||''} ${t.artist||''} ${t.album||''}`);
+      const text=normalizeSearch(`${t.title||''} ${t.artist||''}`);
       return tokens.every(token=>text.includes(token));
     });
   }
@@ -357,10 +349,6 @@ export class Library {
         case "artist":
           valA = (a.artist || "").toLowerCase();
           valB = (b.artist || "").toLowerCase();
-          break;
-        case "album":
-          valA = (a.album || "").toLowerCase();
-          valB = (b.album || "").toLowerCase();
           break;
         case "duration":
           valA = a.duration || 0;
@@ -526,7 +514,7 @@ export class Library {
         const cleanName = f.name.replace(/\.[^/.]+$/, "");
         const parts = cleanName.split(" - ");
         let metadata = { title: parts.length > 1 ? parts.slice(1).join(" - ") : cleanName,
-          artist: parts.length > 1 ? parts[0] : "Неизвестный исполнитель", album: folderName, duration: 0 };
+          artist: parts.length > 1 ? parts[0] : "Неизвестный исполнитель", duration: 0 };
         let parsed = true;
         try {
           if (f.file) metadata = { ...metadata, ...await ID3Parser.parseFile(f.file) };
@@ -546,9 +534,9 @@ export class Library {
         const previous = track;
         track = { ...metadata, id, downloadId:f.downloadId || previous?.downloadId || null, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
           sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
-          liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, unavailable: false };
+          liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, metadataVersion: 2, unavailable: false };
         track.title = normalizeTrackTitle(track.title);
-        delete track.lyrics; delete track.lyricsModified;
+        delete track.album; delete track.lyrics; delete track.lyricsModified;
         delete track.picture; delete track.pictureBase64;
         if (track.pictureBlob) { track.pictureBlob = await resizeArtwork(track.pictureBlob); track.pictureUrl = this.coverURL(id, track.pictureBlob); }
         else {

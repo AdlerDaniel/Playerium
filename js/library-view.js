@@ -15,7 +15,6 @@ export function renderLibrary(ui,container) {
       for(const p of ui.library.getPlaylists().filter(p=>!p.isFolderPlaylist)){const tracks=ui.library.getPlaylistTracks(p.id);items.push({name:p.name,sub:`Плейлист • ${tracks.length} треков`,pictureUrl:tracks.find(t=>t.pictureUrl)?.pictureUrl,playlist:p,tracks,view:{type:'playlist',id:p.id,title:p.name},date:p.updatedAt||p.createdAt});}
     }
     if(filter==='artists')for(const a of ui.library.getArtists())items.push({name:a.name,sub:'Исполнитель',pictureUrl:a.pictureUrl,round:true,icon:icons.artist,view:{type:'artist',id:a.name,title:a.name}});
-    if(filter==='albums')for(const a of ui.library.getAlbums())items.push({name:a.name,sub:`Альбом • ${a.artist}`,pictureUrl:a.pictureUrl,view:{type:'album',id:a.name,title:a.name,extra:a.artist}});
     return items;
   };
   const render=()=>{
@@ -34,7 +33,7 @@ export function renderLibrary(ui,container) {
     }
     if(!items.length){const empty=document.createElement('div');empty.className='library-empty';empty.textContent=input.value?'Ничего не найдено. Попробуйте другое название.':'В этом разделе пока ничего нет.';list.append(empty);}
   };
-  for(const [value,label] of [['all','Все'],['playlists','Плейлисты'],['artists','Исполнители'],['albums','Альбомы']]){const p=document.createElement('button');p.className='mobile-lib-pill';p.dataset.filter=value;p.textContent=label;p.onclick=()=>{filter=value;ui.currentView.tab=value;render();};pills.append(p);}
+  for(const [value,label] of [['all','Все'],['playlists','Плейлисты'],['artists','Исполнители']]){const p=document.createElement('button');p.className='mobile-lib-pill';p.dataset.filter=value;p.textContent=label;p.onclick=()=>{filter=value;ui.currentView.tab=value;render();};pills.append(p);}
   root.querySelector('#btnMobileLibAdd').onclick=()=>ui.showMobileAddSheet();
   root.querySelector('.library-search-toggle').onclick=()=>{root.querySelector('.library-search-line').hidden=false;input.focus();};
   input.oninput=()=>{ui.collectionQuery=input.value;render();};root.querySelector('.library-search-line button').onclick=()=>{input.value='';ui.collectionQuery='';root.querySelector('.library-search-line').hidden=true;render();};

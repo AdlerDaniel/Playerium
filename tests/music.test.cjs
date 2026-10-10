@@ -22,7 +22,7 @@ test('localized recording titles and reordered full credits preserve exact versi
 test('confirmed source registry supplements search without replacing live or alternate masters',async()=>{
  const {recordingSources}=await import('../js/music-recordings.js');
  assert.equal(recordingSources('Schmalgauzen Jessica')[0].sources[0].provider,'hitmusic');
- assert.equal(recordingSources('THE PINBALLS Blues of Shichiten Battou')[0].album,'Number Seven');
+ assert.equal(recordingSources('THE PINBALLS Blues of Shichiten Battou')[0].album,undefined);
  assert.equal(recordingSources('Pixies Where Is My Mind Live').length,0);
  assert.equal(recordingSources('Other Jessica').length,0);
 });
@@ -45,7 +45,7 @@ test('one original recording combines providers, metadata and offline copy witho
   const cover={...official,title:'Повільне диско (cover)',rawTitle:'Повільне диско (cover)',artist:'Somebody'};
   const clip={...official,rawTitle:'KLER - Повільне диско (Official Music Video)'};
   const rows=mergeSongs([[official,other,cover,clip],[metadata]],'KLER Повільне диско');
-  assert.equal(rows.length,1);assert.equal(rows[0].sources.length,2);assert.equal(rows[0].album,metadata.album);assert.equal(rows[0].pictureUrl,metadata.pictureUrl);
+  assert.equal(rows.length,1);assert.equal(rows[0].sources.length,2);assert.equal(rows[0].album,undefined);assert.equal(rows[0].pictureUrl,metadata.pictureUrl);
   assert.match(rows[0].artist,/OTOY/);
   assert.match(mergeSongs([[official,{...metadata,artist:'KLER'}]],'KLER Повільне диско')[0].artist,/OTOY/);
   const local={id:'saved',title:'Повільне диско',artist:'KLER x OTOY',duration:253};
@@ -161,7 +161,7 @@ test('reopening cached multi-provider search keeps the results',async()=>{
   global.window={electronAPI:{musicRequest:async()=>assert.fail('cached results must not request providers')}};
   const {MusicCatalog}=await import('../js/music-catalog.js');const lib={search:()=>[]};const catalog=new MusicCatalog(lib,{});
   catalog.cache.set('song',{time:Date.now(),groups:[[{title:'Song',artist:'Artist',sources:[],catalog:true}],[{title:'Song',artist:'Artist',album:'Album',sources:[],catalog:true}]]});
-  let rows;catalog.schedule('Song',(results,busy)=>{rows=results;assert.equal(busy,false);});assert.equal(rows.length,1);assert.equal(rows[0].album,'Album');
+  let rows;catalog.schedule('Song',(results,busy)=>{rows=results;assert.equal(busy,false);});assert.equal(rows.length,1);assert.equal(rows[0].album,undefined);
 });
 test('decoded short previews are rejected before any download is published',async()=>{
   const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');const {DesktopMusic}=require('../desktop-music');
@@ -179,7 +179,7 @@ test('decoded short previews are rejected before any download is published',asyn
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 
-test('music search retains official audio credits, album and duration while excluding videos',async()=>{
+test('music search retains official audio credits and duration while excluding videos',async()=>{
   const {youtubeMusicEntries}=await import('../js/music-youtube.js');
   const {audioCandidate,sameRecording,cleanTitle}=await import('../js/music-match.js');
   const browse=(text,pageType)=>({text,navigationEndpoint:{browseEndpoint:{browseEndpointContextSupportedConfigs:{browseEndpointContextMusicConfig:{pageType}}}}});
@@ -189,7 +189,7 @@ test('music search retains official audio credits, album and duration while excl
   ]}});
   const data={contents:[row('MUSIC_VIDEO_TYPE_ATV'),row('MUSIC_VIDEO_TYPE_OMV'),row('MUSIC_VIDEO_TYPE_ATV')]};
   const entries=youtubeMusicEntries(data);assert.equal(entries.length,1);
-  const song=audioCandidate(entries[0],'youtubeMusic');assert.equal(song.artist,'DOROFEEVA');assert.equal(song.album,'747 - Single');assert.equal(song.duration,174);
+  const song=audioCandidate(entries[0],'youtubeMusic');assert.equal(song.artist,'DOROFEEVA');assert.equal(song.album,undefined);assert.equal(song.duration,174);
   assert.ok(sameRecording(song,{title:'747',artist:'DOROFEEVA',duration:173.963}));
   assert.equal(cleanTitle('DOROFEEVA - різнокольорова (Lyric Video)'),'DOROFEEVA - різнокольорова');
 });
@@ -204,15 +204,15 @@ test('known song audio is attempted before discovery, and discovery network erro
   window.electronAPI.musicRequest=async()=>{throw Error('Не удалось соединиться с аудиосервисом.');};
   await assert.rejects(catalog.ensureTrack({...song,sources:[]}),/соединиться/);
 });
-test('direct audio receives missing album and cover metadata before saving, while catalog failures do not prevent a known download',async()=>{
+test('direct audio receives missing cover metadata before saving, while catalog failures do not prevent a known download',async()=>{
   global.window={};global.document={querySelectorAll:()=>[]};
   const {MusicCatalog}=await import('../js/music-catalog.js');const calls=[];
   const song={id:'song_ab20',title:'Song',artist:'Artist',catalog:true,sources:[{provider:'musify',url:'https://musify.club/track/pl/123/song.mp3',title:'Song',artist:'Artist'}]};
   const lib={getTracks:()=>[],folders:[],addDownloaded:async(record,track)=>track};
   window.electronAPI={musicRequest:async(op,payload)=>{calls.push({op,payload});if(op==='download')return {};return {results:[{trackName:'Song',artistName:'Artist',collectionName:'Album',artworkUrl100:'https://is1-ssl.mzstatic.com/100x100bb.jpg',trackTimeMillis:180000,releaseDate:'2025-01-01'}]};}};
   const catalog=new MusicCatalog(lib,{renderSidebar:()=>{}});const saved=await catalog.ensureTrack(song);
-  assert.equal(saved.album,'Album');assert.equal(saved.duration,180);assert.match(saved.pictureUrl,/600x600bb/);
-  assert.equal(calls.at(-1).op,'download');assert.equal(calls.at(-1).payload.track.album,'Album');
+  assert.equal(saved.album,undefined);assert.equal(saved.duration,180);assert.match(saved.pictureUrl,/600x600bb/);
+  assert.equal(calls.at(-1).op,'download');assert.equal(calls.at(-1).payload.track.album,undefined);
   window.electronAPI.musicRequest=async(op)=>{if(op==='catalog')throw Error('Catalog unavailable');return {};};
   assert.equal((await catalog.ensureTrack(song)).title,'Song');
 });

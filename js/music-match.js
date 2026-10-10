@@ -6,7 +6,8 @@ const cyrillic={а:'a',б:'b',в:'v',г:'g',ґ:'g',д:'d',е:'e',ё:'e',є:'ye',
 const artistAliases=new Map([
   ['лилу45','lely45'],['лілу45','lely45'],['lilu45','lely45'],
   ['виталий козловский','vitaliy kozlovskiy'],['віталій козловський','vitaliy kozlovskiy'],
-  ['діти інженерів','dity inzheneriv'],['саша чемеров','sasha chemerov']
+  ['діти інженерів','dity inzheneriv'],['саша чемеров','sasha chemerov'],
+  ['океан ельзи','okean elzy']
 ].map(([alias,canonical])=>[normalize(alias),normalize(canonical)]));
 export const normalizeSearch=value=>{
   let text=normalize(value);for(const [alias,canonical]of artistAliases)text=text.replaceAll(alias,canonical);
@@ -58,7 +59,7 @@ export function audioCandidate(entry, provider) {
   if(!url || !/^https:\/\//.test(url))return null;
   const official=!!credited || !!entry.channel_is_verified || /- Topic$/i.test(entry.uploader || entry.channel || '') || provider==='youtubeMusic' || provider==='bandcamp' || (provider==='soundcloud' && artistKey(artist)===artistKey(entry.uploader));
   if(provider==='youtubeAudio' && (!official || (!/- Topic$/i.test(entry.uploader || entry.channel || '') && !/official audio|audio only|visuali[sz]er|lyrics?/i.test(entry.title||''))))return null;
-  return {title:cleanTitle(title),artist,album:entry.album || '',duration:Number(entry.duration)||0,
+  return {title:cleanTitle(title),artist,duration:Number(entry.duration)||0,
     year:entry.release_year || (entry.release_timestamp?new Date(entry.release_timestamp*1000).getUTCFullYear():''),trackNo:entry.track_number || 0,genre:entry.genre || entry.genres?.[0] || '',isrc:entry.isrc || '',
     popularity:Number(entry.view_count)>0?Math.min(1,Math.log10(1+Number(entry.view_count))/10):0,
     pictureUrl:entry.thumbnail || entry.thumbnails?.at(-1)?.url || null,
@@ -79,8 +80,8 @@ export function mergeSongs(groups, query, local=[],allowVariants=false) {
       const completeArtist=existing.artist.length>=raw.artist.length?existing.artist:raw.artist;
       existing.pictureUrls=[...new Set([...(existing.pictureUrls||[]),existing.pictureUrl,raw.pictureUrl,...(raw.pictureUrls||[])].filter(Boolean))];
       existing.sources=[...new Map([...(existing.sources||[]),...(raw.sources||[])].map(s=>[s.url,s])).values()];
-      for(const field of ['album','year','trackNo','genre','isrc','pictureUrl','duration'])if(!existing[field]&&raw[field])existing[field]=raw[field];
-      if((raw.metadataScore||0)>(existing.metadataScore||0)){for(const field of ['title','artist','album','year','trackNo','genre','isrc','pictureUrl','duration'])if(raw[field])existing[field]=raw[field];existing.metadataScore=raw.metadataScore;}
+      for(const field of ['year','trackNo','genre','isrc','pictureUrl','duration'])if(!existing[field]&&raw[field])existing[field]=raw[field];
+      if((raw.metadataScore||0)>(existing.metadataScore||0)){for(const field of ['title','artist','year','trackNo','genre','isrc','pictureUrl','duration'])if(raw[field])existing[field]=raw[field];existing.metadataScore=raw.metadataScore;}
       existing.artist=completeArtist;
       existing.official ||= raw.official;
     }else merged.push({...raw,pictureUrls:[...new Set([raw.pictureUrl,...(raw.pictureUrls||[])].filter(Boolean))],sources:[...(raw.sources||[])]});
@@ -96,5 +97,6 @@ export function mergeSongs(groups, query, local=[],allowVariants=false) {
   }
   const result=[...local.filter(t=>!merged.some(m=>m.id===t.id)),...merged];
   const score=t => tokens.reduce((v,k)=>v+(normalizeSearch(t.title).includes(k)?3:0)+(normalizeSearch(t.artist).includes(k)?4:0),0);
+  for(const track of result)delete track.album;
   return result.sort((a,b)=>score(b)-score(a)||(b.popularity||0)-(a.popularity||0)||Number(b.official)-Number(a.official)||Number(a.catalog)-Number(b.catalog)).slice(0,200);
 }

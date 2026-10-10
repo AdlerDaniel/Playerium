@@ -174,7 +174,7 @@
   background-color: var(--sp-dark-900);
   z-index: 10;
 }
-.track-table-header.no-album {
+.track-table-header.compact-columns {
   grid-template-columns: 48px 5fr 2fr 80px;
 }
 
@@ -198,7 +198,7 @@
   cursor: pointer;
   user-select: none;
 }
-.track-row.no-album {
+.track-row.compact-columns {
   grid-template-columns: 48px 5fr 2fr 80px;
 }
 @media (hover: hover) and (pointer: fine) {
@@ -228,6 +228,7 @@
   display: block;
 }
 .track-row-play {
+  width: 24px; height: 24px; align-items: center; justify-content: center; flex-shrink: 0;
   display: none;
   color: var(--sp-text-primary);
 }
@@ -255,6 +256,7 @@
   height: 14px;
 }
 .track-row.playing.is-playing .track-row-play {
+  width: 24px; height: 24px; align-items: center; justify-content: center; flex-shrink: 0;
   display: none;
 }
 @media (hover: hover) and (pointer: fine) {
@@ -343,22 +345,6 @@
 }
 
 /* Track Album */
-.track-col-album {
-  font-size: 13px;
-  color: var(--sp-text-subdued);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding-right: 12px;
-  min-width: 0;
-  transition: color 0.15s var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-  .track-col-album:hover {
-    color: var(--sp-text-primary);
-  }
-}
-
 /* Track Date Added */
 .track-col-date {
   font-size: 12px;
@@ -532,3 +518,8 @@
 .context-menu-item:is(button) { width:100%; min-height:44px; border:0; background:none; text-align:left; color:inherit; font:inherit; cursor:pointer; }
 .context-menu-item:is(button):hover { background:rgba(255,255,255,.08); }
 @media(max-width:768px) { .song-search-results .track-col-duration { gap:0; } .song-search-results .track-col-duration>span,.song-search-results .track-like-btn { display:none!important; } .song-search-results .track-menu-btn { width:44px!important; height:44px!important; } }
+
+.track-row-play svg { width: 16px; height: 16px; fill: currentColor; flex-shrink: 0; }
+.track-row:focus-within .track-number { display: none; }
+.track-row:focus-within .track-row-play { display: flex; }
+.track-row:focus-within .equalizer-bars { display: none; }

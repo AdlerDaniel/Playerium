@@ -1,6 +1,6 @@
 const {test,expect}=require('@playwright/test');
 async function boot(page){await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);}
-async function within(page,selector){const b=await page.locator(selector).boundingBox(),v=page.viewportSize();expect(b.x).toBeGreaterThanOrEqual(7);expect(b.y).toBeGreaterThanOrEqual(7);expect(b.x+b.width).toBeLessThanOrEqual(v.width-7);expect(b.y+b.height).toBeLessThanOrEqual(v.height-7);}
+async function within(page,selector){await expect.poll(async()=>{const b=await page.locator(selector).boundingBox(),v=page.viewportSize();return !!b&&b.x>=7&&b.y>=7&&b.x+b.width<=v.width-7&&b.y+b.height<=v.height-7;}).toBe(true);}
 test('desktop tooltips flip at top, clamp at sides, show on keyboard focus and dismiss',async({page})=>{
  await page.setViewportSize({width:1000,height:700});await boot(page);
  await page.locator('#btnOpenSettings').hover();await expect(page.locator('.app-tooltip')).toBeVisible();await within(page,'.app-tooltip');

@@ -41,7 +41,7 @@ for(const android of [false,true])test(`search, save, metadata persistence and d
   await expect.poll(()=>page.evaluate(()=>window.playerApp.library.getTracks().length)).toBe(1);
   await expect(results.locator('.track-download-btn')).toHaveCount(0);
   const metadata=await page.evaluate(()=>{const t=window.playerApp.library.getTracks()[0];return {title:t.title,artist:t.artist,album:t.album,genre:t.genre,isrc:t.isrc};});
-  expect(metadata).toEqual({title:'Повільне диско',artist:'KLER x OTOY',album:'Повільне диско',genre:'Pop',isrc:'XX1234567890'});
+  expect(metadata).toEqual({title:'Повільне диско',artist:'KLER x OTOY',album:undefined,genre:'Pop',isrc:'XX1234567890'});
   expect(await page.evaluate(()=>window.musicCalls.filter(c=>c.operation==='download').length)).toBe(1);
   await page.reload();await page.waitForFunction(()=>window.playerApp?.library.getTracks().length===1&&window.playerApp.ui.history.length>0);
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));
@@ -76,7 +76,7 @@ for(const android of [false,true])test(`Muzend merges with catalog metadata and 
   await rows.locator('.track-download-btn').click();
   await expect.poll(()=>page.evaluate(()=>window.playerApp.library.getTracks().length)).toBe(1);
   const result=await page.evaluate(()=>({track:window.playerApp.library.getTracks()[0],sources:window.musicCalls.find(c=>c.operation==='download').payload.track.sources}));
-  expect(result.track.title).toBe('747');expect(result.track.album).toBe('747 - Single');
+  expect(result.track.title).toBe('747');expect(result.track.album).toBeUndefined();
   expect(result.sources).toHaveLength(1);expect(result.sources[0].provider).toBe('muzend');expect(result.sources[0].official).toBe(false);
   await expect(page.locator('.song-search-results')).not.toContainText(/Muzend|источник|интернет/i);
 });

@@ -2,7 +2,7 @@ import {mountCover} from './artwork.js';
 import { saveIcon, icons } from "./design-icons.js";
 import { mountTrackRows } from "./virtual-list.js";
 import { playRow } from './playback-controls.js';
-export function createTrackTable(tracks, playlistContext = null, showAlbumCol = true) {
+export function createTrackTable(tracks, playlistContext = null) {
     const playbackContext = { ...this.currentView };
     const table = document.createElement("div");
     table.className = "track-table";
@@ -21,11 +21,10 @@ export function createTrackTable(tracks, playlistContext = null, showAlbumCol = 
     }
 
     const header = document.createElement("div");
-    header.className = "track-table-header" + (!showAlbumCol ? " no-album" : "");
+    header.className = "track-table-header compact-columns";
     header.innerHTML = `
       <div class="th-num">#</div>
       <div>Название</div>
-      ${showAlbumCol ? `<div>Альбом</div>` : ""}
       <div class="th-date">Дата добавления</div>
       <div class="th-duration">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm9-3.25V8H5.75a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 .75-.75V4.75a.75.75 0 0 0-1.5 0z"/></svg>
@@ -36,7 +35,7 @@ export function createTrackTable(tracks, playlistContext = null, showAlbumCol = 
     const createRow = (track, index) => {
       const row = document.createElement("div");
       const isCurrent = this.player.currentTrack && this.player.currentTrack.id === track.id;
-      row.className = `track-row ${!showAlbumCol ? "no-album" : ""} ${isCurrent ? "playing" : ""} ${isCurrent && this.player.isPlaying ? "is-playing" : ""}`;
+      row.className = `track-row compact-columns ${isCurrent ? "playing" : ""} ${isCurrent && this.player.isPlaying ? "is-playing" : ""}`;
       row.dataset.trackId = track.id;
 
       const coverHtml = track.pictureUrl
@@ -63,9 +62,6 @@ export function createTrackTable(tracks, playlistContext = null, showAlbumCol = 
             <span class="track-artist" data-artist="${this.escapeHTML(track.artist)}">${this.escapeHTML(track.artist)}</span>
           </div>
         </div>
-        ${showAlbumCol ? `
-        <div class="track-col-album" data-album="${this.escapeHTML(track.album)}">${this.escapeHTML(track.album)}</div>
-        ` : ""}
         <div class="track-col-date">${this.formatDate(track.dateAdded)}</div>
         <div class="track-col-duration">
           ${track.catalog ? `<button class="track-download-btn" title="Скачать" aria-label="Скачать ${this.escapeHTML(track.title)}"><svg viewBox="0 0 24 24"><path d="M11 3h2v10l3-3 1.4 1.4L12 17l-5.4-5.6L8 10l3 3V3zM5 19h14v2H5z"/></svg></button>` : ''}

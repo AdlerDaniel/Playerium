@@ -136,7 +136,7 @@ public class MediaNotificationService extends MediaSessionService {
             if (!MainActivity.hasMusicPermission(this, uri)) throw new SecurityException("Unauthorized URI");
             android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));
             MediaMetadata metadata = new MediaMetadata.Builder().setTitle(t.optString("title"))
-                .setArtist(t.optString("artist")).setAlbumTitle(t.optString("album")).setExtras(extras).build();
+                .setArtist(t.optString("artist")).setExtras(extras).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
         }
         if (items.isEmpty()) { player.stop(); player.clearMediaItems(); stopSelf(); return; }
@@ -194,7 +194,7 @@ public class MediaNotificationService extends MediaSessionService {
                 tracks.put(new JSONObject().put("id",item.mediaId).put("uri",item.localConfiguration.uri.toString())
                     .put("title",String.valueOf(item.mediaMetadata.title==null?"":item.mediaMetadata.title))
                     .put("artist",String.valueOf(item.mediaMetadata.artist==null?"":item.mediaMetadata.artist))
-                    .put("album",String.valueOf(item.mediaMetadata.albumTitle==null?"":item.mediaMetadata.albumTitle)));
+                    );
             }
             JSONObject data=new JSONObject().put("tracks",tracks).put("index",player.getCurrentMediaItemIndex())
                 .put("play",player.getPlayWhenReady()).put("position",Math.max(0,player.getCurrentPosition()))

@@ -11,7 +11,7 @@
 .home-dashboard { background: linear-gradient(180deg,var(--theme-hero),var(--sp-dark-900) 380px); }
 .topbar, .topbar.scrolled { background: var(--sp-black); }
 .settings-btn-primary:hover, .home-import:hover { background: var(--sp-text-secondary); color: var(--sp-black); }
-.view-header, body[data-view="liked"] .view-header, body[data-view="liked"] .collection-header, body[data-view="playlist"] .view-header, body[data-view="album"] .view-header { background: linear-gradient(180deg,var(--theme-hero),var(--sp-dark-900)); }
+.view-header, body[data-view="liked"] .view-header, body[data-view="liked"] .collection-header, body[data-view="playlist"] .view-header { background: linear-gradient(180deg,var(--theme-hero),var(--sp-dark-900)); }
 .surface-panel, .form-dialog .modal-card, .mobile-sheet-content, .collection-sheet .mobile-sheet-content { color: var(--sp-text-primary); background: var(--sp-dark-600); }
 .surface-panel .context-menu-item, .dialog-field .search-input { color: var(--sp-text-primary); }
 .dialog-field .search-input { background: var(--sp-dark-400); }

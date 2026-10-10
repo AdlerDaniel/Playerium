@@ -125,7 +125,7 @@ export class AudioPlayer {
           window.AndroidBridge.updatePlaybackState(
             t.title || "Неизвестный трек",
             t.artist || "Неизвестный исполнитель",
-            t.album || "",
+            "",
             Boolean(isPlaying),
             t.pictureUrl || ""
           );
@@ -161,7 +161,6 @@ export class AudioPlayer {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title || "Неизвестный трек",
       artist: track.artist || "Неизвестный исполнитель",
-      album: track.album || "",
       artwork
     });
   }
@@ -266,7 +265,7 @@ export class AudioPlayer {
   syncNativeQueue(play = this.isPlaying, reset = false) {
     if (!this.nativePlayback) return;
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
-      title: t.title, artist: t.artist, album: t.album, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
+      title: t.title, artist: t.artist, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
       repeat: this.repeatMode, volume: this.volume }));
   }
 

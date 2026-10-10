@@ -71,7 +71,7 @@ test('Дорофеева 747 shows its catalog cover before a song has been down
   await expect.poll(()=>page.locator('.track-mini-thumb img').evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);expect(await page.evaluate(()=>window.musicCalls.some(c=>c.op==='download'))).toBe(false);
 });
 
-for(const mobile of [false,true])test(`artist profile, guest credits, popularity and complete album navigation on ${mobile?'phone':'desktop'}`,async({page})=>{
+for(const mobile of [false,true])test(`artist profile, guest credits, popularity without collection navigation on ${mobile?'phone':'desktop'}`,async({page})=>{
   const errors=await setup(page,mobile);
   await page.evaluate(()=>{
     const original=window.electronAPI.musicRequest;
@@ -94,7 +94,7 @@ for(const mobile of [false,true])test(`artist profile, guest credits, popularity
   await expect(page.locator('.artist-profile .view-title')).toHaveText('DOROFEEVA');
   await expect(page.locator('.artist-profile .track-name').first()).toHaveText('Hit song');
   await expect(page.locator('.artist-profile')).toContainText('Совместные записи');await expect(page.locator('.artist-profile')).not.toContainText('Unrelated');
-  await expect(page.locator('.artist-discography')).toContainText('Full Album');await page.locator('.artist-discography .shelf-card').filter({hasText:'Full Album'}).click();
-  await expect(page.locator('.view-title')).toHaveText('Full Album');await expect(page.locator('.track-name')).toHaveText('Album track');
+  await expect(page.locator('.artist-discography')).toHaveCount(0);
+  await expect(page.getByRole('tab',{name:'Альбомы',exact:true})).toHaveCount(0);
   expect(await page.evaluate(()=>window.musicCalls.some(c=>c.op==='download'))).toBe(false);expect(errors).toEqual([]);
 });

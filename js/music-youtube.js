@@ -17,7 +17,7 @@ export function youtubeMusicEntries(data) {
       const time=credits.find(r=>/^\d+:\d{2}(?::\d{2})?$/.test(r.text||''))?.text;
       const duration=time?time.split(':').reduce((n,v)=>n*60+Number(v),0):0;
       seen.add(id);entries.push({id,title:columns[0].map(r=>r.text||'').join(''),artists,
-        album:credits.find(r=>pageType(r)==='MUSIC_PAGE_TYPE_ALBUM')?.text||'',duration,
+        duration,
         uploader:artists[0]+' - Topic',thumbnails:row.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails||[],
         webpage_url:`https://www.youtube.com/watch?v=${id}`});
       return;

@@ -89,9 +89,9 @@ body[data-view="artist"] .view-header { min-height: 320px; }
 .view-actions { padding: 24px; }
 .track-table-header { top: 0; font-size: 14px; text-transform: none; letter-spacing: 0; grid-template-columns: 32px minmax(0,4fr) minmax(0,3fr) minmax(0,2fr) 112px; }
 .track-row { height: 64px; grid-template-columns: 32px minmax(0,4fr) minmax(0,3fr) minmax(0,2fr) 112px; }
-.track-row.no-album,.track-table-header.no-album { grid-template-columns: 32px minmax(0,5fr) minmax(0,2fr) 112px; }
+.track-row.compact-columns,.track-table-header.compact-columns { grid-template-columns: 32px minmax(0,5fr) minmax(0,2fr) 112px; }
 .track-name { font-size: 16px; font-weight: 400; }
-.track-artist,.track-col-album,.track-col-date { font-size: 14px; }
+.track-artist,.track-col-date { font-size: 14px; }
 .track-col-duration { gap: 8px; padding-right: 0; }
 .track-like-btn,.track-menu-btn { width: 20px; height: 24px; flex-shrink: 0; }
 .track-like-btn svg { width: 18px; height: 18px; }
@@ -137,7 +137,7 @@ body[data-view="artist"] .view-header { min-height: 320px; }
   :root { --sp-sidebar-width: 260px; --sp-right-width: 280px; }
   .home-quick-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .track-row,.track-table-header { grid-template-columns: 28px minmax(0,5fr) minmax(0,3fr) 104px !important; }
-  .track-row.no-album,.track-table-header.no-album { grid-template-columns: 28px minmax(0,5fr) 104px !important; }
+  .track-row.compact-columns,.track-table-header.compact-columns { grid-template-columns: 28px minmax(0,5fr) 104px !important; }
   .track-col-date,.th-date { display: none; }
   .mobile-search-categories { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }

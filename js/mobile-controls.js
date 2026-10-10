@@ -135,7 +135,7 @@ export function bindMobileEvents() {
     });
 
     document.getElementById('btnMobileFsShare').onclick=()=>{if(this.player.currentTrack){showTrackMenu(this,this.player.currentTrack,{mobile:true});document.getElementById('sheetOptShare')?.click();}};
-    for(const [id,kind] of [['btnMobileFsAlbum','album'],['btnMobileFsArtist','artist']])document.getElementById(id).onclick=()=>{const t=this.player.currentTrack;if(!t)return;fsPlayer.classList.remove('active');this.navigateTo(kind==='album'&&t.album?{type:'album',id:t.album,extra:t.artist,title:t.album}:kind==='artist'?{type:'artist',id:t.artist,title:t.artist}:{type:'allTracks',title:'Добавленные'});};
+    document.getElementById('btnMobileFsArtist').onclick=()=>{const t=this.player.currentTrack;if(!t)return;fsPlayer.classList.remove('active');this.navigateTo({type:'artist',id:t.artist,title:t.artist});};
     let swipeStart=null,delta=0;
     const header=fsPlayer.querySelector('.mobile-fs-header');header.onpointerdown=e=>{if(e.target.closest('button'))return;swipeStart=e.clientY;delta=0;header.setPointerCapture(e.pointerId);};
     header.onpointermove=e=>{if(swipeStart===null)return;delta=Math.max(0,e.clientY-swipeStart);fsPlayer.style.transform=`translateY(${delta}px)`;};

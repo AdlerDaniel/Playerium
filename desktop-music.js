@@ -55,7 +55,6 @@ function catalogURL(provider,query) {
     case 'itunesArtists':return `https://itunes.apple.com/search?term=${q}&entity=musicArtist&limit=25&country=US`;
     case 'deezerArtistTop':if(!/^\d{1,20}$/.test(query))throw Error('Недопустимый запрос');return `https://api.deezer.com/artist/${query}/top?limit=100`;
     case 'itunesArtistTracks':if(!/^\d{1,20}$/.test(query))throw Error('Недопустимый запрос');return `https://itunes.apple.com/lookup?id=${query}&entity=song&limit=200&country=US`;
-    case 'itunesArtistAlbums':if(!/^\d{1,20}$/.test(query))throw Error('Недопустимый запрос');return `https://itunes.apple.com/lookup?id=${query}&entity=album&limit=200&country=US`;
     case 'itunes':return `https://itunes.apple.com/search?term=${q}&entity=song&limit=35&country=US`;
     case 'itunesUA':return `https://itunes.apple.com/search?term=${q}&entity=song&limit=35&country=UA`;
     case 'deezer':return `https://api.deezer.com/search?q=${q}&limit=35`;
@@ -86,8 +85,28 @@ class DesktopMusic {
     this.tools=app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools');
     this.manifestFile=path.join(app.getPath('userData'),'music-downloads.json');this.manifest=null;this.storeChain=Promise.resolve();
   }
-  async records(){if(!this.loadingRecords)this.loadingRecords=(async()=>{try{this.manifest=JSON.parse(await fs.readFile(this.manifestFile,'utf8'));}catch{this.manifest={};}return this.manifest;})();return this.loadingRecords;}
+  async records(){
+    if(!this.loadingRecords)this.loadingRecords=(async()=>{
+      try{this.manifest=JSON.parse(await fs.readFile(this.manifestFile,'utf8'));}catch{this.manifest={};}
+      let changed=false;
+      for(const record of Object.values(this.manifest)) {
+        if(record.metadata && Object.hasOwn(record.metadata,'album')) {delete record.metadata.album;changed=true;}
+      }
+      if(changed)await this.saveRecords();
+      return this.manifest;
+    })();
+    return this.loadingRecords;
+  }
   async saveRecords(){this.storeChain=this.storeChain.catch(()=>{}).then(async()=>{const temp=this.manifestFile+'.new';await fs.writeFile(temp,JSON.stringify(this.manifest));await fs.rename(temp,this.manifestFile);});return this.storeChain;}
+  async cleanSidecar(record) {
+    const sidecar=record.fullPath+'.playerium.json';
+    if(path.dirname(record.fullPath)!==record.folderSource || await this.authorize(sidecar).catch(()=>null)!==sidecar)return;
+    try {
+      if((await fs.stat(sidecar)).size>1024*1024)return;
+      const metadata=JSON.parse(await fs.readFile(sidecar,'utf8'));
+      if(Object.hasOwn(metadata,'album')){delete metadata.album;await fs.writeFile(sidecar,JSON.stringify(metadata));}
+    }catch{}
+  }
   run(args,id,timeout=45000) {
     return new Promise((resolve,reject)=>{
       const child=spawn(path.join(this.tools,'yt-dlp.exe'),['--ignore-config','--no-warnings','--impersonate','chrome','--socket-timeout','15','--retries','1','--js-runtimes',`node:${process.execPath}`,'--ffmpeg-location',this.tools,...args],
@@ -106,6 +125,22 @@ class DesktopMusic {
   }
   async request(operation,payload,id) {
     if(!/^[\w-]{1,100}$/.test(id))throw Error('Недопустимый запрос');
+    if(operation==='artwork') {
+      const valid=value=>{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&['mzstatic.com','dzcdn.net'].some(host=>u.hostname===host||u.hostname.endsWith('.'+host));};
+      let url=String(payload.url||'');if(!valid(url))throw Error('Недопустимая обложка');
+      const controller=new AbortController();this.requests.set(id,controller);const timer=setTimeout(()=>controller.abort(),15000);
+      try {
+        for(let redirects=0;redirects<5;redirects++) {
+          const response=await fetch(url,{signal:controller.signal,redirect:'manual'});
+          if([301,302,303,307,308].includes(response.status)){url=new URL(response.headers.get('location'),url).href;if(!valid(url))throw Error('Недопустимая обложка');continue;}
+          const type=response.headers.get('content-type')?.split(';')[0];
+          if(!response.ok||!['image/jpeg','image/png','image/webp'].includes(type))throw Error('Некорректная обложка');
+          const chunks=[];let size=0;for await(const chunk of response.body){size+=chunk.length;if(size>4*1024*1024){controller.abort();throw Error('Некорректная обложка');}chunks.push(chunk);}
+          return {base64:Buffer.concat(chunks).toString('base64'),type};
+        }
+        throw Error('Недопустимая обложка');
+      }finally{clearTimeout(timer);this.requests.delete(id);}
+    }
     if(operation==='catalog') {
       const query=String(payload.query||'').trim().slice(0,200);if(!query)return null;
       const controller=new AbortController();this.requests.set(id,controller);const timer=setTimeout(()=>controller.abort(),15000);
@@ -159,7 +194,7 @@ class DesktopMusic {
       delete records[payload.downloadId];await this.saveRecords();return true;
     }
     if(operation==='restore') {
-      const result=[];for(const record of Object.values(await this.records()))if(await fs.stat(record.fullPath).catch(()=>null)){await this.onRoot(record.folderSource);result.push(record);}
+      const result=[];for(const record of Object.values(await this.records()))if(await fs.stat(record.fullPath).catch(()=>null)){await this.onRoot(record.folderSource);await this.cleanSidecar(record);result.push(record);}
       return result;
     }
     throw Error('Недопустимая операция');
@@ -203,8 +238,9 @@ class DesktopMusic {
               info.url=require('node:url').pathToFileURL(input).href;
             }finally{clearTimeout(timer);this.requests.delete(id);}
           }
+          delete info.album; delete info.meta_album;
           // Metadata chosen from the recording catalog is embedded into the audio.
-          for(const key of ['title','artist','album','genre','isrc'])if(track[key]){info[key]=String(track[key]).slice(0,500);info['meta_'+key]=info[key];}
+          for(const key of ['title','artist','genre','isrc'])if(track[key]){info[key]=String(track[key]).slice(0,500);info['meta_'+key]=info[key];}
           if(track.artist)info.artists=[info.artist];
           info.track=info.title;if(track.year){info.release_year=track.year;info.meta_date=String(track.year);info.release_date=String(track.year)+'0101';}if(track.trackNo)info.track_number=track.trackNo;
           if(track.pictureUrl && /^https:\/\/(?:[^/]+\.)?(?:mzstatic\.com|dzcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|bcbits\.com|audius\.co|sndcdn\.com)\//i.test(track.pictureUrl)){info.thumbnail=track.pictureUrl;info.thumbnails=[{url:track.pictureUrl,id:'cover'}];}
@@ -225,7 +261,7 @@ class DesktopMusic {
           const name=`${track.artist} - ${track.title}`.replace(/[<>:"/\\|?*\x00-\x1f]/g,'').slice(0,120).trim();
           const fullPath=path.join(root,`${name} [${track.id.slice(5)}]${path.extname(audio)}`);
           await fs.copyFile(audio,fullPath,constants.COPYFILE_EXCL);committed=fullPath;
-          const metadata={title:info.title,artist:info.artist,album:info.album||'',year:info.release_year||'',trackNo:info.track_number||0,genre:info.genre||'',isrc:info.isrc||'',duration:decoded.format.duration};
+          const metadata={title:info.title,artist:info.artist,year:info.release_year||'',trackNo:info.track_number||0,genre:info.genre||'',isrc:info.isrc||'',duration:decoded.format.duration};
           await fs.writeFile(fullPath+'.playerium.json',JSON.stringify(metadata));
           const cover=(await fs.readdir(staging)).find(f=>/^audio.*\.jpg$/i.test(f));if(cover)await fs.copyFile(path.join(staging,cover),fullPath+'.jpg',constants.COPYFILE_EXCL);
           records[track.id]={fullPath,folderSource:root,folderName:path.basename(root),downloadId:track.id,metadata};await this.saveRecords();

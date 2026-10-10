@@ -792,7 +792,6 @@
   }
 
   .track-col-num,
-  .track-col-album,
   .track-col-date,
   .track-col-duration > span {
     display: none !important;

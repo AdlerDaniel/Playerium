@@ -30,9 +30,9 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
     pane='credits';panel.replaceChildren();header();button('trackMenuBack','Назад',icons.music,main,true);
     const heading=document.createElement('h3');heading.className='menu-pane-title';heading.textContent='Сведения о треке';panel.append(heading);
     const dl=document.createElement('dl');dl.className='track-credits';
-    for(const [label,value] of [['Название',track.title],['Исполнитель',track.artist],['Альбом',track.album],['Год',track.year],['Жанр',track.genre],['ISRC',track.isrc]]){if(!value)continue;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;dl.append(dt,dd);}panel.append(dl);position();focusFirst();
+    for(const [label,value] of [['Название',track.title],['Исполнитель',track.artist],['Год',track.year],['Жанр',track.genre],['ISRC',track.isrc]]){if(!value)continue;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;dl.append(dt,dd);}panel.append(dl);position();focusFirst();
   };
-  const navigate=kind=>{document.getElementById('mobileFullscreenPlayer')?.classList.remove('active');if(!track.catalog)ui.navigateTo(kind==='artist'?{type:'artist',id:track.artist,title:track.artist}:{type:'album',id:track.album,extra:track.artist,title:track.album});else {ui.searchQuery=kind==='artist'?track.artist:track.artist+' '+track.album;ui.searchFilter=kind==='artist'?'all':'songs';document.getElementById('mainSearchInput').value=ui.searchQuery;ui.navigateTo({type:'search',title:'Поиск'});}};
+  const navigate=kind=>{document.getElementById('mobileFullscreenPlayer')?.classList.remove('active');if(!track.catalog)ui.navigateTo({type:'artist',id:track.artist,title:track.artist});else {ui.searchQuery=track.artist;ui.searchFilter=kind==='artist'?'all':'songs';document.getElementById('mainSearchInput').value=ui.searchQuery;ui.navigateTo({type:'search',title:'Поиск'});}};
   const main=()=>{
     pane='main';panel.replaceChildren();header();
     const prefix=mobile?'sheetOpt':'ctx';
@@ -42,7 +42,6 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
     button(prefix+'PlayNext','Включить следующим',icons.play,async()=>{ui.player.playNext(await ui.music.ensureTrack(track));ui.showToast('Будет воспроизведено следующим');});
     const divider=document.createElement('div');divider.className='context-divider';panel.append(divider);
     button(prefix+'Artist','Перейти к исполнителю',icons.artist,()=>navigate('artist'));
-    if(track.album)button(prefix+'Album','Перейти к альбому',icons.music,()=>navigate('album'));
     button(prefix+'Credits','Сведения о треке',moreIcons.credits,credits,true);
     button(prefix+'Share','Поделиться',moreIcons.share,async()=>{const text=`${track.artist} — ${track.title}`,url=track.sources?.[0]?.url;if(mobile&&navigator.share){await navigator.share({title:track.title,text,...(url?{url}:{})});return;}const value=url?text+'\n'+url:text;if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);else {const field=document.createElement('textarea');field.value=value;document.body.append(field);field.select();const copied=document.execCommand('copy');field.remove();if(!copied)throw Error('Не удалось скопировать');}ui.showToast('Скопировано');});
     button(prefix+'SaveOrRemove',track.catalog?'Скачать':'Удалить трек',moreIcons.download,async()=>{if(track.catalog){await ui.music.ensureTrack(track);ui.refreshCurrentView();ui.showToast('Трек сохранён','success');}else if(confirm(`Удалить трек «${track.title}»?`)){await ui.music.removeTrack(track);ui.showToast('Трек удалён');}});

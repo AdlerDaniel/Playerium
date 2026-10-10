@@ -80,8 +80,24 @@ final class MusicEngine {
         while((n=input.read(buffer))!=-1){output.write(buffer,0,n);if(output.size()>limit)throw new IOException("Response too large");}return output.toByteArray();
     }
     private Object execute(String operation,JSONObject payload,String id) throws Exception {
+        if(operation.equals("artwork")) {
+            URL url=new URL(payload.getString("url"));
+            for(int redirects=0;redirects<5;redirects++) {
+                String host=url.getHost().toLowerCase(Locale.ROOT);
+                if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||(url.getPort()!=-1&&url.getPort()!=443)||!(host.equals("mzstatic.com")||host.endsWith(".mzstatic.com")||host.equals("dzcdn.net")||host.endsWith(".dzcdn.net")))throw new SecurityException("Недопустимая обложка");
+                HttpURLConnection connection=(HttpURLConnection)url.openConnection();connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(15000);
+                try {
+                    int status=connection.getResponseCode();
+                    if(status>=300&&status<=399){url=new URL(url,connection.getHeaderField("Location"));continue;}
+                    String type=String.valueOf(connection.getContentType()).split(";")[0];
+                    if(status!=200||!Arrays.asList("image/jpeg","image/png","image/webp").contains(type))throw new IOException("Некорректная обложка");
+                    try(InputStream input=connection.getInputStream()){return new JSONObject().put("type",type).put("base64",Base64.encodeToString(read(input,4*1024*1024),Base64.NO_WRAP));}
+                }finally{connection.disconnect();}
+            }
+            throw new IOException("Недопустимая обложка");
+        }
         if(operation.equals("loudness"))return analyzeLoudness(Uri.parse(payload.getString("uri")));
-        if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {String key=keys.next();JSONObject record=saved.getJSONObject(key);if(exists(record)){try{record=protectDownloaded(record,key);}catch(IOException|SecurityException error){android.util.Log.w("Playerium","Could not hide downloaded media yet",error);}files.put(record);}}return files;}
+        if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {String key=keys.next();JSONObject record=saved.getJSONObject(key);if(exists(record)){cleanSidecar(record);try{record=protectDownloaded(record,key);}catch(IOException|SecurityException error){android.util.Log.w("Playerium","Could not hide downloaded media yet",error);}files.put(record);}}return files;}
         if(operation.equals("describe")){JSONObject record=records().optJSONObject(payload.getString("downloadId"));if(record==null)throw new IOException("Track unavailable");return withCover(record);}
         if(operation.equals("delete")) {String key=payload.getString("downloadId");JSONObject record=records().optJSONObject(key);if(record!=null){if(record.optJSONObject("legacyMedia")!=null){deleteOwned(record.getJSONObject("legacyMedia"));refreshGallery(record.getJSONObject("legacyMedia"));}deleteOwned(record);records().remove(key);saveRecords();}return true;}
         String query=payload.optString("query").trim();if(query.length()>200)query=query.substring(0,200);
@@ -93,7 +109,6 @@ final class MusicEngine {
                 case "itunesArtists":url="https://itunes.apple.com/search?term="+q+"&entity=musicArtist&limit=25&country=US";break;
                 case "deezerArtistTop":if(!query.matches("\\d{1,20}"))throw new SecurityException("Недопустимый запрос");url="https://api.deezer.com/artist/"+query+"/top?limit=100";break;
                 case "itunesArtistTracks":if(!query.matches("\\d{1,20}"))throw new SecurityException("Недопустимый запрос");url="https://itunes.apple.com/lookup?id="+query+"&entity=song&limit=200&country=US";break;
-                case "itunesArtistAlbums":if(!query.matches("\\d{1,20}"))throw new SecurityException("Недопустимый запрос");url="https://itunes.apple.com/lookup?id="+query+"&entity=album&limit=200&country=US";break;
                 case "itunesUA":url="https://itunes.apple.com/search?term="+q+"&entity=song&limit=35&country=UA";break;
                 case "deezer":url="https://api.deezer.com/search?q="+q+"&limit=35";break;
                 case "musicbrainz":url="https://musicbrainz.org/ws/2/recording/?query="+q+"&fmt=json&limit=20";break;
@@ -205,7 +220,35 @@ final class MusicEngine {
         }finally{processes.remove(id);process.destroy();}
     }
     private synchronized JSONObject records() throws Exception {
-        if(records==null){File file=new File(context.getFilesDir(),"music-downloads.json");try(InputStream in=new FileInputStream(file)){records=new JSONObject(new String(read(in,4*1024*1024),StandardCharsets.UTF_8));}catch(Exception e){records=new JSONObject();}}return records;
+        if(records==null){
+            File file=new File(context.getFilesDir(),"music-downloads.json");
+            try(InputStream in=new FileInputStream(file)){records=new JSONObject(new String(read(in,4*1024*1024),StandardCharsets.UTF_8));}catch(Exception e){records=new JSONObject();}
+            boolean changed=false;Iterator<String> keys=records.keys();
+            while(keys.hasNext()){
+                JSONObject record=records.optJSONObject(keys.next());
+                JSONObject metadata=record==null?null:record.optJSONObject("metadata");
+                if(metadata!=null&&metadata.has("album")){metadata.remove("album");changed=true;}
+            }
+            if(changed)saveRecords();
+        }
+        return records;
+    }
+    private void cleanSidecar(JSONObject record) {
+        String saved=record.optString("sidecar");if(saved.isEmpty())return;
+        try {
+            Uri uri=Uri.parse(saved);
+            if(!MainActivity.hasMusicPermission(context,uri))return;
+            JSONObject metadata;
+            try(InputStream in=context.getContentResolver().openInputStream(uri)){
+                metadata=new JSONObject(new String(read(in,1024*1024),StandardCharsets.UTF_8));
+            }
+            if(metadata.has("album")){
+                metadata.remove("album");
+                try(OutputStream out=context.getContentResolver().openOutputStream(uri,"wt")){
+                    out.write(metadata.toString().getBytes(StandardCharsets.UTF_8));
+                }
+            }
+        }catch(Exception error){android.util.Log.w("Playerium","Could not clean saved metadata yet",error);}
     }
     private synchronized void saveRecords() throws Exception {
         AtomicFile file=new AtomicFile(new File(context.getFilesDir(),"music-downloads.json"));FileOutputStream out=file.startWrite();try{out.write(records.toString().getBytes(StandardCharsets.UTF_8));file.finishWrite(out);}catch(Exception e){file.failWrite(out);throw e;}
@@ -280,7 +323,8 @@ final class MusicEngine {
                         byte[] header=new byte[12];try(InputStream in=new FileInputStream(input)){if(in.read(header)==12&&new String(header,4,4,StandardCharsets.US_ASCII).equals("ftyp"))info.put("ext","m4a");}
                         info.put("url",input.toURI().toString());
                     }
-                    for(String field:new String[]{"title","artist","album","genre","isrc"})if(!track.optString(field).isEmpty()){info.put(field,track.getString(field));info.put("meta_"+field,track.getString(field));}
+                    info.remove("album");info.remove("meta_album");
+                    for(String field:new String[]{"title","artist","genre","isrc"})if(!track.optString(field).isEmpty()){info.put(field,track.getString(field));info.put("meta_"+field,track.getString(field));}
                     if(track.has("artist"))info.put("artists",new JSONArray().put(track.getString("artist")));
                     info.put("track",info.getString("title"));if(!track.optString("year").isEmpty()){info.put("release_year",track.opt("year"));info.put("meta_date",track.optString("year"));info.put("release_date",track.optString("year")+"0101");}if(track.has("trackNo"))info.put("track_number",track.opt("trackNo"));
                     String picture=track.optString("pictureUrl");if(picture.matches("https://(?:[^/]+\\.)?(?:mzstatic\\.com|dzcdn\\.net|ytimg\\.com|ggpht\\.com|googleusercontent\\.com|bcbits\\.com|audius\\.co|sndcdn\\.com)/.*")){info.put("thumbnail",picture);info.put("thumbnails",new JSONArray().put(new JSONObject().put("url",picture).put("id","cover")));}
@@ -301,7 +345,7 @@ final class MusicEngine {
                     double expected=track.optDouble("duration",candidate.optDouble("duration",0));
                     if(!(actual>0)||(expected>0&&Math.abs(expected-actual)>Math.max(8,expected*.04)))throw new IOException("Полная запись не совпадает с выбранной версией.");
                     info.put("duration",actual);
-                    JSONObject metadata=new JSONObject();for(String field:new String[]{"title","artist","album","genre","isrc","duration"})metadata.put(field,info.opt(field));metadata.put("year",info.opt("release_year"));metadata.put("trackNo",info.opt("track_number"));
+                    JSONObject metadata=new JSONObject();for(String field:new String[]{"title","artist","genre","isrc","duration"})metadata.put(field,info.opt(field));metadata.put("year",info.opt("release_year"));metadata.put("trackNo",info.opt("track_number"));
                     File cover=null;for(File file:staging.listFiles())if(file.getName().endsWith(".jpg")){cover=file;break;}
                     committed=publish(audio,cover,metadata,payload.optString("folderSource"),key);
                     synchronized(this){records().put(key,committed);saveRecords();}return withCover(committed);

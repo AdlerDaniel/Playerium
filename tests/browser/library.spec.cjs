@@ -127,8 +127,9 @@ test('home shelves, library filters and navigation expose the imported collectio
   await expect(page.locator('.sidebar-item:visible')).toHaveCount(0);
   await page.locator('#librarySearchInput').fill('Добавленные');
   await expect(page.locator('.sidebar-item:visible')).toHaveCount(1);
-  await page.locator('.home-filters').getByRole('button',{name:'Альбомы',exact:true}).click();
-  await expect(page.locator('.shelf-heading h2')).toHaveText('Ваши альбомы');
+  await expect(page.locator('.home-filters').getByRole('button',{name:'Альбомы',exact:true})).toHaveCount(0);
+  await page.locator('.home-filters').getByRole('button',{name:'Исполнители',exact:true}).click();
+  await expect(page.locator('.shelf-heading h2')).toHaveText('Ваши исполнители');
   await page.locator('#mainSearchInput').fill('Song');
   await expect(page.locator('.track-name')).toHaveText('Song');
   await page.locator('#btnNavBack').click();

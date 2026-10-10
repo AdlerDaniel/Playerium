@@ -127,7 +127,7 @@ app.whenReady().then(async () => {
     const { parseFile } = await import('music-metadata');
     const { common, format } = await parseFile(real);
     const picture = common.picture?.[0];
-    return { title: common.title, artist: common.artist, album: common.album, year: common.year, trackNo: common.track?.no, duration: format.duration || 0,
+    return { title: common.title, artist: common.artist, year: common.year, trackNo: common.track?.no, duration: format.duration || 0,
       picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null };
   });
   handle('shell:openExternal', openExternal);
