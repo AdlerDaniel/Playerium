@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   unwatchFolder: path => ipcRenderer.invoke('folder:unwatch', path),
   getAudioSource: path => ipcRenderer.invoke('file:source', path),
   getMetadata: path => ipcRenderer.invoke('file:metadata', path),
+  getLoudness: path => ipcRenderer.invoke('file:loudness', path),
   musicRequest: async (operation,payload,id) => {
     const result=await ipcRenderer.invoke('music:request',operation,payload,id);
     if(!result.ok)throw Error(result.error);

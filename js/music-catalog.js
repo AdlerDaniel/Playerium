@@ -72,6 +72,7 @@ export class MusicCatalog {
     window.electronAPI?.onMusicProgress?.(state=>this.progress(state));
     window.onMusicProgress=state=>this.progress(state);
     library.ensureTrack=track=>this.ensureTrack(track);
+    library.getLoudness=track=>this.request('loudness',{uri:track.nativeUri});
   }
   get available(){return !!(window.electronAPI?.musicRequest || window.AndroidBridge?.musicRequest);}
   request(operation,payload,search=false) {

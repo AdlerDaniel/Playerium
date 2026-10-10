@@ -180,7 +180,7 @@
 .liked-songs-thumb svg {
   width: 20px;
   height: 20px;
-  fill: #ffffff;
+  fill: var(--sp-text-primary);
 }
 
 .item-info {

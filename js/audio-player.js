@@ -5,6 +5,7 @@
 
 import { NativeEqualizer } from "./native-equalizer.js";
 import { Equalizer } from "./equalizer.js";
+import {browserLoudness} from './loudness.js';
 
 export class AudioPlayer {
   constructor(library) {
@@ -23,6 +24,9 @@ export class AudioPlayer {
     this.audioCtx = null;
     this.sourceNode = null;
     this.gainNode = null;
+    this.normalizationNode = null;
+    this.normalizationGain = 1;
+    this.browserLoudnessCache=new Map();
     this.equalizer = null;
     this.isWebAudioInitialized = false;
 
@@ -67,11 +71,16 @@ export class AudioPlayer {
       this.equalizer = new Equalizer(this.audioCtx);
       this.audio.volume = 1;
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
+      this.normalizationNode=this.audioCtx.createGain();
+      this.normalizationNode.gain.value=this.normalizationGain;
+      const limiter=this.audioCtx.createDynamicsCompressor();
+      limiter.threshold.value=-1;limiter.knee.value=0;limiter.ratio.value=20;limiter.attack.value=.003;limiter.release.value=.15;
 
       // Graph: source -> equalizer input -> equalizer output -> gainNode -> destination
-      this.equalizer.connectSource(this.sourceNode);
+      this.sourceNode.connect(this.normalizationNode);
+      this.equalizer.connectSource(this.normalizationNode);
       this.equalizer.connectDestination(this.gainNode);
-      this.gainNode.connect(this.audioCtx.destination);
+      this.gainNode.connect(limiter);limiter.connect(this.audioCtx.destination);
 
       this.isWebAudioInitialized = true;
     } catch (e) {
@@ -205,9 +214,13 @@ export class AudioPlayer {
     if (newQueue) this.playbackContext = context ? { ...context } : null;
 
     this.currentTrack = track;
+    this.normalizationGain=1;
+    if(this.normalizationNode){this.normalizationNode.gain.cancelScheduledValues(this.audioCtx.currentTime);this.normalizationNode.gain.setValueAtTime(1,this.audioCtx.currentTime);}
 
     this.nativePlayback = !!(track.nativeUri && window.AndroidBridge?.setPlaybackQueue && this.queue.every(t => t.nativeUri));
     if (this.nativePlayback) {
+      try{const result=await this.library.getLoudness?.(track);if(result?.gain)track.normalizationGain=result.gain;}catch{}
+      if(request!==this.playRequest)return;
       this.syncNativeQueue(true, true);
       this.equalizer?.sync?.();
       this.onTrackChange?.(track);
@@ -217,10 +230,10 @@ export class AudioPlayer {
     window.AndroidBridge?.playbackCommand?.("stop", 0);
     try {
       if (track.unavailable) throw new Error("Файл недоступен. Восстановите доступ к папке через «Добавить папку».");
-      let url;
+      let url,file;
       if (track.filePath && window.electronAPI?.getAudioSource) url = await window.electronAPI.getAudioSource(track.filePath);
       else {
-        const file = await this.library.getAudioFile(track);
+        file = await this.library.getAudioFile(track);
         if (request !== this.playRequest) return;
         if (!file) throw new Error("Нет доступа к файлу. Добавьте папку заново, чтобы восстановить доступ.");
         url = URL.createObjectURL(file);
@@ -228,12 +241,19 @@ export class AudioPlayer {
       if (request !== this.playRequest) { if (url?.startsWith("blob:")) URL.revokeObjectURL(url); return; }
       this.sourceUrl = url;
       this.audio.src = url;
+      if(track.filePath&&window.electronAPI?.getLoudness){
+        try{const result=await window.electronAPI.getLoudness(track.filePath);if(request!==this.playRequest)return;this.normalizationGain=result.gain;this.normalizationNode?.gain.setValueAtTime(result.gain,this.audioCtx.currentTime);}catch{}
+      }else if(file&&file.size<=64*1024*1024&&this.audioCtx&&this.normalizationNode){
+        try{const key=track.id+'|'+file.size+'|'+file.lastModified;let result=this.browserLoudnessCache.get(key);if(!result){result=await browserLoudness(file,this.audioCtx);this.browserLoudnessCache.set(key,result);if(this.browserLoudnessCache.size>200)this.browserLoudnessCache.delete(this.browserLoudnessCache.keys().next().value);}if(request!==this.playRequest)return;this.normalizationGain=result.gain;this.normalizationNode.gain.setValueAtTime(result.gain,this.audioCtx.currentTime);}catch{}
+      }
+      if(request!==this.playRequest)return;
       await this.audio.play();
       if (request !== this.playRequest) return;
       this.failedTracks.clear();
       this.updateMediaSessionMetadata(track);
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
+      const next=this.queue[this.queueIndex+1];if(next?.filePath&&window.electronAPI?.getLoudness)window.electronAPI.getLoudness(next.filePath).catch(()=>{});
     } catch (error) {
       if (request !== this.playRequest) return;
       this.audio.pause();
@@ -246,7 +266,7 @@ export class AudioPlayer {
   syncNativeQueue(play = this.isPlaying, reset = false) {
     if (!this.nativePlayback) return;
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
-      title: t.title, artist: t.artist, album: t.album })), index: this.queueIndex, play, reset,
+      title: t.title, artist: t.artist, album: t.album, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
       repeat: this.repeatMode, volume: this.volume }));
   }
 

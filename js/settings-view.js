@@ -1,3 +1,4 @@
+import {THEMES,applyTheme,currentTheme} from './themes.js';
 export function renderSettingsView(container) {
     const settingsDiv = document.createElement("div");
     settingsDiv.className = "settings-container";
@@ -91,22 +92,16 @@ export function renderSettingsView(container) {
       <div class="settings-section">
         <h2 class="settings-section-title">
           <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.59 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
-          Внешний вид и акцентный цвет
+          Оформление
         </h2>
         <div class="settings-card">
           <div class="settings-row">
             <div class="settings-label-wrap">
               <span class="settings-label">Цветовая тема</span>
-              <span class="settings-desc">Выберите акцентный цвет кнопок и индикаторов в приложении.</span>
-            </div>
-            <div class="theme-colors-row">
-              <div class="theme-dot active" style="background-color: #1ed760;" data-color="#1ed760" title="Spotify Green"></div>
-              <div class="theme-dot" style="background-color: #1d75d9;" data-color="#1d75d9" title="Blue"></div>
-              <div class="theme-dot" style="background-color: #8400e7;" data-color="#8400e7" title="Purple"></div>
-              <div class="theme-dot" style="background-color: #e91429;" data-color="#e91429" title="Red"></div>
-              <div class="theme-dot" style="background-color: #f59b23;" data-color="#f59b23" title="Orange"></div>
+              <span class="settings-desc">Цвета фонов, панелей, карточек, меню и элементов управления.</span>
             </div>
           </div>
+          <div class="theme-picker" aria-label="Цветовая тема">${THEMES.map(t=>`<button class="theme-choice" data-theme-id="${t.id}" aria-pressed="${currentTheme().id===t.id}" style="--preview-bg:${t.colors[0]};--preview-panel:${t.colors[1]};--preview-raised:${t.colors[3]};--preview-accent:${t.colors[9]}"><span class="theme-preview" aria-hidden="true"><span class="theme-preview-sidebar"></span><span class="theme-preview-main"><span></span><span></span></span><span class="theme-preview-player"></span></span><span class="theme-choice-name">${t.name}</span></button>`).join('')}</div>
         </div>
       </div>
 
@@ -271,14 +266,7 @@ export function renderSettingsView(container) {
       });
     });
 
-    // Theme color dots
-    settingsDiv.querySelectorAll(".theme-dot").forEach((dot) => {
-      dot.addEventListener("click", () => {
-        settingsDiv.querySelectorAll(".theme-dot").forEach((d) => d.classList.remove("active"));
-        dot.classList.add("active");
-        const color = dot.dataset.color;
-        document.documentElement.style.setProperty("--sp-green", color);
-        document.documentElement.style.setProperty("--sp-green-hover", color);
-      });
+    settingsDiv.querySelectorAll('.theme-choice').forEach(button=>button.onclick=()=>{
+      applyTheme(button.dataset.themeId);settingsDiv.querySelectorAll('.theme-choice').forEach(choice=>choice.setAttribute('aria-pressed',String(choice===button)));
     });
 }

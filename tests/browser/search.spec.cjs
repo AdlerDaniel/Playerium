@@ -48,11 +48,11 @@ for(const mobile of [false,true])test(`search covers before audio, filters and f
 test('mobile raw query preserves spaces, focus and readable text during partial results; swipe closes sheet',async({page},testInfo)=>{
   const errors=await setup(page,true);
   const input=page.locator('.mobile-search-input');
-  const emptyColors=await input.evaluate(el=>({text:getComputedStyle(el).color,background:getComputedStyle(el.parentElement).backgroundColor}));expect(emptyColors.text).toBe('rgb(18, 18, 18)');expect(emptyColors.background).toBe('rgb(255, 255, 255)');
+  const emptyColors=await input.evaluate(el=>({text:getComputedStyle(el).color,background:getComputedStyle(el.parentElement).backgroundColor}));expect(emptyColors.text).toBe('rgb(17, 37, 27)');expect(emptyColors.background).toBe('rgb(234, 248, 238)');
   await input.pressSequentially('747 Tenke',{delay:50});await expect(input).toHaveValue('747 Tenke');await expect(input).toBeFocused();
   await expect(page.locator('.song-search-results .track-row')).toHaveCount(1);
   await page.waitForTimeout(1700);await expect(input).toBeFocused();
-  const activeColors=await input.evaluate(el=>({text:getComputedStyle(el).color,background:getComputedStyle(el.parentElement).backgroundColor}));expect(activeColors.text).toBe('rgb(255, 255, 255)');expect(activeColors.background).toBe('rgb(36, 36, 36)');
+  const activeColors=await input.evaluate(el=>({text:getComputedStyle(el).color,background:getComputedStyle(el.parentElement).backgroundColor}));expect(activeColors.text).toBe('rgb(234, 248, 238)');expect(activeColors.background).toBe('rgb(30, 58, 43)');
   await page.screenshot({path:testInfo.outputPath('search-phone.png')});
   await page.locator('.track-menu-btn').first().click();const handle=page.locator('.mobile-sheet-handle');await handle.hover();const box=await handle.boundingBox();
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+100,{steps:6});await page.mouse.up();

@@ -18,6 +18,10 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.DefaultAudioSink;
+import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 import com.google.common.util.concurrent.Futures;
@@ -44,6 +48,10 @@ public class MediaNotificationService extends MediaSessionService {
     private ExoPlayer player;
     private MediaSession session;
     private Equalizer equalizer;
+    private final NormalizationProcessor normalization=new NormalizationProcessor();
+    private final java.util.concurrent.ExecutorService loudnessWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private String normalizingUri="";
+    private long normalizationVersion;
     private String equalizerSettings;
     private String error;
     private SharedPreferences playbackPrefs;
@@ -65,7 +73,12 @@ public class MediaNotificationService extends MediaSessionService {
         super.onCreate();
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
 
-        player = new ExoPlayer.Builder(this).build();
+        DefaultRenderersFactory renderers=new DefaultRenderersFactory(this){
+            @Override protected AudioSink buildAudioSink(Context context,boolean enableFloatOutput,boolean enableAudioTrackPlaybackParams){
+                return new DefaultAudioSink.Builder(context).setAudioProcessors(new AudioProcessor[]{normalization}).build();
+            }
+        };
+        player = new ExoPlayer.Builder(this,renderers).build();
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true);
         player.setHandleAudioBecomingNoisy(true);
         player.setWakeMode(C.WAKE_MODE_LOCAL);
@@ -75,6 +88,7 @@ public class MediaNotificationService extends MediaSessionService {
                 player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
             @Override public void onAudioSessionIdChanged(int id) { configureEqualizer(id); }
+            @Override public void onMediaItemTransition(MediaItem item,int reason){normalizeCurrent();}
             @Override public void onEvents(Player ignored,Player.Events events) {
                 savePlayback();JSONObject data=state();stateSnapshot=data.toString();
                 MainActivity activity=MainActivity.getInstance();if(activity!=null&&activity.isForeground())activity.sendPlayerState(data);
@@ -120,8 +134,9 @@ public class MediaNotificationService extends MediaSessionService {
             JSONObject t = tracks.getJSONObject(i);
             Uri uri = Uri.parse(t.getString("uri"));
             if (!MainActivity.hasMusicPermission(this, uri)) throw new SecurityException("Unauthorized URI");
+            android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));
             MediaMetadata metadata = new MediaMetadata.Builder().setTitle(t.optString("title"))
-                .setArtist(t.optString("artist")).setAlbumTitle(t.optString("album")).build();
+                .setArtist(t.optString("artist")).setAlbumTitle(t.optString("album")).setExtras(extras).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
         }
         if (items.isEmpty()) { player.stop(); player.clearMediaItems(); stopSelf(); return; }
@@ -156,6 +171,17 @@ public class MediaNotificationService extends MediaSessionService {
             String saved=playbackPrefs.getString("queue","");
             if(!saved.isEmpty())setQueue(new JSONObject(saved));
         }catch(Exception ignored){playbackPrefs.edit().remove("queue").apply();}
+    }
+    private void normalizeCurrent(){
+        MediaItem item=player.getCurrentMediaItem();if(item==null||item.localConfiguration==null)return;
+        Uri uri=item.localConfiguration.uri;if(uri.toString().equals(normalizingUri))return;
+        normalizingUri=uri.toString();long version=++normalizationVersion;double known=MusicEngine.get(this).knownLoudness(uri);normalization.startTrack(known!=1?known:item.mediaMetadata.extras==null?1:item.mediaMetadata.extras.getDouble("normalizationGain",1));
+        loudnessWorker.submit(()->{
+            try{double gain=MusicEngine.get(this).analyzeLoudness(uri).getDouble("gain");handler.post(()->{if(version==normalizationVersion)normalization.setGain(gain);});}catch(Exception ignored){}
+        });
+        int next=player.getCurrentMediaItemIndex()+1;if(next<player.getMediaItemCount()){
+            MediaItem future=player.getMediaItemAt(next);if(future.localConfiguration!=null)loudnessWorker.submit(()->{try{MusicEngine.get(this).analyzeLoudness(future.localConfiguration.uri);}catch(Exception ignored){}});
+        }
     }
 
     private void savePlayback() {
@@ -238,6 +264,7 @@ public class MediaNotificationService extends MediaSessionService {
     @Override public void onDestroy() {
         savePlayback();
         handler.removeCallbacksAndMessages(null);
+        ++normalizationVersion;loudnessWorker.shutdownNow();
         if (equalizer != null) equalizer.release();
         session.release(); player.release(); stateSnapshot = "{}";
         super.onDestroy();

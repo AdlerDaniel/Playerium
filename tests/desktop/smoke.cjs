@@ -60,6 +60,7 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     await app.evaluate(({app})=>app.emit('second-instance'));
     const denied=await win.evaluate(async()=>{try{await window.electronAPI.getMetadata('/etc/passwd');return false;}catch{return true;}});
     assert.equal(denied,true);
+    const deniedLoudness=await win.evaluate(async()=>{try{await window.electronAPI.getLoudness('/etc/passwd');return false;}catch{return true;}});assert.equal(deniedLoudness,true);
     await win.reload();await win.waitForFunction(()=>window.playerApp?.library.db);
     await win.evaluate(()=>window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))));
     await win.waitForFunction(()=>window.playerApp.player.isPlaying);

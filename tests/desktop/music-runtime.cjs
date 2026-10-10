@@ -12,6 +12,16 @@ const {DesktopMusic}=require('../../desktop-music');
     const base=`http://127.0.0.1:${server.address().port}`;
     const engine=new DesktopMusic({app:{isPackaged:false,getPath:()=>root},authorize:async p=>fs.realpath(p)});
     if(process.env.PLAYERIUM_MUSIC_TEST_TOOLS)engine.tools=process.env.PLAYERIUM_MUSIC_TEST_TOOLS;
+    const {LoudnessAnalyzer}=require('../../desktop-loudness');
+    const analyzer=new LoudnessAnalyzer(path.join(engine.tools,'ffmpeg.exe'),path.join(root,'loudness'));
+    const quiet=path.join(root,'quiet.wav'),loud=path.join(root,'loud.wav');
+    const loudData=Buffer.from(wav);for(let i=44;i<loudData.length;i+=2)loudData.writeInt16LE(loudData.readInt16LE(i)*12,i);
+    await fs.writeFile(quiet,wav);await fs.writeFile(loud,loudData);
+    const q=await analyzer.analyze(quiet),l=await analyzer.analyze(loud);
+    assert.ok(Math.abs(q.integrated+20*Math.log10(q.gain)-l.integrated-20*Math.log10(l.gain))<3,'Different input levels should converge within 3 dB');
+    assert.deepEqual(await analyzer.analyze(quiet),q,'Measured gain must persist');
+    assert.equal((await fs.readFile(quiet)).equals(wav),true,'Normalization must not rewrite source audio');
+    console.log('Real FFmpeg loudness analysis, normalized level and cache verified');
     const nativeRun=engine.run.bind(engine);const run=async(...args)=>{try{return await nativeRun(...args);}catch(error){console.error(error.message);throw error;}};
     // Control only extractor responses. Audio transfer, conversion and embedding use bundled executables.
     engine.run=(args,...rest)=>args.includes('--dump-single-json')?Promise.resolve(JSON.stringify({id:'fixture',title:args.at(-1).endsWith('/wrong')?'Wrong recording':'Studio song',artist:'Playerium',uploader:'Playerium',duration:2,webpage_url:args.at(-1),ext:'wav',url:base+'/song.wav',thumbnails:[{url:base+(args.at(-1).endsWith('/no-cover')?'/missing.jpg':'/art.png'),id:'cover'}],extractor:'generic',extractor_key:'Generic',formats:[{format_id:'audio',url:base+'/song.wav',ext:'wav',acodec:'pcm_s16le',protocol:'http'}]})):run(args,...rest);

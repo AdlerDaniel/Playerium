@@ -26,7 +26,7 @@ async function verifyHelper() {
   const args=await fs.readFile(marker,'utf8');assert.equal(args,'/S --updated /D='+folder+'\n\n');
   assert.equal(JSON.parse(await fs.readFile(result,'utf8')).state,'complete');
   console.log('Windows helper: real executable replacement, installer exit and automatic restart verified');
- }finally{await fs.rm(folder,{recursive:true,force:true});}
+ }finally{await fs.rm(folder,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
 }
 module.exports=verifyHelper;
 if(require.main===module)verifyHelper().catch(e=>{console.error(e);process.exitCode=1;});

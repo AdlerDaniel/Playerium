@@ -14,6 +14,7 @@ import { createTrackTable } from "./track-table.js";
  */
 
 import { AutoUpdater } from "./updater.js";
+import {installTooltips,positionFloating} from './floating-surfaces.js';
 
 export class UIController {
   constructor(library, player) {
@@ -40,6 +41,7 @@ export class UIController {
   }
 
   init() {
+    this.hideTooltip=installTooltips();
     this.initMobileState();
     this.bindDOM();
     this.bindMobileEvents();
@@ -152,7 +154,7 @@ export class UIController {
       const rect = progressContainer.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       progressTooltip.textContent = this.formatTime(ratio * this.player.getDuration());
-      progressTooltip.style.left = ratio * 100 + '%';
+      positionFloating(progressTooltip,{anchor:{getBoundingClientRect:()=>({left:e.clientX-progressTooltip.offsetWidth/2,top:rect.top,bottom:rect.bottom})},prefer:'above'});
     });
     const volumeContainer = document.getElementById('volumeSliderContainer');
     document.getElementById('btnVolumeIcon').addEventListener('click', () => this.player.toggleMute());
@@ -705,6 +707,7 @@ export class UIController {
   showPlaylistContextMenu(x,y,playlist) {return collectionMenu(this,{playlist,tracks:this.library.getPlaylistTracks(playlist.id),anchor:{getBoundingClientRect:()=>({left:x,bottom:y})}});}
 
   closeContextMenu() {
+    if(this.dismissTrackMenu){const close=this.dismissTrackMenu;this.dismissTrackMenu=null;close();}
     const menu = document.getElementById("appContextMenu");
     menu.classList.remove("active");
     menu.style.display = "none";

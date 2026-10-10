@@ -11,6 +11,7 @@ const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
 const { DesktopUpdater } = require('./desktop-updater');
 const { DesktopMusic, downloadError, createAudioFetcher, createPageFetcher } = require('./desktop-music');
 const {audioResponse}=require('./desktop-audio');
+const {LoudnessAnalyzer}=require('./desktop-loudness');
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
@@ -138,6 +139,8 @@ app.whenReady().then(async () => {
     catch(error){return {ok:false,error:downloadError(error)};}
   });
   handle('music:cancel',id=>music.cancel(id));
+  const loudness=new LoudnessAnalyzer(path.join(app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools'),'ffmpeg.exe'),path.join(app.getPath('userData'),'loudness'));
+  handle('file:loudness',async file=>loudness.analyze(await authorize(file)));
   // Node fetch exposes manual redirects; Electron net.fetch cancels them.
   // The updater must validate each redirect before following it.
   const updater = new DesktopUpdater({ app,

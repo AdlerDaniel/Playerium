@@ -303,7 +303,7 @@ input:checked + .slider-toggle:before {
   transform: scale(1.05);
 }
 .theme-dot.active {
-  border-color: #ffffff;
+  border-color: var(--sp-text-primary);
   transform: scale(1.15);
 }
 

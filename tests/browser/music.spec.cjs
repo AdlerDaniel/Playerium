@@ -43,7 +43,7 @@ for(const android of [false,true])test(`search, save, metadata persistence and d
   const metadata=await page.evaluate(()=>{const t=window.playerApp.library.getTracks()[0];return {title:t.title,artist:t.artist,album:t.album,genre:t.genre,isrc:t.isrc};});
   expect(metadata).toEqual({title:'Повільне диско',artist:'KLER x OTOY',album:'Повільне диско',genre:'Pop',isrc:'XX1234567890'});
   expect(await page.evaluate(()=>window.musicCalls.filter(c=>c.operation==='download').length)).toBe(1);
-  await page.reload();await page.waitForFunction(()=>window.playerApp?.library.getTracks().length===1);
+  await page.reload();await page.waitForFunction(()=>window.playerApp?.library.getTracks().length===1&&window.playerApp.ui.history.length>0);
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));
   await page.locator('.track-row .track-menu-btn').click();
   page.once('dialog',dialog=>dialog.accept());

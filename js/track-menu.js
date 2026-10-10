@@ -1,19 +1,20 @@
 import {icons,saveIcon} from './design-icons.js';
 import {mountCover} from './artwork.js';
 import {showFormDialog} from './surface-menu.js';
+import {positionFloating,watchFloating} from './floating-surfaces.js';
 const glyph=path=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const moreIcons={queue:glyph('M3 5h14v2H3zm0 4h14v2H3zm0 4h8v2H3zm15-1h2v4h4v2h-4v4h-2v-4h-4v-2h4z'),download:glyph('M11 3h2v10l3-3 1.4 1.4L12 17l-5.4-5.6L8 10l3 3V3zM5 19h14v2H5z'),credits:glyph('M11 10h2v8h-2zm0-4h2v2h-2zM12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22zm0 2a9 9 0 1 1 0 18 9 9 0 0 1 0-18z'),share:glyph('M18 2a4 4 0 1 1-3.6 5.7L8 11a4 4 0 0 1 0 2l6.4 3.3a4 4 0 1 1-1 2L7 15a4 4 0 1 1 0-6l6.4-3.3A4 4 0 0 1 18 2z')};
 export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=null}={}) {
   ui.dismissTrackMenu?.();ui.dismissSurface?.();ui.closeContextMenu();
   const opener=document.activeElement;
-  let root,panel,closed=false,pane='main';
+  let root,panel,closed=false,pane='main',unwatch=()=>{};
   if(mobile){root=document.createElement('div');root.className='mobile-bottom-sheet track-options-sheet';root.innerHTML='<div class="mobile-sheet-overlay"></div><div class="mobile-sheet-content" role="dialog" aria-modal="true"></div>';panel=root.lastElementChild;document.body.append(root);requestAnimationFrame(()=>root.classList.add('active'));}
   else {root=document.getElementById('appContextMenu');panel=root;root.classList.add('track-context-menu','active');root.style.display='block';root.setAttribute('role','menu');}
-  const close=()=>{if(closed)return;closed=true;if(mobile){root.classList.remove('active');setTimeout(()=>root.remove(),240);}else ui.closeContextMenu();if(ui.dismissTrackMenu===close)ui.dismissTrackMenu=null;opener?.isConnected&&opener.focus();};
+  const close=()=>{if(closed)return;closed=true;unwatch();if(mobile){root.classList.remove('active');setTimeout(()=>root.remove(),240);}else ui.closeContextMenu();if(ui.dismissTrackMenu===close)ui.dismissTrackMenu=null;opener?.isConnected&&opener.focus({preventScroll:true});};
   ui.dismissTrackMenu=close;
   const execute=async action=>{close();try{await action();}catch(error){ui.showToast(error.message,'error');}};
   const button=(id,label,icon,action,submenu=false)=>{const b=document.createElement('button');b.id=id;b.className=mobile?'mobile-sheet-item':'context-menu-item';b.innerHTML=`${icon||icons.music}<span>${ui.escapeHTML(label)}</span>${submenu?'<span class="menu-chevron" aria-hidden="true">›</span>':''}`;if(!mobile)b.setAttribute('role','menuitem');b.onclick=e=>{e.stopPropagation();submenu?action():execute(action);};panel.append(b);return b;};
-  const position=()=>{if(mobile)return;root.style.left=Math.max(8,Math.min(x,innerWidth-root.offsetWidth-8))+'px';root.style.top=Math.max(8,Math.min(y,innerHeight-root.offsetHeight-8))+'px';};
+  const position=()=>{if(!mobile){root.scrollTop=0;positionFloating(root,{x,y});}};
   const header=()=>{if(!mobile)return;const h=document.createElement('div');h.className='sheet-track-header';h.innerHTML=`<div class="mobile-sheet-handle"></div><div class="sheet-track-info"><div class="sheet-track-cover"></div><div><strong>${ui.escapeHTML(track.title)}</strong><span>${ui.escapeHTML(track.artist)}</span></div></div>`;panel.append(h);mountCover(h.querySelector('.sheet-track-cover'),track,true);panel.setAttribute('aria-label','Действия: '+track.title);};
   const focusFirst=()=>panel.querySelector('button')?.focus({preventScroll:true});
   const playlists=()=>{
@@ -58,4 +59,5 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
   };
   if(mobile){root.firstElementChild.onclick=close;let start=null,delta=0;panel.addEventListener('pointerdown',e=>{if(e.target.closest('.mobile-sheet-handle')){start=e.clientY;delta=0;panel.setPointerCapture(e.pointerId);}});panel.addEventListener('pointermove',e=>{if(start===null)return;delta=Math.max(0,e.clientY-start);panel.style.transform=`translateY(${delta}px)`;});const release=()=>{if(start===null)return;start=null;panel.style.transform='';if(delta>72)close();};panel.addEventListener('pointerup',release);panel.addEventListener('pointercancel',release);}
   main();
+  if(!mobile)unwatch=watchFloating(root,{x,y});
 }

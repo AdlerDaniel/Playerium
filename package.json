@@ -35,6 +35,7 @@
       "desktop-update-helper.js",
       "desktop-music.js",
       "desktop-audio.js",
+      "desktop-loudness.js",
       "MUSIC-NOTICES.md"
     ],
     "extraResources": [

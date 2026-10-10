@@ -1,5 +1,6 @@
 // Shared keyboard/touch surfaces for collection menus and local file actions.
 import {icons} from './design-icons.js';
+import {watchFloating} from './floating-surfaces.js';
 export function showSurfaceMenu(ui,{title,items,anchor}={}) {
   ui.dismissTrackMenu?.(); ui.dismissSurface?.(); ui.closeContextMenu();
   const opener=document.activeElement, root=document.createElement('div');
@@ -8,8 +9,8 @@ export function showSurfaceMenu(ui,{title,items,anchor}={}) {
   const panel=root.lastElementChild;panel.setAttribute('aria-label',title);
   panel.innerHTML=`${ui.isMobile?'<div class="mobile-sheet-handle"></div>':''}<h3 class="menu-pane-title">${ui.escapeHTML(title)}</h3>`;
   document.body.append(root);
-  let closed=false;
-  const close=()=>{if(closed)return;closed=true;root.classList.remove('active');root.classList.add('closing');setTimeout(()=>root.remove(),200);if(ui.dismissSurface===close)ui.dismissSurface=null;opener?.isConnected&&opener.focus({preventScroll:true});};
+  let closed=false,unwatch=()=>{};
+  const close=()=>{if(closed)return;closed=true;unwatch();root.classList.remove('active');root.classList.add('closing');setTimeout(()=>root.remove(),200);if(ui.dismissSurface===close)ui.dismissSurface=null;opener?.isConnected&&opener.focus({preventScroll:true});};
   ui.dismissSurface=close;
   for(const item of items){
     const b=document.createElement('button');b.className=(ui.isMobile?'mobile-sheet-item':'context-menu-item')+(item.danger?' danger':'');
@@ -30,7 +31,7 @@ export function showSurfaceMenu(ui,{title,items,anchor}={}) {
     const release=commit=>{if(start===null)return;start=null;panel.style.transform='';if(commit&&delta>72)close();};
     panel.onpointerup=()=>release(true);panel.onpointercancel=()=>release(false);
   }
-  if(!ui.isMobile){const rect=anchor?.getBoundingClientRect?.()||{left:innerWidth/2, bottom:innerHeight/2};panel.style.left=Math.max(8,Math.min(rect.left,innerWidth-panel.offsetWidth-8))+'px';panel.style.top=Math.max(8,Math.min(rect.bottom,innerHeight-panel.offsetHeight-8))+'px';}
+  if(!ui.isMobile)unwatch=watchFloating(panel,{anchor,x:innerWidth/2,y:innerHeight/2});
   requestAnimationFrame(()=>root.classList.add('active'));panel.querySelector('button')?.focus({preventScroll:true});
   return close;
 }

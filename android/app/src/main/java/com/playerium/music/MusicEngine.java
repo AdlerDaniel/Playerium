@@ -38,6 +38,8 @@ final class MusicEngine {
     private final File runtime;
     private JSONObject records;
     private String musicClientVersion;
+    private final Map<String,Double> knownLoudness=new ConcurrentHashMap<>();
+    double knownLoudness(Uri uri){Double gain=knownLoudness.get(uri.toString());return gain==null?1:gain;}
     private MusicEngine(Context context){this.context=context;runtime=new File(context.getNoBackupFilesDir(),"music-runtime-0.18.1-2026.08.19");}
     void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();Future<?> task=tasks.remove(id);if(task!=null)task.cancel(true);}
     void request(String id,String operation,String json) {
@@ -78,6 +80,7 @@ final class MusicEngine {
         while((n=input.read(buffer))!=-1){output.write(buffer,0,n);if(output.size()>limit)throw new IOException("Response too large");}return output.toByteArray();
     }
     private Object execute(String operation,JSONObject payload,String id) throws Exception {
+        if(operation.equals("loudness"))return analyzeLoudness(Uri.parse(payload.getString("uri")));
         if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {String key=keys.next();JSONObject record=saved.getJSONObject(key);if(exists(record)){try{record=protectDownloaded(record,key);}catch(IOException|SecurityException error){android.util.Log.w("Playerium","Could not hide downloaded media yet",error);}files.put(record);}}return files;}
         if(operation.equals("describe")){JSONObject record=records().optJSONObject(payload.getString("downloadId"));if(record==null)throw new IOException("Track unavailable");return withCover(record);}
         if(operation.equals("delete")) {String key=payload.getString("downloadId");JSONObject record=records().optJSONObject(key);if(record!=null){if(record.optJSONObject("legacyMedia")!=null){deleteOwned(record.getJSONObject("legacyMedia"));refreshGallery(record.getJSONObject("legacyMedia"));}deleteOwned(record);records().remove(key);saveRecords();}return true;}
@@ -138,6 +141,36 @@ final class MusicEngine {
         try(InputStream in=context.getAssets().open("music-runtime/yt-dlp");OutputStream out=new FileOutputStream(new File(runtime,"yt-dlp"))){copy(in,out);}
         new File(runtime,"ready").createNewFile();
     }
+    synchronized JSONObject analyzeLoudness(Uri uri) throws Exception {
+        if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");
+        DocumentFile document=DocumentFile.fromSingleUri(context,uri);
+        long size=document==null?0:document.length(),modified=document==null?0:document.lastModified();
+        if("file".equals(uri.getScheme())){File file=new File(uri.getPath());size=file.length();modified=file.lastModified();}
+        String key=uri.toString()+"|"+size+"|"+modified+"|lufs-v1";
+        android.content.SharedPreferences cache=context.getSharedPreferences("playerium_loudness",Context.MODE_PRIVATE);
+        String saved=cache.getString(key,null);if(saved!=null){JSONObject result=new JSONObject(saved);knownLoudness.put(uri.toString(),result.getDouble("gain"));return result;}
+        initialize();File input=File.createTempFile("loudness-",".audio",context.getCacheDir());
+        try {
+            try(InputStream in=context.getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(input)){if(in==null)throw new IOException("Audio unavailable");copy(in,out);}
+            File nativeDir=new File(context.getApplicationInfo().nativeLibraryDir);
+            ProcessBuilder builder=new ProcessBuilder(new File(nativeDir,"libffmpeg.so").getAbsolutePath(),"-hide_banner","-nostdin","-i",input.getAbsolutePath(),"-vn","-af","loudnorm=I=-18:TP=-1:LRA=11:print_format=json","-f","null","-");
+            builder.environment().put("LD_LIBRARY_PATH",new File(runtime,"python/usr/lib")+":"+new File(runtime,"ffmpeg/usr/lib"));
+            builder.redirectErrorStream(true);Process process=builder.start();
+            FutureTask<byte[]> output=new FutureTask<>(()->read(process.getInputStream(),1024*1024));new Thread(output,"Playerium loudness output").start();
+            try {
+                long deadline=System.currentTimeMillis()+90000;
+                while(true){try{process.exitValue();break;}catch(IllegalThreadStateException running){if(System.currentTimeMillis()>deadline||Thread.currentThread().isInterrupted())throw new IOException("Loudness analysis timed out");Thread.sleep(50);}}
+                if(process.exitValue()!=0)throw new IOException("Loudness analysis failed");
+                String text=new String(output.get(5,TimeUnit.SECONDS),StandardCharsets.UTF_8);
+                java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\{\\s*\"input_i\"[\\s\\S]*?\\}").matcher(text);
+                if(!match.find())throw new IOException("Missing loudness measurement");
+                JSONObject stats=new JSONObject(match.group());double integrated=measurementNumber(stats.getString("input_i")),peak=measurementNumber(stats.getString("input_tp"));
+                double gain=1;if(!Double.isNaN(integrated)&&!Double.isInfinite(integrated)&&!Double.isNaN(peak)&&!Double.isInfinite(peak)&&integrated>=-60)gain=Math.pow(10,Math.max(-30,Math.min(18,Math.min(-18-integrated,-1-peak)))/20);
+                JSONObject result=new JSONObject().put("gain",gain);cache.edit().putString(key,result.toString()).apply();knownLoudness.put(uri.toString(),gain);return result;
+            }finally{process.destroy();}
+        }finally{input.delete();}
+    }
+    private static double measurementNumber(String value){try{return Double.parseDouble(value);}catch(NumberFormatException ignored){return Double.NaN;}}
     private static void unzip(File zip,File root) throws Exception {
         root.mkdirs();String prefix=root.getCanonicalPath()+File.separator;
         JSONObject links=new JSONObject();
