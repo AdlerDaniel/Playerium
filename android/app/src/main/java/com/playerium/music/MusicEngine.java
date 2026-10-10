@@ -208,8 +208,8 @@ final class MusicEngine {
     private JSONObject hitMusicInfo(String page) throws Exception {
         String text=get(page);java.util.regex.Matcher title=java.util.regex.Pattern.compile("(?i)<meta\\s+property=\"og:title\"\\s+content=\"([^\"]+)\"").matcher(text),audio=java.util.regex.Pattern.compile("(?i)\\bmp3source=\"([^\"]+)\"").matcher(text);
         if(!title.find()||!audio.find())throw new IOException("Не удалось получить полную запись.");
-        String label=android.text.Html.fromHtml(title.group(1),0).toString().replaceAll("(?i)\\s+-\\s+Скачать.*$","");String[] parts=label.split("\\s[-–—]\\s",2);
-        String value=android.text.Html.fromHtml(audio.group(1),0).toString();URL url=new URL(value);
+        String label=android.text.Html.fromHtml(title.group(1)).toString().replaceAll("(?i)\\s+-\\s+Скачать.*$","");String[] parts=label.split("\\s[-–—]\\s",2);
+        String value=android.text.Html.fromHtml(audio.group(1)).toString();URL url=new URL(value);
         if(parts.length!=2||!url.getProtocol().equals("https")||!url.getHost().equals("cdn.music2019.su")||url.getUserInfo()!=null||url.getPort()!=-1||url.getRef()!=null||!url.getPath().matches("/{1,2}")||url.getQuery()==null||!url.getQuery().matches("h=[\\w-]{32,1024}(?:\\\\{2})?"))throw new SecurityException("Недопустимая запись");
         return new JSONObject().put("id",new URL(page).getPath().substring(7)).put("title",parts[1]).put("artist",parts[0]).put("url",value).put("ext","mp3").put("extractor","generic").put("webpage_url",page);
     }
