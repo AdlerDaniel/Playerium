@@ -176,6 +176,24 @@ test('Android song selection does not queue loudness work through the JavaScript
   await p.playTrack(a,0,[a,b]);await p.playTrack(b,1);
   assert.equal(messages.length,2);assert.equal(messages[1].index,1);assert.equal(p.currentTrack,b);
 });
+
+test('Android notification artwork sends durable image bytes once and follows automatic native transitions',async()=>{
+  const pictures=[],commands=[],queues=[];
+  window.AndroidBridge={setPlaybackQueue:s=>queues.push(JSON.parse(s)),storePlaybackArtwork:(id,bytes)=>pictures.push({id,bytes}),playbackCommand:(...args)=>commands.push(args),setEqualizer:()=>{}};
+  const a={id:'art-a',nativeUri:'content://music/a',pictureBlob:new Blob(['cover-a'],{type:'image/png'})};
+  const b={id:'art-b',nativeUri:'content://music/b',pictureBlob:new Blob(['cover-b'],{type:'image/png'})};
+  const c={id:'art-c',nativeUri:'content://music/c',pictureBlob:new Blob(['cover-c'],{type:'image/png'})};
+  const p=await player();await p.playTrack(a,0,[a,b,c]);
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual(pictures.map(t=>[t.id,atob(t.bytes)]),[['art-a','cover-a'],['art-b','cover-b']]);
+  p.syncNativeQueue();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(pictures.length,2);
+  p.applyNativeState({id:'art-b',index:1,playing:true,position:500,duration:42000,shuffle:true,repeat:1});
+  await new Promise(resolve=>setTimeout(resolve,0));assert.equal(pictures.at(-1).id,'art-c');
+  assert.equal(p.currentTrack,b);assert.equal(p.isShuffle,true);assert.equal(p.repeatMode,'one');
+  p.next();p.prev();p.toggleShuffle();
+  assert.deepEqual(commands,[['next',0],['previous',0],['shuffle',0]]);
+  p.syncNativeQueue();assert.equal(queues.at(-1).shuffle,false);
+});
 test('async directory scan handles nested audio/LRC and never traverses symlinks',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'playerium-'));
   try { await fs.mkdir(path.join(root,'nested'));await fs.writeFile(path.join(root,'nested/song.mp3'),'a');await fs.writeFile(path.join(root,'nested/song.lrc'),'b');await fs.writeFile(path.join(root,'ignore.txt'),'c');

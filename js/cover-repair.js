@@ -33,6 +33,7 @@ export function installCoverRepair(music, catalogTracks) {
               track.coverCheckedAt = Date.now();
               track.pictureSource = {provider,url:candidate.pictureUrl,title:candidate.title,artist:candidate.artist,duration:candidate.duration,isrc:candidate.isrc||'',verifiedAt:Date.now()};
               await music.library.putInStore('tracks',{...track,pictureUrl:null});
+              music.ui?.player?.publishNativeArtwork?.();
               for(const row of document.querySelectorAll('[data-track-id]')) if(row.dataset.trackId===track.id) {
                 const host=row.querySelector('.track-mini-thumb');if(host)mountCover(host,track);
               }

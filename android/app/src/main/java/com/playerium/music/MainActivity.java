@@ -238,6 +238,7 @@ public class MainActivity extends AppCompatActivity {
         }
         @JavascriptInterface public void clearSelectedFiles() { getSharedPreferences("playerium", MODE_PRIVATE).edit().remove("selected_music_files").apply(); }
         @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
+        @JavascriptInterface public void storePlaybackArtwork(String id,String base64) { PlaybackArtwork.storeAsync(MainActivity.this,id,base64); }
         @JavascriptInterface public void musicRequest(String id,String operation,String payload) { MusicEngine.get(MainActivity.this).request(id,operation,payload); }
         @JavascriptInterface public void cancelMusic(String id) { MusicEngine.get(MainActivity.this).cancel(id); }
 

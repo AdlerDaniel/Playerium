@@ -28,6 +28,7 @@ export class AudioPlayer {
     this.normalizationGain = 1;
     this.browserLoudnessCache=new Map();
     this.loudnessPending=new Map();
+    this.nativeArtworkSent=new Map();
     this.equalizer = null;
     this.isWebAudioInitialized = false;
 
@@ -196,7 +197,7 @@ export class AudioPlayer {
 
     if (newQueue) {
       this.originalQueue = [...newQueue];
-      if (this.isShuffle) {
+      if (this.isShuffle && !(track.nativeUri && window.AndroidBridge?.setPlaybackQueue)) {
         this.queue = this.createShuffledQueue(newQueue, track);
         this.queueIndex = 0;
       } else {
@@ -306,7 +307,23 @@ export class AudioPlayer {
     if (!this.nativePlayback) return;
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
       title: t.title, artist: t.artist, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
-      repeat: this.repeatMode, volume: this.volume }));
+      repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume }));
+    this.publishNativeArtwork();
+  }
+
+  publishNativeArtwork() {
+    if(!this.nativePlayback||!window.AndroidBridge?.storePlaybackArtwork)return;
+    for(const track of [this.currentTrack,this.queue[this.queueIndex+1]]) {
+      const blob=track?.pictureBlob;
+      if(!blob||blob.size>4*1024*1024||this.nativeArtworkSent.get(track.id)===blob)continue;
+      this.nativeArtworkSent.set(track.id,blob);
+      if(this.nativeArtworkSent.size>256)this.nativeArtworkSent.delete(this.nativeArtworkSent.keys().next().value);
+      blob.arrayBuffer().then(buffer=>{
+        const bytes=new Uint8Array(buffer),chunks=[];
+        for(let i=0;i<bytes.length;i+=32768)chunks.push(String.fromCharCode(...bytes.subarray(i,i+32768)));
+        window.AndroidBridge?.storePlaybackArtwork?.(track.id,btoa(chunks.join('')));
+      }).catch(()=>{if(this.nativeArtworkSent.get(track.id)===blob)this.nativeArtworkSent.delete(track.id);});
+    }
   }
 
   stopTrack() {
@@ -331,6 +348,9 @@ export class AudioPlayer {
       if (this.queue.length) { this.originalQueue = [...this.queue]; this.nativePlayback = true; }
     }
     if (!this.nativePlayback) return;
+    if(typeof state.shuffle==='boolean'&&this.isShuffle!==state.shuffle){this.isShuffle=state.shuffle;this.onShuffleChange?.(this.isShuffle);this.savePreferences();}
+    const repeat=['off','one','all'][state.repeat];
+    if(repeat&&repeat!==this.repeatMode){this.repeatMode=repeat;this.onRepeatChange?.(repeat);this.savePreferences();}
     const index = Number.isInteger(state.index) && this.queue[state.index]?.id === state.id ? state.index : this.queue.findIndex(t => t.id === state.id);
     if (index < 0) return;
     if (this.currentTrack?.id !== state.id || this.queueIndex !== index) {
@@ -338,6 +358,7 @@ export class AudioPlayer {
       this.currentTrack = this.queue[index];
       this.onTrackChange?.(this.currentTrack);
       this.onQueueChange?.(this.queue, index);
+      this.publishNativeArtwork();
     }
     if (this.isPlaying !== state.playing) {
       this.isPlaying = state.playing;
@@ -393,6 +414,7 @@ export class AudioPlayer {
 
   next() {
     if (this.queue.length === 0) return;
+    if(this.nativePlayback){window.AndroidBridge?.playbackCommand?.('next',0);return;}
 
     let nextIndex = this.queueIndex + 1;
     if (nextIndex >= this.queue.length) {
@@ -411,6 +433,7 @@ export class AudioPlayer {
 
   prev() {
     if (this.queue.length === 0) return;
+    if(this.nativePlayback){window.AndroidBridge?.playbackCommand?.('previous',0);return;}
 
     // If more than 3 seconds in, restart current track
     if ((this.nativePlayback ? this.nativeTime : this.audio.currentTime) > 3) {
@@ -482,6 +505,10 @@ export class AudioPlayer {
 
   toggleShuffle() {
     this.isShuffle = !this.isShuffle;
+    if(this.nativePlayback){
+      window.AndroidBridge?.playbackCommand?.('shuffle',this.isShuffle?1:0);
+      this.savePreferences();this.onShuffleChange?.(this.isShuffle);return;
+    }
     if (this.isShuffle) {
       this.queue = this.createShuffledQueue(this.originalQueue, this.currentTrack);
       this.queueIndex = 0;

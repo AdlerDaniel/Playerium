@@ -24,6 +24,9 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+import androidx.media3.session.CommandButton;
+import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionResult;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.json.JSONArray;
@@ -34,6 +37,9 @@ import java.util.List;
 /** Owns audio, queue, audio focus and lock-screen controls independently of Activity. */
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public class MediaNotificationService extends MediaSessionService {
+    private static volatile MediaNotificationService instance;
+    private static final SessionCommand SHUFFLE=new SessionCommand("playerium.SHUFFLE",android.os.Bundle.EMPTY);
+    private static final SessionCommand REPEAT=new SessionCommand("playerium.REPEAT",android.os.Bundle.EMPTY);
     private static volatile String stateSnapshot = "{}";
     private static final AtomicReference<String> pendingQueue = new AtomicReference<>();
     static void resumeIfSaved(Context context) {
@@ -50,6 +56,11 @@ public class MediaNotificationService extends MediaSessionService {
     private Equalizer equalizer;
     private final NormalizationProcessor normalization=new NormalizationProcessor();
     private final java.util.concurrent.ExecutorService loudnessWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    static void artworkChanged(String id){
+        MediaNotificationService service=instance;
+        if(service!=null)service.handler.post(()->service.applyArtwork(id));
+    }
     private String normalizingUri="";
     private long normalizationVersion;
     private String equalizerSettings;
@@ -71,6 +82,7 @@ public class MediaNotificationService extends MediaSessionService {
 
     @Override public void onCreate() {
         super.onCreate();
+        instance=this;
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
 
         DefaultRenderersFactory renderers=new DefaultRenderersFactory(this){
@@ -88,8 +100,9 @@ public class MediaNotificationService extends MediaSessionService {
                 player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
             @Override public void onAudioSessionIdChanged(int id) { configureEqualizer(id); }
-            @Override public void onMediaItemTransition(MediaItem item,int reason){normalizeCurrent();}
+            @Override public void onMediaItemTransition(MediaItem item,int reason){normalizeCurrent();refreshArtwork();}
             @Override public void onEvents(Player ignored,Player.Events events) {
+                updateMediaButtons();
                 savePlayback();JSONObject data=state();stateSnapshot=data.toString();
                 MainActivity activity=MainActivity.getInstance();if(activity!=null&&activity.isForeground())activity.sendPlayerState(data);
             }
@@ -98,6 +111,18 @@ public class MediaNotificationService extends MediaSessionService {
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         session = new MediaSession.Builder(this, player).setSessionActivity(activityIntent)
             .setCallback(new MediaSession.Callback() {
+                @Override public MediaSession.ConnectionResult onConnect(MediaSession mediaSession,MediaSession.ControllerInfo controller){
+                    MediaSession.ConnectionResult defaults=MediaSession.Callback.super.onConnect(mediaSession,controller);
+                    return new MediaSession.ConnectionResult.AcceptedResultBuilder(mediaSession)
+                        .setAvailableSessionCommands(defaults.availableSessionCommands.buildUpon().add(SHUFFLE).add(REPEAT).build())
+                        .setAvailablePlayerCommands(defaults.availablePlayerCommands).build();
+                }
+                @Override public ListenableFuture<SessionResult> onCustomCommand(MediaSession mediaSession,MediaSession.ControllerInfo controller,SessionCommand command,android.os.Bundle args){
+                    if(SHUFFLE.equals(command))player.setShuffleModeEnabled(!player.getShuffleModeEnabled());
+                    else if(REPEAT.equals(command))player.setRepeatMode((player.getRepeatMode()+1)%3);
+                    else return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED));
+                    return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+                }
                 @Override public ListenableFuture<MediaSession.MediaItemsWithStartPosition> onPlaybackResumption(MediaSession ignored,MediaSession.ControllerInfo controller) {
                     if(player.getMediaItemCount()==0)restorePlayback();
                     List<MediaItem> items=new ArrayList<>();
@@ -106,6 +131,10 @@ public class MediaNotificationService extends MediaSessionService {
                     return Futures.immediateFuture(new MediaSession.MediaItemsWithStartPosition(items,player.getCurrentMediaItemIndex(),Math.max(0,player.getCurrentPosition())));
                 }
             }).build();
+        // The JavaScript UI starts us directly; no MediaController connects on that path.
+        // Register immediately so Media3 owns the notification and foreground lifecycle.
+        addSession(session);
+        updateMediaButtons();
         if(pendingQueue.get()==null)restorePlayback();
         handler.post(publishState);
     }
@@ -136,7 +165,7 @@ public class MediaNotificationService extends MediaSessionService {
             if (!MainActivity.hasMusicPermission(this, uri)) throw new SecurityException("Unauthorized URI");
             android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));
             MediaMetadata metadata = new MediaMetadata.Builder().setTitle(t.optString("title"))
-                .setArtist(t.optString("artist")).setExtras(extras).build();
+                .setArtist(t.optString("artist")).setArtworkUri(PlaybackArtwork.find(this,t.getString("id"))).setExtras(extras).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
         }
         if (items.isEmpty()) { player.stop(); player.clearMediaItems(); stopSelf(); return; }
@@ -171,6 +200,7 @@ public class MediaNotificationService extends MediaSessionService {
         }
         player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
         player.setVolume((float)data.optDouble("volume", 0.8));
+        player.setShuffleModeEnabled(data.optBoolean("shuffle"));
         savePlayback();
     }
 
@@ -192,6 +222,33 @@ public class MediaNotificationService extends MediaSessionService {
         }
     }
 
+    private void refreshArtwork(){
+        MediaItem item=player.getCurrentMediaItem();if(item==null||item.localConfiguration==null)return;
+        if(PlaybackArtwork.find(this,item.mediaId)!=null){applyArtwork(item.mediaId);return;}
+        artworkWorker.submit(()->{
+            if(PlaybackArtwork.embedded(this,item.mediaId,item.localConfiguration.uri)!=null)
+                handler.post(()->applyArtwork(item.mediaId));
+        });
+    }
+    private void applyArtwork(String id){
+        if(instance!=this||player==null)return;
+        Uri artwork=PlaybackArtwork.find(this,id);if(artwork==null)return;
+        for(int index=0;index<player.getMediaItemCount();index++){
+            MediaItem item=player.getMediaItemAt(index);
+            if(item.mediaId.equals(id)&&!artwork.equals(item.mediaMetadata.artworkUri))
+                player.replaceMediaItem(index,item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkUri(artwork).build()).build());
+        }
+    }
+
+    private void updateMediaButtons(){
+        if(session==null)return;
+        session.setCustomLayout(java.util.Arrays.asList(
+            new CommandButton.Builder().setDisplayName(player.getShuffleModeEnabled()?"Выключить перемешивание":"Перемешать")
+                .setIconResId(R.drawable.ic_media_shuffle).setSessionCommand(SHUFFLE).build(),
+            new CommandButton.Builder().setDisplayName(player.getRepeatMode()==Player.REPEAT_MODE_ONE?"Повторять трек":player.getRepeatMode()==Player.REPEAT_MODE_ALL?"Повторять очередь":"Повтор выключен")
+                .setIconResId(R.drawable.ic_media_repeat).setSessionCommand(REPEAT).build()));
+    }
+
     private void savePlayback() {
         if(player==null||playbackPrefs==null)return;
         try {
@@ -206,7 +263,7 @@ public class MediaNotificationService extends MediaSessionService {
             }
             JSONObject data=new JSONObject().put("tracks",tracks).put("index",player.getCurrentMediaItemIndex())
                 .put("play",player.getPlayWhenReady()).put("position",Math.max(0,player.getCurrentPosition()))
-                .put("volume",player.getVolume()).put("repeat",player.getRepeatMode()==Player.REPEAT_MODE_ONE?"one":player.getRepeatMode()==Player.REPEAT_MODE_ALL?"all":"off");
+                .put("volume",player.getVolume()).put("shuffle",player.getShuffleModeEnabled()).put("repeat",player.getRepeatMode()==Player.REPEAT_MODE_ONE?"one":player.getRepeatMode()==Player.REPEAT_MODE_ALL?"all":"off");
             playbackPrefs.edit().putString("queue",data.toString()).apply();lastSaved=SystemClock.elapsedRealtime();
         }catch(Exception ignored){}
     }
@@ -223,6 +280,12 @@ public class MediaNotificationService extends MediaSessionService {
             case "seek": player.seekTo(Math.max(0, (long)value)); break;
             case "volume": player.setVolume((float)Math.max(0, Math.min(1, value))); break;
             case "repeat": player.setRepeatMode((int)value); break;
+            case "shuffle": player.setShuffleModeEnabled(value!=0); break;
+            case "next":
+                int next=player.getNextMediaItemIndex();if(next==C.INDEX_UNSET)player.pause();else player.seekTo(next,0);break;
+            case "previous":
+                int previous=player.getPreviousMediaItemIndex();
+                if(player.getCurrentPosition()>3000||previous==C.INDEX_UNSET)player.seekTo(0);else player.seekTo(previous,0);break;
         }
     }
 
@@ -256,6 +319,7 @@ public class MediaNotificationService extends MediaSessionService {
             data.put("queue", queue);
             data.put("index", player.getCurrentMediaItemIndex());
             data.put("repeat", player.getRepeatMode());
+            data.put("shuffle",player.getShuffleModeEnabled());
             data.put("playing", player.isPlaying()); data.put("position", player.getCurrentPosition());
             data.put("duration", Math.max(0, player.getDuration()));
             if (error != null) data.put("error", error);
@@ -273,6 +337,7 @@ public class MediaNotificationService extends MediaSessionService {
         savePlayback();
         handler.removeCallbacksAndMessages(null);
         ++normalizationVersion;loudnessWorker.shutdownNow();
+        artworkWorker.shutdownNow();if(instance==this)instance=null;
         if (equalizer != null) equalizer.release();
         session.release(); player.release(); stateSnapshot = "{}";
         super.onDestroy();
