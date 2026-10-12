@@ -30,6 +30,46 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 @androidx.test.filters.SdkSuppress(minSdkVersion=23)
 public class MediaCardTest {
+    @Test public void reopeningTheActivityRestoresThePlayingTrackWithoutRestartingIt() throws Exception {
+        android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        Context context=instrumentation.getTargetContext();
+        android.app.Activity first=instrumentation.startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        File file=fixture(context,40);
+        android.app.Activity reopened=null;
+        try {
+            String queue=new JSONObject().put("tracks",new JSONArray().put(new JSONObject()
+                .put("id","ui-restoration-fixture").put("uri",android.net.Uri.fromFile(file).toString())
+                .put("title","Restored playing track").put("artist","Playerium verification")))
+                .put("play",true).put("reset",true).toString();
+            instrumentation.runOnMainSync(()->MediaNotificationService.submitQueue(context,queue));
+            waitFor("ui-restoration-fixture",true,15000);foregroundCard(context);
+            instrumentation.runOnMainSync(first::finish);
+            instrumentation.runOnMainSync(()->context.startService(new Intent(context,MediaNotificationService.class).putExtra("command","seek").putExtra("value",7000d)));
+            Thread.sleep(500);
+            reopened=instrumentation.startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            final android.app.Activity target=reopened;
+            long end=System.currentTimeMillis()+15000;boolean restored=false;
+            do {
+                java.util.concurrent.CountDownLatch done=new java.util.concurrent.CountDownLatch(1);
+                java.util.concurrent.atomic.AtomicReference<String> result=new java.util.concurrent.atomic.AtomicReference<>();
+                instrumentation.runOnMainSync(()->{
+                    android.view.ViewGroup content=target.findViewById(android.R.id.content);
+                    ((android.webkit.WebView)content.getChildAt(0)).evaluateJavascript(
+                        "!!(window.playerApp && playerApp.player.currentTrack && document.getElementById('mobileMiniTitle').textContent === 'Restored playing track' && !document.getElementById('mobileMiniPlayer').classList.contains('hidden') && playerApp.player.getCurrentTime() >= 7)",
+                        value->{result.set(value);done.countDown();});
+                });
+                assertTrue(done.await(5,TimeUnit.SECONDS));restored="true".equals(result.get());
+                if(!restored)Thread.sleep(200);
+            } while(!restored&&System.currentTimeMillis()<end);
+            assertTrue("Reopened WebView must display the native playing track and current position",restored);
+            JSONObject state=waitFor("ui-restoration-fixture",true,1000);assertTrue(state.optLong("position")>=7000);
+        } finally {
+            instrumentation.runOnMainSync(()->context.startService(new Intent(context,MediaNotificationService.class).putExtra("command","stop")));
+            context.stopService(new Intent(context,MediaNotificationService.class));file.delete();
+            if(reopened!=null){final android.app.Activity target=reopened;instrumentation.runOnMainSync(target::finish);}
+            instrumentation.runOnMainSync(first::finish);
+        }
+    }
     @Test public void changedArtworkHasANewPrivateUriAndInvalidImagesCannotReplaceIt() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         android.net.Uri previous=null;

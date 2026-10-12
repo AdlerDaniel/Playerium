@@ -8,10 +8,13 @@
 .theme-preview-main { flex: 1; background: var(--preview-panel); border-radius: 3px; display: flex; gap: 5px; padding: 14px 7px 7px; }
 .theme-preview-main span { background: var(--preview-raised); width: 50%; border-radius: 3px; }
 .theme-preview-player { position: absolute; bottom: 6px; left: calc(50% - 5px); width: 10px; height: 10px; border-radius: 50%; background: var(--preview-accent); }
-.home-dashboard { background: linear-gradient(180deg,var(--theme-hero),var(--sp-dark-900) 380px); }
+.home-dashboard { background: transparent; }
+body[data-view="home"] .main-view-container {
+  background-image: linear-gradient(180deg,var(--theme-home-top),var(--sp-dark-900) 420px);
+}
 .topbar, .topbar.scrolled { background: var(--sp-black); }
 .settings-btn-primary:hover, .home-import:hover { background: var(--sp-text-secondary); color: var(--sp-black); }
-.view-header, body[data-view="liked"] .view-header, body[data-view="liked"] .collection-header, body[data-view="playlist"] .view-header { background: linear-gradient(180deg,var(--theme-hero),var(--sp-dark-900)); }
+.view-header, body[data-view="liked"] .view-header, body[data-view="liked"] .collection-header, body[data-view="playlist"] .view-header { background: linear-gradient(180deg,var(--theme-home-top),var(--sp-dark-900)); }
 .surface-panel, .form-dialog .modal-card, .mobile-sheet-content, .collection-sheet .mobile-sheet-content { color: var(--sp-text-primary); background: var(--sp-dark-600); }
 .surface-panel .context-menu-item, .dialog-field .search-input { color: var(--sp-text-primary); }
 .dialog-field .search-input { background: var(--sp-dark-400); }
@@ -30,6 +33,37 @@ button:focus-visible, [role="button"]:focus-visible, [role="link"]:focus-visible
 input,textarea,select { color: var(--sp-text-primary); caret-color: var(--sp-text-primary); }
 .collection-section-heading,.artist-discography h2,.settings-section-title { color: var(--sp-text-primary); }
 .mobile-mini-player { background: var(--sp-dark-600); }
+.mobile-mini-player.hidden { visibility: hidden; }
 .mobile-fullscreen-player { background: linear-gradient(180deg,var(--theme-hero),var(--sp-dark-900) 85%); }
 .mobile-nav-bar { background: linear-gradient(transparent,var(--sp-dark-900) 45%); }
 @media(max-width:600px){.theme-picker{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* The page owns its ambient color; padded shelves never paint a rectangle. */
+.shelf-art > .card-cover { border-radius: inherit; overflow: hidden; }
+.search-recent-query { justify-content: flex-start; min-width: 0; padding: 0; }
+.search-recent-query svg { flex-shrink: 0; border-radius: 8px; }
+.search-recent-query span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-recent-row { gap: 16px; }
+.search-history-remove { flex-shrink: 0; }
+.home-filters .pill-btn { background: var(--sp-dark-700); color: var(--sp-text-primary); }
+.home-filters .pill-btn.active { background: var(--sp-green); color: var(--sp-on-accent); }
+.spotify-search .mobile-cat-card { background: var(--sp-dark-700); color: var(--sp-text-primary); border-radius: 12px; box-shadow: none; }
+.spotify-search .mobile-cat-card:nth-child(2n) { background: var(--sp-dark-800); }
+.spotify-search .mobile-cat-card svg { fill: currentColor; color: var(--sp-green); opacity: .65; }
+.spotify-search .mobile-cat-card:hover { background: var(--sp-dark-600); }
+@media (max-width:768px), (pointer:coarse) and (max-width:1024px) {
+  body[data-view="home"] .topbar { background: var(--theme-home-top) !important; }
+  body[data-view="home"] .main-view-container { background-image: linear-gradient(180deg,var(--theme-home-top),var(--sp-dark-900) 380px); }
+  .home-dashboard { background: transparent; padding-top: 8px; }
+  .spotify-search { padding-top: calc(24px + var(--sp-mobile-safe-top)); }
+  .spotify-search .mobile-search-title { line-height: 1.25; margin-bottom: 20px; }
+  .spotify-search .mobile-search-bar-box { background: var(--sp-dark-700); color: var(--sp-text-primary); border-radius: 10px; }
+  .spotify-search .mobile-search-input { color: var(--sp-text-primary); -webkit-text-fill-color: var(--sp-text-primary); caret-color: var(--sp-text-primary); border: 0; outline: none; box-shadow: none; padding: 0; border-radius: 0; appearance: none; font-weight: 400; }
+  .spotify-search .mobile-search-input::placeholder { color: var(--sp-text-secondary); -webkit-text-fill-color: var(--sp-text-secondary); }
+  .spotify-search .mobile-search-bar-box svg, .spotify-search .mobile-search-clear { color: var(--sp-text-secondary); }
+  .spotify-search .mobile-search-bar-box:focus-within { box-shadow: inset 0 0 0 1px var(--sp-dark-400); }
+  .spotify-search .mobile-search-clear { min-width: 44px; }
+  .spotify-search .search-back { width: 44px; flex-shrink: 0; }
+  .shelf-heading h2 { font-size: clamp(20px,5.4vw,24px); letter-spacing: -.4px; }
+  .shelf-more { font-size: 12px; }
+}

@@ -108,4 +108,5 @@ test('Android restores relocated downloads before rebuilding its paused playback
   expect(result.tracks).toHaveLength(1);expect(result.tracks[0].id).toBe(expected.id);expect(result.tracks[0].liked).toBe(true);
   expect(result.playlist).toEqual([expected.id]);expect(result.queue.ready).toBe(true);expect(result.queue.play).toBe(false);expect(result.queue.reset).toBe(false);
   expect(result.queue.tracks[0].uri).toBe('content://music/PlayeriumDownloads/song.mp3');expect(result.time).toBe(42);
+  expect(result.queue.position).toBe(42000);
 });

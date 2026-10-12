@@ -1,4 +1,37 @@
 const {test,expect}=require('@playwright/test');
+test('mobile home and search have continuous themed surfaces and aligned history in every palette',async({page},info)=>{
+ await page.setViewportSize({width:390,height:844});await boot(page);
+ await page.evaluate(()=>{
+  localStorage.setItem('playerium_search_history',JSON.stringify(['Anna asti','Nirvana','Kler','Дорофеева']));
+  const a=window.playerApp;for(let i=0;i<4;i++)a.library.tracks.set('fixture'+i,{id:'fixture'+i,title:['Повело','Ночью на кухне','Топит','Сонце Сідає'][i],artist:['ANNA ASTI','ANNA ASTI','ANNA ASTI','Океан Ельзи'][i],duration:180,dateAdded:Date.now()-i});a.ui.refreshCurrentView();
+ });
+ for(const id of ['light-brown','dark-brown','burgundy','green','blue','yellow']){
+  await page.evaluate(async id=>{(await import('/js/themes.js')).applyTheme(id);window.playerApp.ui.navigateTo({type:'home'});},id);
+  const home=await page.evaluate(()=>({child:getComputedStyle(document.querySelector('.home-dashboard')).backgroundImage,parent:getComputedStyle(document.querySelector('.main-view-container')).backgroundImage,top:getComputedStyle(document.querySelector('.topbar')).backgroundColor}));
+  expect(home.child).toBe('none');await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.main-view-container')).backgroundImage.includes(getComputedStyle(document.querySelector('.topbar')).backgroundColor))).toBe(true);
+  await page.screenshot({path:info.outputPath(id+'-home.png')});
+  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'search'}));
+  const xs=await page.locator('.search-recent-query svg').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().left));expect(new Set(xs).size).toBe(1);expect(xs[0]).toBeLessThan(25);
+  await page.locator('.mobile-search-input').focus();
+  expect(await page.locator('.mobile-search-input').evaluate(n=>getComputedStyle(n).outlineStyle)).toBe('none');
+  const title=await page.locator('.mobile-search-title').boundingBox();expect(title.y).toBeGreaterThanOrEqual(24);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:info.outputPath(id+'-search.png')});
+ }
+});
+test('mobile player restores native playback on reload and return without sending a play command',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.addInitScript(()=>{
+  localStorage.setItem('playerium_auto_update_check','false');window.nativeWrites=[];
+  window.nativeSnapshot={queue:['native-a'],tracks:[{uri:'content://music/a',title:'Playing song',artist:'Artist'}],index:0,id:'native-a',playing:true,position:67000,duration:180000};
+  window.AndroidBridge={getPlaybackState:()=>JSON.stringify(window.nativeSnapshot),setPlaybackQueue:data=>window.nativeWrites.push(data)};
+ });
+ await page.goto('/');await expect(page.locator('#mobileMiniPlayer')).toBeVisible();await expect(page.locator('#mobileMiniTitle')).toHaveText('Playing song');await expect(page.locator('#mobileMiniPauseIcon')).toBeVisible();
+ await page.reload();await expect(page.locator('#mobileMiniTitle')).toHaveText('Playing song');
+ await page.evaluate(()=>{document.getElementById('mobileMiniPlayer').classList.add('hidden');window.nativeSnapshot.position=94000;window.dispatchEvent(new Event('pageshow'));});
+ await expect(page.locator('#mobileMiniPlayer')).toBeVisible();await expect(page.locator('#currentTimeLabel')).toHaveText('1:34');
+ expect(await page.evaluate(()=>window.nativeWrites)).toEqual([]);
+});
 async function boot(page){await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);}
 async function within(page,selector){await expect.poll(async()=>{const b=await page.locator(selector).boundingBox(),v=page.viewportSize();return !!b&&b.x>=7&&b.y>=7&&b.x+b.width<=v.width-7&&b.y+b.height<=v.height-7;}).toBe(true);}
 test('desktop tooltips flip at top, clamp at sides, show on keyboard focus and dismiss',async({page})=>{

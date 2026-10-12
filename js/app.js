@@ -27,13 +27,24 @@ class App {
       window.playerApp = this;
 
       await this.library.init();
+      const previousNativeUris = new Map(this.library.getTracks().map(track => [track.id,track.nativeUri]));
       // Android can relocate old downloads before exposing playable library rows.
       if(window.AndroidBridge)await this.music.restore();
       this.player.loadSavedPreferences();
       this.ui.init();
       if(!window.AndroidBridge)this.music.restore();
       if (window.AndroidBridge?.getPlaybackState) {
-        try { this.player.applyNativeState(JSON.parse(window.AndroidBridge.getPlaybackState()));this.player.syncNativeQueue(); } catch {}
+        let relocated = this.library.getTracks().some(track => previousNativeUris.has(track.id) && previousNativeUris.get(track.id) !== track.nativeUri);
+        const restorePlayback = () => {
+          try {
+            this.player.applyNativeState(JSON.parse(window.AndroidBridge.getPlaybackState()));
+            if (relocated && this.player.nativePlayback) { this.player.syncNativeQueue(this.player.isPlaying,false,this.player.getCurrentTime()); relocated = false; }
+            this.ui.syncPlayerDisplay();
+          } catch (error) { console.warn('Playback display restoration failed', error); }
+        };
+        restorePlayback();
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) restorePlayback(); });
+        window.addEventListener('pageshow', restorePlayback);
       }
 
       // Hook UI folder picker to universal selector

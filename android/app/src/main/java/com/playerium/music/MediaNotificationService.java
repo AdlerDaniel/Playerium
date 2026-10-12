@@ -315,8 +315,18 @@ public class MediaNotificationService extends MediaSessionService {
         try {
             data.put("id", player.getCurrentMediaItem() == null ? "" : player.getCurrentMediaItem().mediaId);
             JSONArray queue = new JSONArray();
-            for (int i = 0; i < player.getMediaItemCount(); i++) queue.put(player.getMediaItemAt(i).mediaId);
+            JSONArray tracks = new JSONArray();
+            for (int i = 0; i < player.getMediaItemCount(); i++) {
+                MediaItem item = player.getMediaItemAt(i);
+                queue.put(item.mediaId);
+                JSONObject track = new JSONObject();
+                track.put("uri", item.localConfiguration == null ? "" : item.localConfiguration.uri.toString());
+                track.put("title", item.mediaMetadata.title == null ? "" : item.mediaMetadata.title.toString());
+                track.put("artist", item.mediaMetadata.artist == null ? "" : item.mediaMetadata.artist.toString());
+                tracks.put(track);
+            }
             data.put("queue", queue);
+            data.put("tracks", tracks);
             data.put("index", player.getCurrentMediaItemIndex());
             data.put("repeat", player.getRepeatMode());
             data.put("shuffle",player.getShuffleModeEnabled());

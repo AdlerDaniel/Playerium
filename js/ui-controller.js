@@ -49,7 +49,15 @@ export class UIController {
     this.renderSidebar();
     this.navigateTo({ type: "home", title: "Главная" });
     this.setupDropZone();
+    // The native service can report a track before the WebView finishes loading.
+    this.syncPlayerDisplay();
     setTimeout(() => this.updater.checkForUpdates(false), 2000);
+  }
+
+  syncPlayerDisplay() {
+    this.player.onTrackChange?.(this.player.currentTrack);
+    this.player.onPlayStateChange?.(this.player.isPlaying);
+    this.player.onTimeUpdate?.(this.player.getCurrentTime(), this.player.getDuration());
   }
 
   initMobileState() {

@@ -31,6 +31,24 @@ async function library() {
 function descriptor(name, filePath, title = name) {
   return { name, fullPath: filePath, size: 100, lastModified: 1, metadata: { title, artist: 'Artist', duration: 42 } };
 }
+test('native restoration retains queue indices and metadata when library records are unavailable', async () => {
+  const {AudioPlayer}=await modules(),writes=[];
+  window.AndroidBridge={setPlaybackQueue:data=>writes.push(data)};
+  const p=new AudioPlayer({getTrackById:()=>null,tracks:new Map()});
+  const state={queue:['a','b'],tracks:[{uri:'content://a',title:'First',artist:'Artist'},{uri:'content://b',title:'Current',artist:'Other'}],index:1,id:'b',playing:true,position:83000,duration:210000};
+  p.applyNativeState(state);
+  assert.equal(p.currentTrack.title,'Current');assert.equal(p.queueIndex,1);assert.equal(p.queue.length,2);
+  assert.equal(p.getCurrentTime(),83);assert.equal(p.isPlaying,true);assert.deepEqual(writes,[]);
+  const imported={id:'b',nativeUri:'content://b',title:'Current',pictureUrl:'blob:restored-cover'};
+  p.library.tracks.set(imported.id,imported);p.library.getTrackById=id=>p.library.tracks.get(id);
+  p.applyNativeState(state);assert.equal(p.currentTrack,imported);assert.deepEqual(writes,[]);
+});
+test('native restoration matches imported recordings by URI without restarting playback',async()=>{
+  const {AudioPlayer}=await modules(),track={id:'new-id',nativeUri:'content://a',title:'Song',pictureUrl:'blob:cover'};
+  const p=new AudioPlayer({getTrackById:()=>null,tracks:new Map([[track.id,track]])});
+  p.applyNativeState({queue:['old-id'],tracks:[{uri:'content://a',title:'Song'}],index:0,id:'old-id',playing:true,position:41000,duration:100000});
+  assert.equal(p.currentTrack,track);assert.equal(p.getCurrentTime(),41);
+});
 test('native queue edits preserve playing or paused state', async () => {
   const { AudioPlayer } = await modules();
   const messages=[];

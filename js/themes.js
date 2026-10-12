@@ -11,6 +11,8 @@ export function applyTheme(id,persist=true){
  const theme=THEMES.find(t=>t.id===id)||THEMES[3],c=theme.colors,root=document.documentElement;
  const keys=['--sp-black','--sp-dark-900','--sp-dark-800','--sp-dark-700','--sp-dark-600','--sp-dark-500','--sp-dark-400','--sp-text-primary','--sp-text-secondary','--sp-green','--sp-green-hover','--sp-on-accent','--theme-hero'];
  keys.forEach((key,i)=>root.style.setProperty(key,c[i]));
+  const mix = (a,b,weight) => '#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*weight+parseInt(b.slice(i,i+2),16)*(1-weight)).toString(16).padStart(2,'0')).join('');
+  root.style.setProperty('--theme-home-top',mix(c[12],c[1],.22));
  root.style.setProperty('--sp-text-subdued',c[8]);root.style.setProperty('--sp-green-active',c[9]);root.style.setProperty('--sp-theme-color',c[9]);
  root.style.setProperty('--theme-hover',theme.scheme==='light'?'#392b2010':'#ffffff10');root.style.setProperty('--theme-selection',theme.scheme==='light'?'#79533322':c[9]+'24');
  root.dataset.theme=theme.id;root.style.colorScheme=theme.scheme;

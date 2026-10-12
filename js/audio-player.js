@@ -303,11 +303,12 @@ export class AudioPlayer {
     }catch{/* Optional analysis must not delay or interrupt playback. */}
   }
 
-  syncNativeQueue(play = this.isPlaying, reset = false) {
+  syncNativeQueue(play = this.isPlaying, reset = false, position = null) {
     if (!this.nativePlayback) return;
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
       title: t.title, artist: t.artist, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
-      repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume }));
+      repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume,
+      ...(Number.isFinite(position) ? {position:Math.max(0,Math.round(position * 1000))} : {}) }));
     this.publishNativeArtwork();
   }
 
@@ -344,16 +345,28 @@ export class AudioPlayer {
     if (!state) return;
     if (state.error) this.onError?.(state.error);
     if (!this.nativePlayback && state.queue?.length && !this.currentTrack) {
-      this.queue = state.queue.map(id => this.library.getTrackById(id)).filter(Boolean);
+      this.queue = state.queue.map((id, index) => {
+        const saved = state.tracks?.[index];
+        return this.library.getTrackById(id)
+          || (saved?.uri && [...(this.library.tracks?.values() || [])].find(t => t.nativeUri === saved.uri))
+          || (saved?.uri ? {id, nativeUri:saved.uri, title:saved.title, artist:saved.artist, duration:Math.max(0,state.duration / 1000)} : null);
+      });
+      // Preserve native indices; never replace the playing queue with a partial import.
+      if (this.queue.some(track => !track)) { this.queue = []; return; }
       if (this.queue.length) { this.originalQueue = [...this.queue]; this.nativePlayback = true; }
     }
     if (!this.nativePlayback) return;
+    // Replace provisional native metadata once the library has finished loading.
+    this.queue = this.queue.map(track => this.library.getTrackById?.(track.id)
+      || [...(this.library.tracks?.values() || [])].find(saved => saved.nativeUri === track.nativeUri)
+      || track);
     if(typeof state.shuffle==='boolean'&&this.isShuffle!==state.shuffle){this.isShuffle=state.shuffle;this.onShuffleChange?.(this.isShuffle);this.savePreferences();}
     const repeat=['off','one','all'][state.repeat];
     if(repeat&&repeat!==this.repeatMode){this.repeatMode=repeat;this.onRepeatChange?.(repeat);this.savePreferences();}
-    const index = Number.isInteger(state.index) && this.queue[state.index]?.id === state.id ? state.index : this.queue.findIndex(t => t.id === state.id);
+    const nativeUri = state.tracks?.[state.index]?.uri;
+    const index = Number.isInteger(state.index) && (this.queue[state.index]?.id === state.id || (nativeUri && this.queue[state.index]?.nativeUri === nativeUri)) ? state.index : this.queue.findIndex(t => t.id === state.id);
     if (index < 0) return;
-    if (this.currentTrack?.id !== state.id || this.queueIndex !== index) {
+    if (this.currentTrack !== this.queue[index] || this.queueIndex !== index) {
       this.queueIndex = index;
       this.currentTrack = this.queue[index];
       this.onTrackChange?.(this.currentTrack);
