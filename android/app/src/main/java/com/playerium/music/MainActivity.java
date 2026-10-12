@@ -46,7 +46,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-    private static MainActivity instance;
+    private static volatile MainActivity instance;
     private WebView webView;
     private ValueCallback<Uri[]> uploadMessage;
     private final static int FILECHOOSER_RESULTCODE = 1001;
@@ -476,8 +476,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         if (updater != null) updater.detach();
-        instance = null;
-        if (webView != null) { webView.removeJavascriptInterface("AndroidBridge"); webView.destroy(); webView = null; }
+        // A replacement Activity may already own the bridge when this one closes.
+        if (instance == this) instance = null;
+        if (webView != null) {
+            webView.removeJavascriptInterface("AndroidBridge");
+            android.view.ViewParent parent = webView.getParent();
+            if (parent instanceof android.view.ViewGroup) ((android.view.ViewGroup) parent).removeView(webView);
+            webView.destroy(); webView = null;
+        }
         super.onDestroy();
     }
 }

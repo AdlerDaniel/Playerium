@@ -62,6 +62,7 @@ public class MediaCardTest {
                 if(!restored)Thread.sleep(200);
             } while(!restored&&System.currentTimeMillis()<end);
             assertTrue("Reopened WebView must display the native playing track and current position",restored);
+            assertSame("Closing an old Activity must not detach the replacement bridge",target,MainActivity.getInstance());
             JSONObject state=waitFor("ui-restoration-fixture",true,1000);assertTrue(state.optLong("position")>=7000);
         } finally {
             instrumentation.runOnMainSync(()->context.startService(new Intent(context,MediaNotificationService.class).putExtra("command","stop")));
