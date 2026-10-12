@@ -27,6 +27,7 @@ export class AudioPlayer {
     this.normalizationNode = null;
     this.normalizationGain = 1;
     this.browserLoudnessCache=new Map();
+    this.loudnessPending=new Map();
     this.equalizer = null;
     this.isWebAudioInitialized = false;
 
@@ -218,8 +219,8 @@ export class AudioPlayer {
 
     this.nativePlayback = !!(track.nativeUri && window.AndroidBridge?.setPlaybackQueue && this.queue.every(t => t.nativeUri));
     if (this.nativePlayback) {
-      try{const result=await this.library.getLoudness?.(track);if(result?.gain)track.normalizationGain=result.gain;}catch{}
-      if(request!==this.playRequest)return;
+      // The native service applies cached gain and measures in its own background worker.
+      // Sending the queue must never wait for a full-file analysis through the bridge.
       this.syncNativeQueue(true, true);
       this.equalizer?.sync?.();
       this.onTrackChange?.(track);
@@ -240,11 +241,8 @@ export class AudioPlayer {
       if (request !== this.playRequest) { if (url?.startsWith("blob:")) URL.revokeObjectURL(url); return; }
       this.sourceUrl = url;
       this.audio.src = url;
-      if(track.filePath&&window.electronAPI?.getLoudness){
-        try{const result=await window.electronAPI.getLoudness(track.filePath);if(request!==this.playRequest)return;this.normalizationGain=result.gain;this.normalizationNode?.gain.setValueAtTime(result.gain,this.audioCtx.currentTime);}catch{}
-      }else if(file&&file.size<=64*1024*1024&&this.audioCtx&&this.normalizationNode){
-        try{const key=track.id+'|'+file.size+'|'+file.lastModified;let result=this.browserLoudnessCache.get(key);if(!result){result=await browserLoudness(file,this.audioCtx);this.browserLoudnessCache.set(key,result);if(this.browserLoudnessCache.size>200)this.browserLoudnessCache.delete(this.browserLoudnessCache.keys().next().value);}if(request!==this.playRequest)return;this.normalizationGain=result.gain;this.normalizationNode.gain.setValueAtTime(result.gain,this.audioCtx.currentTime);}catch{}
-      }
+      const cached=this.browserLoudnessCache.get(this.loudnessKey(track,file));
+      if(cached)this.applyNormalization(cached.gain,false);
       if(request!==this.playRequest)return;
       await this.audio.play();
       if (request !== this.playRequest) return;
@@ -252,7 +250,9 @@ export class AudioPlayer {
       this.updateMediaSessionMetadata(track);
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
-      const next=this.queue[this.queueIndex+1];if(next?.filePath&&window.electronAPI?.getLoudness)window.electronAPI.getLoudness(next.filePath).catch(()=>{});
+      this.normalizationTask=this.normalizeInBackground(track,file,request);
+      const next=this.queue[this.queueIndex+1];
+      if(next?.filePath&&window.electronAPI?.getLoudness)this.measureLoudness(next).catch(()=>{});
     } catch (error) {
       if (request !== this.playRequest) return;
       this.audio.pause();
@@ -260,6 +260,46 @@ export class AudioPlayer {
       this.onPlayStateChange?.(false);
       this.onError?.(error.message || "Не удалось воспроизвести трек");
     }
+  }
+
+  loudnessKey(track,file) {
+    return `${track.filePath||track.id}|${file?.size??track.fileSize}|${file?.lastModified??track.lastModified}`;
+  }
+
+  applyNormalization(gain,smooth=true) {
+    if(!Number.isFinite(gain)||gain<=0||gain>8)return;
+    this.normalizationGain=gain;
+    if(!this.normalizationNode||!this.audioCtx)return;
+    const param=this.normalizationNode.gain,time=this.audioCtx.currentTime;
+    param.cancelScheduledValues(time);
+    if(smooth)param.setTargetAtTime(gain,time,.08);
+    else param.setValueAtTime(gain,time);
+  }
+
+  async measureLoudness(track,file) {
+    const key=this.loudnessKey(track,file);
+    if(this.browserLoudnessCache.has(key))return this.browserLoudnessCache.get(key);
+    if(this.loudnessPending.has(key))return this.loudnessPending.get(key);
+    let task;
+    if(track.filePath&&window.electronAPI?.getLoudness)task=window.electronAPI.getLoudness(track.filePath);
+    else if(file&&file.size<=64*1024*1024&&this.audioCtx&&this.normalizationNode)task=browserLoudness(file,this.audioCtx);
+    else return null;
+    const pending=Promise.resolve(task).then(result=>{
+      if(Number.isFinite(result?.gain)&&result.gain>0&&result.gain<=8){
+        this.browserLoudnessCache.set(key,result);
+        if(this.browserLoudnessCache.size>200)this.browserLoudnessCache.delete(this.browserLoudnessCache.keys().next().value);
+      }
+      return result;
+    });
+    this.loudnessPending.set(key,pending);
+    try{return await pending;}finally{this.loudnessPending.delete(key);}
+  }
+
+  async normalizeInBackground(track,file,request) {
+    try {
+      const result=await this.measureLoudness(track,file);
+      if(request===this.playRequest&&this.currentTrack===track&&!this.nativePlayback)this.applyNormalization(result?.gain);
+    }catch{/* Optional analysis must not delay or interrupt playback. */}
   }
 
   syncNativeQueue(play = this.isPlaying, reset = false) {

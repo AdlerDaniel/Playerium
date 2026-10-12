@@ -23,9 +23,12 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class BackgroundPlaybackTest {
     private JSONObject waitFor(boolean playing) throws Exception {
+        return waitFor("background-fixture",playing);
+    }
+    private JSONObject waitFor(String id,boolean playing) throws Exception {
         long end=System.currentTimeMillis()+15000;
         while(System.currentTimeMillis()<end){JSONObject state=new JSONObject(MediaNotificationService.currentState());
-            if("background-fixture".equals(state.optString("id"))&&state.optBoolean("playing")==playing)return state;
+            if(id.equals(state.optString("id"))&&state.optBoolean("playing")==playing)return state;
             Thread.sleep(100);
         }
         throw new AssertionError(MediaNotificationService.currentState());
@@ -47,7 +50,9 @@ public class BackgroundPlaybackTest {
         MediaController controller=null;
         try {
             JSONObject track=new JSONObject().put("id","background-fixture").put("uri",android.net.Uri.fromFile(file).toString()).put("title","Background test").put("artist","Playerium");
-            String queue=new JSONObject().put("tracks",new JSONArray().put(track)).put("play",true).put("reset",true).toString();
+            JSONObject second=new JSONObject(track.toString()).put("id","background-second");
+            JSONArray tracks=new JSONArray().put(track).put(second);
+            String queue=new JSONObject().put("tracks",tracks).put("play",true).put("reset",true).toString();
             instrumentation.runOnMainSync(()->MediaNotificationService.submitQueue(context,queue));
             waitFor(true);
             controller=new MediaController.Builder(context,new SessionToken(context,new ComponentName(context,MediaNotificationService.class))).buildAsync().get(15,TimeUnit.SECONDS);
@@ -58,6 +63,16 @@ public class BackgroundPlaybackTest {
             instrumentation.runOnMainSync(controls::pause);waitFor(false);
             instrumentation.runOnMainSync(controls::play);waitFor(true);
             Thread.sleep(1500);assertTrue(waitFor(true).getLong("position")>position);
+            java.util.concurrent.atomic.AtomicInteger timelineChanges=new java.util.concurrent.atomic.AtomicInteger();
+            androidx.media3.common.Player.Listener listener=new androidx.media3.common.Player.Listener(){
+                @Override public void onTimelineChanged(androidx.media3.common.Timeline timeline,int reason){if(reason==androidx.media3.common.Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED)timelineChanges.incrementAndGet();}
+            };
+            instrumentation.runOnMainSync(()->controls.addListener(listener));
+            String selected=new JSONObject().put("tracks",tracks).put("index",1).put("play",true).put("reset",true).toString();
+            instrumentation.runOnMainSync(()->MediaNotificationService.submitQueue(context,selected));
+            waitFor("background-second",true);
+            assertEquals("Selecting an existing song must keep prepared queue sources",0,timelineChanges.get());
+            instrumentation.runOnMainSync(()->controls.removeListener(listener));
         }finally{
             if(controller!=null){final MediaController controls=controller;instrumentation.runOnMainSync(()->{controls.stop();controls.clearMediaItems();controls.release();});}
             context.stopService(new Intent(context,MediaNotificationService.class));

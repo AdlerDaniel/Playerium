@@ -28,7 +28,20 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     assert.equal(tracks.length,1, `Expected one audio track, got ${tracks.length}; errors: ${errors.join("; ")}`);
     const track=tracks[0];
     assert.equal(track.title,'Song');assert.equal(track.duration,20);assert.equal(track.lyrics,undefined);
-    await win.evaluate(()=>window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))));
+    await app.evaluate(()=>{
+      const {createRequire}=process.getBuiltinModule('module');
+      const {LoudnessAnalyzer}=createRequire(process.cwd()+'/.latency-test.cjs')('./desktop-loudness.js');
+      global.originalLoudness=LoudnessAnalyzer.prototype.analyze;
+      LoudnessAnalyzer.prototype.analyze=function(){return new Promise(resolve=>global.releaseLoudness=resolve);};
+    });
+    const startup=await win.evaluate(async()=>{
+      const start=performance.now();
+      await Promise.race([
+        window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))),
+        new Promise((_,reject)=>setTimeout(()=>reject(Error('Playback is blocked by loudness analysis')),2000))
+      ]);
+      return performance.now()-start;
+    });
     await win.waitForFunction(()=>window.playerApp.player.isPlaying && window.playerApp.player.audio.duration>0);
     assert.match(await win.evaluate(()=>window.playerApp.player.audio.src),/^playerium-audio:/);
     const sound = await win.evaluate(async () => {
@@ -44,6 +57,13 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
       return {audible,context:player.audioCtx.state,volume:player.volume,position:player.audio.currentTime};
     });
     assert.equal(sound.audible,true,`Streaming audio must reach Web Audio: ${JSON.stringify(sound)}`);
+    assert.ok(startup<2000,'An unresolved analysis must not hold the first audible frame');
+    await app.evaluate(()=>{
+      global.releaseLoudness({gain:1});
+      const {createRequire}=process.getBuiltinModule('module');
+      createRequire(process.cwd()+'/.latency-test.cjs')('./desktop-loudness.js').LoudnessAnalyzer.prototype.analyze=global.originalLoudness;
+    });
+    console.log('Audible playback starts while full-file loudness analysis is still pending:',Math.round(startup),'ms');
     const range=await app.evaluate(async({net},src)=>{const r=await net.fetch(src,{headers:{Range:'bytes=44-63'}});return {status:r.status,range:r.headers.get('content-range'),bytes:(await r.arrayBuffer()).byteLength};},await win.evaluate(()=>window.playerApp.player.audio.src));
     assert.deepEqual(range,{status:206,range:'bytes 44-63/320044',bytes:20},'Audio protocol must deliver the requested byte interval for seeking');
     await win.evaluate(()=>window.playerApp.player.seekToTime(12));

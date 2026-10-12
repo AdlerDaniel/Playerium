@@ -147,7 +147,15 @@ public class MediaNotificationService extends MediaSessionService {
         boolean preserve = !data.optBoolean("reset") && current != null
             && items.get(index).mediaId.equals(currentId)
             && java.util.Objects.equals(items.get(index).localConfiguration, current.localConfiguration);
-        if (preserve) {
+        boolean sameQueue=items.size()==player.getMediaItemCount();
+        for(int i=0;sameQueue&&i<items.size();i++)sameQueue=items.get(i).equals(player.getMediaItemAt(i));
+        if(sameQueue){
+            // A song selection in the existing queue reuses prepared media sources.
+            if(data.optBoolean("reset")||index!=player.getCurrentMediaItemIndex()||data.has("position"))
+                player.seekTo(index,data.has("position")?Math.max(0,data.optLong("position")):0);
+            if(player.getPlaybackState()==Player.STATE_IDLE)player.prepare();
+            player.setPlayWhenReady(play);
+        } else if (preserve) {
             // Keep the active media source and its position; edit only its neighbours.
             int oldIndex = player.getCurrentMediaItemIndex();
             player.removeMediaItems(oldIndex + 1, player.getMediaItemCount());
