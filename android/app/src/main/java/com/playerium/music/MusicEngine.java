@@ -219,6 +219,20 @@ final class MusicEngine {
             if(process.exitValue()!=0&&!(args.contains("--ignore-errors")&&!output.isEmpty()))throw new IOException("Recording unavailable: "+diagnostic.substring(0,Math.min(2000,diagnostic.length())));return output;
         }finally{processes.remove(id);process.destroy();}
     }
+    byte[] savedArtwork(Uri audio) {
+        try {
+            JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}
+            Iterator<String> keys=saved.keys();
+            while(keys.hasNext()){
+                JSONObject record=saved.getJSONObject(keys.next());
+                if(!audio.toString().equals(record.optString("uri")))continue;
+                String value=record.optString("cover");if(value.isEmpty())return null;
+                Uri cover=Uri.parse(value);if(!MainActivity.hasMusicPermission(context,cover))return null;
+                try(InputStream in=context.getContentResolver().openInputStream(cover)){return read(in,4*1024*1024);}
+            }
+        }catch(Exception ignored){}
+        return null;
+    }
     private synchronized JSONObject records() throws Exception {
         if(records==null){
             File file=new File(context.getFilesDir(),"music-downloads.json");

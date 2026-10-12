@@ -106,7 +106,7 @@ jobs:
           disable-animations: true
           script: |
             gradle -p android connectedDebugAndroidTest --no-daemon
-            adb pull /sdcard/Android/data/com.playerium.music/files/media-card.png android/app/build/outputs/androidTest-results/media-card-29.png
+            adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-29.png
       - name: Verify music processing on modern Android with 16 KB pages
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -119,7 +119,7 @@ jobs:
           script: |
             test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
             gradle -p android connectedDebugAndroidTest --no-daemon
-            adb pull /sdcard/Android/data/com.playerium.music/files/media-card.png android/app/build/outputs/androidTest-results/media-card-35.png
+            adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-35.png
       - name: Upload native music verification reports
         if: always()
         uses: actions/upload-artifact@v4

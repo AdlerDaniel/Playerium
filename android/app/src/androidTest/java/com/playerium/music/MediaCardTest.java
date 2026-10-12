@@ -126,8 +126,8 @@ public class MediaCardTest {
             Thread.sleep(300);
             controls.getTransportControls().seekTo(0);
             shell(instrumentation,"cmd statusbar expand-notifications");Thread.sleep(1000);
-            Bitmap screenshot=instrumentation.getUiAutomation().takeScreenshot();
-            if(screenshot!=null){try(FileOutputStream out=new FileOutputStream(new File(context.getExternalFilesDir(null),"media-card.png"))){screenshot.compress(Bitmap.CompressFormat.PNG,100,out);}screenshot.recycle();}
+            // UTP uninstalls the app before Gradle returns; preserve evidence outside app storage.
+            shell(instrumentation,"screencap -p /data/local/tmp/playerium-media-card.png");
             shell(instrumentation,"cmd statusbar collapse");
             instrumentation.runOnMainSync(activity::finish);
             shell(instrumentation,"input keyevent KEYCODE_SLEEP");

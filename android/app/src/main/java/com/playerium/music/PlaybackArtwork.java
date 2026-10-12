@@ -69,6 +69,7 @@ final class PlaybackArtwork {
     static Uri embedded(Context context,String id,Uri audio) {
         Uri cached=find(context,id);if(cached!=null)return cached;
         if(!MainActivity.hasMusicPermission(context,audio))return null;
+        try{Uri saved=save(context,id,MusicEngine.get(context).savedArtwork(audio));if(saved!=null)return saved;}catch(Exception ignored){}
         MediaMetadataRetriever reader=new MediaMetadataRetriever();
         try{reader.setDataSource(context,audio);return save(context,id,reader.getEmbeddedPicture());}
         catch(Exception ignored){return null;}

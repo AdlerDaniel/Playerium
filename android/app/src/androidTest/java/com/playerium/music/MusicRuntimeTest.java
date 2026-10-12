@@ -90,6 +90,8 @@ public class MusicRuntimeTest {
         record.remove("galleryHidden");assertTrue(new File(owned.getParentFile(),".nomedia").delete());
         Method protect=MusicEngine.class.getDeclaredMethod("protectDownloaded",JSONObject.class,String.class);protect.setAccessible(true);
         JSONObject restored=(JSONObject)protect.invoke(engine,record,"song_abcd1234");
+        assertNotNull(engine.savedArtwork(android.net.Uri.fromFile(owned)));
+        assertNotNull(PlaybackArtwork.embedded(context,"saved-sidecar-cover",android.net.Uri.fromFile(owned)));
         assertEquals(record.getString("uri"),restored.getString("uri"));assertTrue(new File(owned.getParentFile(),".nomedia").isFile());
         Method withCover=MusicEngine.class.getDeclaredMethod("withCover",JSONObject.class);withCover.setAccessible(true);
         assertTrue(((JSONObject)withCover.invoke(engine,restored)).getJSONObject("metadata").getString("pictureBase64").length()>0);
