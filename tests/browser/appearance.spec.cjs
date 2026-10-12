@@ -1,4 +1,18 @@
 const {test,expect}=require('@playwright/test');
+test('Android assets restore playback with the APIs available in an older WebView',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.addInitScript(()=>{
+  Promise.allSettled=undefined;Array.prototype.at=undefined;Element.prototype.replaceChildren=undefined;DocumentFragment.prototype.replaceChildren=undefined;
+  Blob.prototype.arrayBuffer=undefined;Blob.prototype.text=undefined;AbortSignal.timeout=undefined;
+  Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true,writable:true});
+  localStorage.setItem('playerium_auto_update_check','false');
+  window.AndroidBridge={getPlaybackState:()=>JSON.stringify({queue:['native-old'],tracks:[{uri:'content://song',title:'Restored playing track',artist:'Artist'}],index:0,id:'native-old',playing:true,position:7000,duration:40000})};
+ });
+ await page.goto('/android/app/src/main/assets/index.html');
+ await expect(page.locator('#mobileMiniTitle')).toHaveText('Restored playing track');await expect(page.locator('#mobileMiniPlayer')).toBeVisible();
+ const restored=await page.evaluate(async()=>({uuid:crypto.randomUUID(),last:[1,2].at(-1),settled:(await Promise.allSettled([Promise.resolve(1),Promise.reject('fixture')])).map(x=>x.status),bytes:Array.from(new Uint8Array(await new Blob([new Uint8Array([1,2])]).arrayBuffer()))}));
+ expect(restored.uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);expect(restored.last).toBe(2);expect(restored.settled).toEqual(['fulfilled','rejected']);expect(restored.bytes).toEqual([1,2]);
+});
 test('mobile home and search have continuous themed surfaces and aligned history in every palette',async({page},info)=>{
  await page.setViewportSize({width:390,height:844});await boot(page);
  await page.evaluate(()=>{
