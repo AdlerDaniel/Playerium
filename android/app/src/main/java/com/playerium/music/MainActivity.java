@@ -240,6 +240,7 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
         @JavascriptInterface public void storePlaybackArtwork(String id,String base64) { PlaybackArtwork.storeAsync(MainActivity.this,id,base64); }
         @JavascriptInterface public void musicRequest(String id,String operation,String payload) { MusicEngine.get(MainActivity.this).request(id,operation,payload); }
+        @JavascriptInterface public void cloudRequest(String id,String operation,String payload) { GoogleCloud.get(MainActivity.this).request(id,operation,payload); }
         @JavascriptInterface public void cancelMusic(String id) { MusicEngine.get(MainActivity.this).cancel(id); }
 
         @JavascriptInterface
@@ -299,6 +300,9 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onPause() { foreground = false; super.onPause(); }
     void sendMusicResponse(JSONObject response) {
         runOnUiThread(()->{if(webView!=null)webView.evaluateJavascript("window.onMusicResponse && window.onMusicResponse("+response+");",null);});
+    }
+    void sendCloudResponse(JSONObject response) {
+        runOnUiThread(()->{if(webView!=null)webView.evaluateJavascript("window.onCloudResponse && window.onCloudResponse("+response+");",null);});
     }
 
     public void sendUpdateState(final JSONObject state) {
@@ -421,6 +425,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode==GoogleCloud.AUTH_REQUEST){GoogleCloud.get(this).authorizationResult(resultCode==RESULT_OK?data:null);return;}
         if (requestCode == FILECHOOSER_RESULTCODE) {
             if (uploadMessage == null) return;
             // Import persistent native URIs; no full audio files cross the WebView bridge.

@@ -1,4 +1,5 @@
 import {THEMES,applyTheme,currentTheme} from './themes.js';
+import {renderCloudSettings} from './cloud-settings.js';
 export function renderSettingsView(container) {
     const settingsDiv = document.createElement("div");
     settingsDiv.className = "settings-container";
@@ -163,6 +164,7 @@ export function renderSettingsView(container) {
     `;
 
     container.replaceChildren(settingsDiv);
+    renderCloudSettings(this,settingsDiv);
 
     // Bind update settings
     const repoInput = document.getElementById("inputSettingsGithubRepo");

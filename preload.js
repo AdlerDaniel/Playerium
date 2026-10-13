@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return result.data;
   },
   cancelMusic: id => ipcRenderer.invoke('music:cancel',id),
+  cloudRequest: async (operation,payload) => {
+    const result=await ipcRenderer.invoke('cloud:request',operation,payload);
+    if(!result.ok)throw Error(result.error);return result.data;
+  },
   onMusicProgress: callback => {
     const listener=(_event,state)=>callback(state);ipcRenderer.on('music:progress',listener);
     return ()=>ipcRenderer.removeListener('music:progress',listener);

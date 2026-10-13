@@ -1,0 +1,8 @@
+.cloud-settings .settings-card{display:flex;flex-direction:column;gap:12px}
+.cloud-settings p{margin:0;line-height:1.5;overflow-wrap:anywhere}
+.cloud-actions{display:flex;flex-wrap:wrap;gap:10px}
+.cloud-settings summary{cursor:pointer;font-size:14px;color:var(--sp-text-subdued);padding:8px 0}
+.cloud-settings details[open]>.cloud-actions{margin-top:12px}
+.cloud-settings [data-trash-list] .settings-label-wrap{min-width:0;overflow-wrap:anywhere}
+.cloud-settings button[hidden],.cloud-settings details[hidden]{display:none}
+@media(max-width:600px){.cloud-settings .settings-row{align-items:flex-start;flex-wrap:wrap}.cloud-actions button{max-width:100%;white-space:normal}}

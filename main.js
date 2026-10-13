@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Tray, Menu, nativeImage, safeStorage } = require('electron');
 const helperIndex=process.argv.indexOf('--playerium-update-helper');
 if(helperIndex!==-1){
   require('./desktop-update-helper').startHelper(process.argv[helperIndex+1]).catch(error=>{console.error(error);app.exit(1);});
@@ -139,6 +139,9 @@ app.whenReady().then(async () => {
     catch(error){return {ok:false,error:downloadError(error)};}
   });
   handle('music:cancel',id=>music.cancel(id));
+  const cloud=new (require('./desktop-cloud').DesktopCloud)({app,safeStorage,authorize,openExternal,
+    onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));}});
+  handle('cloud:request',async(operation,payload)=>{try{return {ok:true,data:await cloud.request(operation,payload)};}catch(error){return {ok:false,error:error.message||'Не удалось синхронизировать Google Диск.'};}});
   const loudness=new LoudnessAnalyzer(path.join(app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools'),'ffmpeg.exe'),path.join(app.getPath('userData'),'loudness'));
   handle('file:loudness',async file=>loudness.analyze(await authorize(file)));
   // Node fetch exposes manual redirects; Electron net.fetch cancels them.
