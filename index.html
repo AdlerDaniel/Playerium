@@ -29,6 +29,8 @@
   <link rel="stylesheet" href="css/search.css">
   <link rel="stylesheet" href="css/spotify-surfaces.css">
   <link rel="stylesheet" href="css/themes.css">
+  <link rel="stylesheet" href="css/window-frame.css">
+  <link rel="stylesheet" href="css/loading.css">
 </head>
 <body>
   <div id="app">
@@ -105,7 +107,7 @@
         <!-- Scrollable Main View Content -->
         <div class="main-view" id="mainScrollContainer">
           <div id="mainViewContent">
-            <!-- Dynamic Content (Home, Playlists, Artists, Settings) -->
+            <div class="boot-skeleton" role="status" aria-label="Загрузка медиатеки" aria-busy="true"><i class="skeleton boot-skeleton-heading"></i><div class="boot-skeleton-cards" aria-hidden="true"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div><i class="skeleton boot-skeleton-heading"></i><div class="boot-skeleton-cards" aria-hidden="true"><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div></div>
           </div>
         </div>
       </main>

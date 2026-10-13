@@ -25,6 +25,8 @@ public class LoudnessTest {
    double q=MusicEngine.get(context).analyzeLoudness(android.net.Uri.fromFile(quiet)).getDouble("gain"),l=MusicEngine.get(context).analyzeLoudness(android.net.Uri.fromFile(loud)).getDouble("gain");
    assertTrue(Math.abs(20*Math.log10(1000*q/(12000*l)))<3);
    assertEquals(q,MusicEngine.get(context).analyzeLoudness(android.net.Uri.fromFile(quiet)).getDouble("gain"),.00001);
+    java.lang.reflect.Field field=MusicEngine.class.getDeclaredField("knownLoudness");field.setAccessible(true);((java.util.Map)field.get(MusicEngine.get(context))).clear();
+    assertEquals(q,MusicEngine.get(context).knownLoudness(android.net.Uri.fromFile(quiet)),.00001);
   }finally{quiet.delete();loud.delete();}
  }
  @Test public void pcmGainKeepsChannelBalanceAndCannotOverflow()throws Exception{

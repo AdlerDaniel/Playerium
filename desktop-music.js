@@ -90,7 +90,7 @@ class DesktopMusic {
       try{this.manifest=JSON.parse(await fs.readFile(this.manifestFile,'utf8'));}catch{this.manifest={};}
       let changed=false;
       for(const record of Object.values(this.manifest)) {
-        if(record.metadata && Object.hasOwn(record.metadata,'album')) {delete record.metadata.album;changed=true;}
+
       }
       if(changed)await this.saveRecords();
       return this.manifest;
@@ -104,7 +104,7 @@ class DesktopMusic {
     try {
       if((await fs.stat(sidecar)).size>1024*1024)return;
       const metadata=JSON.parse(await fs.readFile(sidecar,'utf8'));
-      if(Object.hasOwn(metadata,'album')){delete metadata.album;await fs.writeFile(sidecar,JSON.stringify(metadata));}
+
     }catch{}
   }
   run(args,id,timeout=45000) {
@@ -238,7 +238,7 @@ class DesktopMusic {
               info.url=require('node:url').pathToFileURL(input).href;
             }finally{clearTimeout(timer);this.requests.delete(id);}
           }
-          delete info.album; delete info.meta_album;
+          if(track.album){info.album=track.album;info.meta_album=track.album;}
           // Metadata chosen from the recording catalog is embedded into the audio.
           for(const key of ['title','artist','genre','isrc'])if(track[key]){info[key]=String(track[key]).slice(0,500);info['meta_'+key]=info[key];}
           if(track.artist)info.artists=[info.artist];
@@ -261,7 +261,7 @@ class DesktopMusic {
           const name=`${track.artist} - ${track.title}`.replace(/[<>:"/\\|?*\x00-\x1f]/g,'').slice(0,120).trim();
           const fullPath=path.join(root,`${name} [${track.id.slice(5)}]${path.extname(audio)}`);
           await fs.copyFile(audio,fullPath,constants.COPYFILE_EXCL);committed=fullPath;
-          const metadata={title:info.title,artist:info.artist,year:info.release_year||'',trackNo:info.track_number||0,genre:info.genre||'',isrc:info.isrc||'',duration:decoded.format.duration};
+          const metadata={title:info.title,artist:info.artist,album:info.album||'',year:info.release_year||'',trackNo:info.track_number||0,genre:info.genre||'',isrc:info.isrc||'',duration:decoded.format.duration};
           await fs.writeFile(fullPath+'.playerium.json',JSON.stringify(metadata));
           const cover=(await fs.readdir(staging)).find(f=>/^audio.*\.jpg$/i.test(f));if(cover)await fs.copyFile(path.join(staging,cover),fullPath+'.jpg',constants.COPYFILE_EXCL);
           records[track.id]={fullPath,folderSource:root,folderName:path.basename(root),downloadId:track.id,metadata};await this.saveRecords();

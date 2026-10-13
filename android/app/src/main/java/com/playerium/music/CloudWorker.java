@@ -15,7 +15,7 @@ public final class CloudWorker extends Worker {
         if(!cloud.hasPendingJobs())return Result.success();
         Context context=getApplicationContext();NotificationManager manager=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
         if(Build.VERSION.SDK_INT>=26)manager.createNotificationChannel(new NotificationChannel("playerium_cloud","Синхронизация музыки",NotificationManager.IMPORTANCE_LOW));
-        android.app.Notification notification=new NotificationCompat.Builder(context,"playerium_cloud").setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Playerium").setContentText("Сохранение музыки в Google Диск").setProgress(0,0,true).setOngoing(true).setSilent(true).build();
+        android.app.Notification notification=new NotificationCompat.Builder(context,"playerium_cloud").setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Playerium").setContentText("Синхронизация музыки · осталось: "+cloud.pendingCount()).setProgress(0,0,true).setOngoing(true).setSilent(true).build();
         ForegroundInfo info=Build.VERSION.SDK_INT>=29?new ForegroundInfo(7402,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC):new ForegroundInfo(7402,notification);
         setForegroundAsync(info).get();cloud.runJobs();return Result.success();
     }catch(Exception e){cloud.recordFailure(e);return Result.retry();}}

@@ -22,6 +22,7 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     const win=await app.firstWindow();
     const errors=[];win.on('pageerror',e=>errors.push(e.message));
     await win.waitForFunction(()=>window.playerApp?.library.db);
+    if(process.platform==='win32'){await win.locator('.window-frame').waitFor();await win.locator('[data-action="maximize"]').click();await win.waitForFunction(()=>document.querySelector('[data-action="maximize"]').getAttribute('aria-label')==='Восстановить окно');await win.locator('[data-action="maximize"]').click();assert.equal(await win.locator('[data-action="close"]').getAttribute('aria-label'),'Закрыть в трей');}
     await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},folder);
     await win.evaluate(()=>window.playerApp.selectMusicFolder());
     const tracks=await win.evaluate(()=>window.playerApp.library.getTracks().map(t=>({title:t.title,duration:t.duration,lyrics:t.lyrics,fileName:t.fileName})));

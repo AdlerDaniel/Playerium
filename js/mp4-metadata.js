@@ -25,7 +25,7 @@ export async function readMP4Metadata(file) {
           const begin = pos + h, stop = pos + length;
           if (name === 'data' && begin + 8 <= stop) {
             const payload = begin + 8, format = view.getUint32(begin) & 0xffffff;
-            const fields = {'©nam':'title','©ART':'artist','aART':'artist','©day':'year','©gen':'genre'};
+            const fields = {'©nam':'title','©ART':'artist','aART':'artist','©alb':'album','©day':'year','©gen':'genre'};
             if (fields[parent] && (format === 1 || format === 0)) {
               const value = text(payload, stop);
               if (value && (!result[fields[parent]] || parent === '©ART')) result[fields[parent]] = value;

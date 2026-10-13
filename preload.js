@@ -1,11 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
+  getWindowState:()=>ipcRenderer.invoke('window:state'),
+  windowControl:action=>ipcRenderer.invoke('window:control',action),
+  onWindowState:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('window:state',listener);return()=>ipcRenderer.removeListener('window:state',listener);},
   selectFolder: () => ipcRenderer.invoke('dialog:openDirectory'),
   watchFolder: path => ipcRenderer.invoke('folder:watch', path),
   unwatchFolder: path => ipcRenderer.invoke('folder:unwatch', path),
   getAudioSource: path => ipcRenderer.invoke('file:source', path),
   getMetadata: path => ipcRenderer.invoke('file:metadata', path),
   getLoudness: path => ipcRenderer.invoke('file:loudness', path),
+  getCachedLoudness: path => ipcRenderer.invoke('file:loudnessCached', path),
   musicRequest: async (operation,payload,id) => {
     const result=await ipcRenderer.invoke('music:request',operation,payload,id);
     if(!result.ok)throw Error(result.error);

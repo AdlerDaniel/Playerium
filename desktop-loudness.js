@@ -13,6 +13,10 @@ function measure(executable,file){return new Promise((resolve,reject)=>{
 });}
 class LoudnessAnalyzer{
  constructor(executable,directory){this.executable=executable;this.directory=directory;this.pending=new Map();this.tail=Promise.resolve();}
+  async cached(file){
+   const stat=await fs.stat(file),key=createHash('sha256').update(file+'|'+stat.size+'|'+stat.mtimeMs+'|lufs-v1').digest('hex');
+   try{const result=JSON.parse(await fs.readFile(path.join(this.directory,key+'.json'),'utf8'));if(Number.isFinite(result.gain)&&result.gain>0&&result.gain<=8)return result;}catch{}return null;
+  }
  async analyze(file){
   const stat=await fs.stat(file),key=createHash('sha256').update(file+'|'+stat.size+'|'+stat.mtimeMs+'|lufs-v1').digest('hex');
   if(this.pending.has(key))return this.pending.get(key);

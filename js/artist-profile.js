@@ -2,6 +2,7 @@ import {mountCover} from './artwork.js';
 import {icons} from './design-icons.js';
 import {artistCredits,belongsToArtist} from './music-artists.js';
 import {artistKey} from './music-match.js';
+import {loadingRows} from './loading.js';
 
 export function renderArtistProfile(container,name) {
   const ui=this,requested=ui.currentView.artist||{name};
@@ -13,6 +14,7 @@ export function renderArtistProfile(container,name) {
     header.innerHTML=`<div class="view-header-cover artist-hero-art">${icons.artist}</div><div class="view-header-details"><span class="view-type-badge">Исполнитель</span><h1 class="view-title">${ui.escapeHTML(artist.name)}</h1><div class="view-metadata">${tracks.length?`${tracks.length} треков`:''}</div></div>`;
     const picture=artist.pictureUrl||tracks.find(t=>t.pictureUrl)?.pictureUrl;if(picture)mountCover(header.firstElementChild,{pictureUrl:picture},true);
     root.append(header);if(tracks.length)root.append(ui.createActionBar(tracks));
+    if(busy&&!tracks.length)root.append(loadingRows(6));
     const status=document.createElement('p');status.className='artist-profile-status';status.setAttribute('role','status');status.textContent=busy?'Загрузка песен…':profile.offline?'Не удалось загрузить каталог. Показаны доступные треки.':'';root.append(status);
     const section=(title,list)=>{if(!list.length)return;const h=document.createElement('h2');h.className='collection-section-heading';h.textContent=title;root.append(h,ui.createTrackTable(list));};
     section('Популярные',expanded?tracks:tracks.slice(0,10));

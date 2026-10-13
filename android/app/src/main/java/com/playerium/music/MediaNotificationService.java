@@ -215,7 +215,8 @@ public class MediaNotificationService extends MediaSessionService {
         Uri uri=item.localConfiguration.uri;if(uri.toString().equals(normalizingUri))return;
         normalizingUri=uri.toString();long version=++normalizationVersion;double known=MusicEngine.get(this).knownLoudness(uri);normalization.startTrack(known!=1?known:item.mediaMetadata.extras==null?1:item.mediaMetadata.extras.getDouble("normalizationGain",1));
         loudnessWorker.submit(()->{
-            try{double gain=MusicEngine.get(this).analyzeLoudness(uri).getDouble("gain");handler.post(()->{if(version==normalizationVersion)normalization.setGain(gain);});}catch(Exception ignored){}
+            // Measurements are cached for the next start, never applied midway through a song.
+            try{MusicEngine.get(this).analyzeLoudness(uri);}catch(Exception ignored){}
         });
         int next=player.getCurrentMediaItemIndex()+1;if(next<player.getMediaItemCount()){
             MediaItem future=player.getMediaItemAt(next);if(future.localConfiguration!=null)loudnessWorker.submit(()->{try{MusicEngine.get(this).analyzeLoudness(future.localConfiguration.uri);}catch(Exception ignored){}});

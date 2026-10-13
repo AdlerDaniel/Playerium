@@ -75,16 +75,20 @@ function startWatchingFolder(root) {
   watchers.set(root, { close() { active = false; clearTimeout(timer); watcher.close(); } });
 }
 function createWindow() {
-  mainWindow = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, title: 'Playerium', backgroundColor: '#121212', autoHideMenuBar: true,
+  mainWindow = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, frame:process.platform!=='win32', title: 'Playerium', backgroundColor: '#121212', autoHideMenuBar: true,
     icon: fs.existsSync(path.join(__dirname, 'build/icon.ico')) ? path.join(__dirname, 'build/icon.ico') : undefined,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   mainWindow.loadFile('index.html');
+  const sendWindowState=()=>mainWindow.webContents.send('window:state',{maximized:mainWindow.isMaximized(),fullscreen:mainWindow.isFullScreen()});
+  for(const event of ['maximize','unmaximize','enter-full-screen','leave-full-screen'])mainWindow.on(event,sendWindowState);
   mainWindow.on('close',event=>{if(!quitting&&tray){event.preventDefault();mainWindow.hide();}});
   mainWindow.webContents.on('will-navigate', event => event.preventDefault());
   mainWindow.webContents.on('will-attach-webview', event => event.preventDefault());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { openExternal(url).catch(() => {}); return { action: 'deny' }; });
 }
 app.whenReady().then(async () => {
+  handle('window:state',()=>({custom:process.platform==='win32',maximized:mainWindow.isMaximized(),fullscreen:mainWindow.isFullScreen()}));
+  handle('window:control',action=>{if(action==='minimize')mainWindow.minimize();else if(action==='maximize')mainWindow.isMaximized()?mainWindow.unmaximize():mainWindow.maximize();else if(action==='close')mainWindow.close();else throw Error('Unsupported window action');});
   rootsFile = path.join(app.getPath('userData'), 'music-roots.json');
   try { roots = new Set(JSON.parse(await fsp.readFile(rootsFile, 'utf8'))); } catch {}
   protocol.handle('playerium-audio', async request => {
@@ -127,7 +131,7 @@ app.whenReady().then(async () => {
     const { parseFile } = await import('music-metadata');
     const { common, format } = await parseFile(real);
     const picture = common.picture?.[0];
-    return { title: common.title, artist: common.artist, year: common.year, trackNo: common.track?.no, duration: format.duration || 0,
+    return { title: common.title, artist: common.artist, album: common.album, genre: common.genre?.join(', '), year: common.year, trackNo: common.track?.no, duration: format.duration || 0,
       picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null };
   });
   handle('shell:openExternal', openExternal);
@@ -139,11 +143,12 @@ app.whenReady().then(async () => {
     catch(error){return {ok:false,error:downloadError(error)};}
   });
   handle('music:cancel',id=>music.cancel(id));
-  const cloud=new (require('./desktop-cloud').DesktopCloud)({app,safeStorage,authorize,openExternal,
+  const cloud=new (require('./desktop-cloud').DesktopCloud)({app,safeStorage,authorize,openExternal,fetcher:require('./desktop-cloud-http').createCloudFetcher(net),
     onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));}});
   handle('cloud:request',async(operation,payload)=>{try{return {ok:true,data:await cloud.request(operation,payload)};}catch(error){return {ok:false,error:error.message||'Не удалось синхронизировать Google Диск.'};}});
   const loudness=new LoudnessAnalyzer(path.join(app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools'),'ffmpeg.exe'),path.join(app.getPath('userData'),'loudness'));
   handle('file:loudness',async file=>loudness.analyze(await authorize(file)));
+  handle('file:loudnessCached',async file=>loudness.cached(await authorize(file)));
   // Node fetch exposes manual redirects; Electron net.fetch cancels them.
   // The updater must validate each redirect before following it.
   const updater = new DesktopUpdater({ app,

@@ -242,7 +242,9 @@ export class AudioPlayer {
       if (request !== this.playRequest) { if (url?.startsWith("blob:")) URL.revokeObjectURL(url); return; }
       this.sourceUrl = url;
       this.audio.src = url;
-      const cached=this.browserLoudnessCache.get(this.loudnessKey(track,file));
+      let cached=this.browserLoudnessCache.get(this.loudnessKey(track,file));
+      if(!cached&&track.filePath&&window.electronAPI?.getCachedLoudness)cached=await window.electronAPI.getCachedLoudness(track.filePath).catch(()=>null);
+      if(!cached&&track.normalizationKey===this.loudnessKey(track,file))cached={gain:track.normalizationGain};
       if(cached)this.applyNormalization(cached.gain,false);
       if(request!==this.playRequest)return;
       await this.audio.play();
@@ -288,6 +290,8 @@ export class AudioPlayer {
     const pending=Promise.resolve(task).then(result=>{
       if(Number.isFinite(result?.gain)&&result.gain>0&&result.gain<=8){
         this.browserLoudnessCache.set(key,result);
+        track.normalizationGain=result.gain;track.normalizationKey=key;
+        this.library.putInStore?.('tracks',track).catch(()=>{});
         if(this.browserLoudnessCache.size>200)this.browserLoudnessCache.delete(this.browserLoudnessCache.keys().next().value);
       }
       return result;
@@ -298,8 +302,8 @@ export class AudioPlayer {
 
   async normalizeInBackground(track,file,request) {
     try {
-      const result=await this.measureLoudness(track,file);
-      if(request===this.playRequest&&this.currentTrack===track&&!this.nativePlayback)this.applyNormalization(result?.gain);
+      // Cache for a future start; changing gain after playback starts is audible.
+      await this.measureLoudness(track,file);
     }catch{/* Optional analysis must not delay or interrupt playback. */}
   }
 

@@ -3,6 +3,7 @@ import {icons} from './design-icons.js';
 import {mountCover} from './artwork.js';
 import {playRow} from './playback-controls.js';
 import {normalize} from './music-match.js';
+import {loadingRows} from './loading.js';
 const historyKey='playerium_search_history';
 function history(){try{return JSON.parse(localStorage.getItem(historyKey)||'[]').filter(q=>typeof q==='string').slice(0,8);}catch{return [];}}
 function remember(query){if(query.trim().length<2)return;try{localStorage.setItem(historyKey,JSON.stringify([query.trim(),...history().filter(q=>q!==query.trim())].slice(0,8)));}catch{}}
@@ -67,7 +68,7 @@ export function renderSearchView(container) {
       makeCards('artists','Исполнители',[...artistMap.values()]);
       makeCards('playlists','Плейлисты',ui.library.getPlaylists().filter(p=>normalize(p.name).includes(normalize(query))).map(p=>({name:p.name,subtitle:'Плейлист',pictureUrl:p.pictureUrl,action:()=>ui.navigateTo({type:'playlist',id:p.id,title:p.name})})));
     }
-    if(!tracks.length&&loading){const skeleton=document.createElement('div');skeleton.className='search-skeleton';skeleton.setAttribute('aria-hidden','true');skeleton.innerHTML='<i></i><i></i><i></i><i></i>';results.append(skeleton);}
+    if(!tracks.length&&loading)results.append(loadingRows());
     if(!loading&&results.children.length===1){const empty=document.createElement('div');empty.className='search-empty';empty.innerHTML=`<h2>${error?'Не удалось выполнить поиск':'Ничего не найдено'}</h2><p>${error?'Проверьте подключение и попробуйте ещё раз.':`Попробуйте другое название песни или исполнителя.`}</p>`;if(error){const retry=document.createElement('button');retry.textContent='Повторить';retry.onclick=()=>{ui.music.cache.delete(query.toLocaleLowerCase());ui.refreshCurrentView();};empty.append(retry);}results.append(empty);}
     if(focusedRow&&typeof focusedClass==='string'){const row=[...results.querySelectorAll('.track-row')].find(r=>r.dataset.trackId===focusedRow.dataset.trackId);const target=row&&[...row.querySelectorAll('button')].find(b=>b.className===focusedClass);target?.focus({preventScroll:true});}
   };

@@ -25,7 +25,7 @@ export class CloudSync {
  async connect(){await this.request('connect');await this.refreshStatus();await this.sync();}
  async disconnect(){await this.request('disconnect');this.status={connected:false};this.changed?.();}
  async sync(){
-  if(this.busy||!this.available)return;this.busy=true;this.error=null;this.changed?.();
+  if(this.busy||!this.available)return;this.busy=true;this.error=null;this.failures=[];this.changed?.();
   try{
    await this.refreshStatus();if(!this.status.connected)return;
    const account=this.status.account;if(!account)throw Error('Не удалось определить аккаунт Google.');
@@ -37,11 +37,13 @@ export class CloudSync {
    const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
    for(const op of [...this.outbox]){
+     try{
     const link=this.links[op.key];
     if(op.kind==='track'){
      const track=link&&this.library.getTrackById(link.localId);if(!track){this.outbox=this.outbox.filter(p=>p.id!==op.id);continue;}
      await this.request('publish',{operation:op,source:await this.source(track),cover:await this.cover(track)});
     }else await this.request('publish',{operation:op});
+     }catch(error){this.failures.push(error.message);}
    }
    const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
@@ -49,6 +51,7 @@ export class CloudSync {
    await this.capture();
    await this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))));
    this.lastSync=Date.now();await this.save();
+    if(this.failures.length)throw Error(`Не завершено операций: ${this.failures.length}. ${this.failures[0]}`);
   }finally{this.busy=false;this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
  }
  async cover(track){
@@ -69,16 +72,22 @@ export class CloudSync {
   const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));
   for(const [key,link] of Object.entries(this.links))if(link.localId&&!this.library.getTrackById(link.localId)&&!link.removed){this.operation('delete',{key});link.removed=true;}
   for(const track of this.library.getTracks()){
+   try{
    let key=Object.keys(this.links).find(k=>this.links[k].localId===track.id);
    if(!key){
     const fingerprint=await this.request('fingerprint',{source:track.cloudSource||await this.source(track)});key=fingerprint.key;
     if(view.tracks.get(key)?.deleted){this.links[key]={localId:track.id,removed:false};continue;}
     this.links[key]={localId:track.id,removed:false};
     if(!view.tracks.get(key)?.data&&!this.outbox.some(op=>op.key===key&&op.kind==='track')){
-     this.operation('track',{key,track:{title:track.title||'Без названия',artist:track.artist||'Неизвестный исполнитель',duration:track.duration||0,year:track.year||null,genre:track.genre||null,ext:fingerprint.ext,size:fingerprint.size,audioId:'pending'}});
+      this.operation('track',{key,track:{...this.metadata(track),ext:fingerprint.ext,size:fingerprint.size,audioId:'pending'}});
     }
    }
-   const link=this.links[key];if(link.liked===undefined){if(track.liked)this.operation('like',{key,liked:true});link.liked=!!track.liked;}else if(link.liked!==!!track.liked){this.operation('like',{key,liked:!!track.liked});link.liked=!!track.liked;}
+   const link=this.links[key],data=this.metadata(track),signature=JSON.stringify(data),remote=view.tracks.get(key),coverSignature=await this.coverSignature(track);
+   if(remote?.data&&!remote.deleted&&!this.outbox.some(op=>op.key===key&&op.kind==='track')&&((link.metadata!==undefined&&link.metadata!==signature)||(!remote.data.album&&data.album)||(link.coverSignature!==undefined&&link.coverSignature!==coverSignature)||(!remote.data.coverId&&coverSignature))){this.operation('track',{key,track:{...remote.data,...data}});}
+   link.coverSignature=coverSignature;
+   link.metadata=signature;
+   if(link.liked===undefined){if(track.liked)this.operation('like',{key,liked:true});link.liked=!!track.liked;}else if(link.liked!==!!track.liked){this.operation('like',{key,liked:!!track.liked});link.liked=!!track.liked;}
+   }catch(error){this.failures?.push(error.message);}
   }
   for(const [id,old] of Object.entries(this.shadow))if(!this.library.getPlaylistById(id)&&!old.deleted){this.operation('playlist-delete',{playlist:id});old.deleted=true;}
   for(const pl of this.library.getPlaylists().filter(p=>!p.isFolderPlaylist)){
@@ -89,20 +98,31 @@ export class CloudSync {
   }
   await this.save();
  }
+ metadata(track){return {title:track.title||'Без названия',artist:track.artist||'Неизвестный исполнитель',album:track.album||'',duration:track.duration||0,year:track.year||null,genre:track.genre||null,trackNo:track.trackNo||null,isrc:track.isrc||null};}
+ async coverSignature(track){if(!track.pictureBlob)return '';this.coverSignatures||=new WeakMap();if(this.coverSignatures.has(track.pictureBlob))return this.coverSignatures.get(track.pictureBlob);let hash=2166136261;const bytes=new Uint8Array(await track.pictureBlob.arrayBuffer());for(const byte of bytes)hash=Math.imul(hash^byte,16777619);const signature=track.pictureBlob.type+':'+bytes.length+':'+(hash>>>0);this.coverSignatures.set(track.pictureBlob,signature);return signature;}
  async apply(view){
   this.applying=true;
   try{
+   const downloads=[...view.tracks].filter(([key,remote])=>remote.data&&!remote.deleted&&!this.library.getTrackById(this.links[key]?.localId));
+   this.progress={done:0,total:downloads.length};this.changed?.();
+   if(window.AndroidBridge&&downloads.length)await this.request('queueDownloads',{tracks:downloads.map(([key,remote])=>({key,track:remote.data}))});
    for(const [key,remote] of view.tracks){
+    try{
     let link=this.links[key],track=link&&this.library.getTrackById(link.localId);
-    if(remote.deleted){if(track){if(this.ui.player.currentTrack?.id===track.id)this.ui.player.stop();await this.library.removeTrack(track.id);this.ui.player.removeTrack?.(track.id);await this.request('removeLocal',{key});}if(link)link.removed=true;continue;}
+    if(remote.deleted){if(track){if(this.ui.player.currentTrack?.id===track.id)this.ui.player.stop();await this.library.removeTrack(track.id);this.ui.player.removeTrack?.(track.id);}await this.request('removeLocal',{key});if(link)link.removed=true;await this.save();continue;}
     if(!remote.data)continue;
     if(!track){
      const file=await this.request('download',{key,track:remote.data});this.library.blockedSources?.delete(file.folderSource);track=await this.library.addDownloaded(file,null);
-     if(file.coverBase64){const bytes=Uint8Array.from(atob(file.coverBase64),c=>c.charCodeAt(0));track.pictureBlob=new Blob([bytes],{type:file.coverMime||'image/jpeg'});track.pictureUrl=this.library.coverURL(track.id,track.pictureBlob);}
+     if(file.coverBase64){const bytes=Uint8Array.from(atob(file.coverBase64),c=>c.charCodeAt(0));track.pictureBlob=new Blob([bytes],{type:file.coverMime||'image/jpeg'});track.pictureUrl=this.library.coverURL(track.id,track.pictureBlob);track.cloudCoverId=remote.data.coverId;}
      this.links[key]=link={localId:track.id,removed:false};
     }
-    if(!track.pictureBlob&&remote.data.coverId){const cover=await this.request('cover',{id:remote.data.coverId});if(cover.base64){const bytes=Uint8Array.from(atob(cover.base64),c=>c.charCodeAt(0));track.pictureBlob=new Blob([bytes],{type:remote.data.coverMime||'image/jpeg'});track.pictureUrl=this.library.coverURL(track.id,track.pictureBlob);}}
-    track.cloudKey=key;track.title=remote.data.title;track.artist=remote.data.artist;track.liked=remote.liked;link.liked=remote.liked;link.removed=false;await this.library.putInStore('tracks',track);
+    if(remote.data.coverId&&track.cloudCoverId!==remote.data.coverId&&!this.outbox.some(op=>op.kind==='track'&&op.key===key)){try{const cover=await this.request('cover',{id:remote.data.coverId});if(cover.base64){const bytes=Uint8Array.from(atob(cover.base64),c=>c.charCodeAt(0));track.pictureBlob=new Blob([bytes],{type:remote.data.coverMime||'image/jpeg'});track.pictureUrl=this.library.coverURL(track.id,track.pictureBlob);track.cloudCoverId=remote.data.coverId;}}catch(error){this.failures?.push(error.message);}}
+    const pending=this.outbox.filter(op=>op.kind==='track'&&op.key===key).sort((a,b)=>b.clock-a.clock)[0];
+    track.cloudKey=key;Object.assign(track,this.metadata(pending?.track||remote.data));track.liked=remote.liked;link.liked=remote.liked;link.removed=false;link.metadata=JSON.stringify(this.metadata(track));await this.library.putInStore('tracks',track);
+    link.coverSignature=await this.coverSignature(track);
+    await this.save();
+    if(downloads.some(([k])=>k===key)){this.progress.done++;this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();this.changed?.();}
+    }catch(error){this.failures?.push(error.message);await this.save();}
    }
    for(const remote of view.playlists.values()){
     if(remote.deleted){if(this.library.getPlaylistById(remote.id))await this.library.deletePlaylist(remote.id);this.shadow[remote.id]={deleted:true};continue;}

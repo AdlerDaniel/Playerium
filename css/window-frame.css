@@ -1,0 +1,4 @@
+.window-frame{height:36px;display:flex;align-items:center;justify-content:space-between;background:var(--sp-black);color:var(--sp-text-secondary);-webkit-app-region:drag;user-select:none}
+.window-brand{display:flex;align-items:center;gap:8px;padding-left:14px;font-size:12px;font-weight:600}.window-brand img{width:18px;height:18px}
+.window-controls{display:flex;align-self:stretch;-webkit-app-region:no-drag}.window-controls button{width:46px;border:0;border-radius:0;background:transparent;color:inherit;display:grid;place-items:center}.window-controls button:hover{background:var(--sp-dark-600);color:var(--sp-text-primary)}.window-controls button[data-action=close]:hover{background:#c42b1c;color:white}.window-controls svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1}
+body.custom-window #app{height:calc(100vh - 36px);height:calc(100dvh - 36px)}body.custom-window.window-fullscreen #app{height:100vh;height:100dvh}

@@ -382,6 +382,8 @@ public class MainActivity extends AppCompatActivity {
             retriever.setDataSource(this, file.getUri());
             data.put("title", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE));
             data.put("artist", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST));
+            data.put("album", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM));
+            data.put("genre", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE));
             data.put("year", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR));
             data.put("trackNo", retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER));
             String duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);

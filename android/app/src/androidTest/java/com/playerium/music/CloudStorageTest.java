@@ -26,4 +26,12 @@ public class CloudStorageTest {
         try{request("fingerprint",new JSONObject().put("source","file:///system/build.prop"));fail("Arbitrary file accepted");}catch(java.io.IOException expected){}
         try{request("removeLocal",new JSONObject().put("key","../outside"));fail("Traversal accepted");}catch(java.io.IOException expected){}
     }
+    @Test public void bulkDownloadQueuePersistsBeyondThirtySongsWithoutCredentials()throws Exception{
+        Context context=ApplicationProvider.getApplicationContext();android.content.SharedPreferences prefs=context.getSharedPreferences("playerium_cloud",Context.MODE_PRIVATE);
+        java.lang.reflect.Field field=GoogleCloud.class.getDeclaredField("prefs");field.setAccessible(true);prefs=(android.content.SharedPreferences)field.get(GoogleCloud.get(context));
+        String previous=prefs.getString("account",null);boolean enabled=prefs.getBoolean("enabled",false);prefs.edit().putBoolean("enabled",true).putString("account","queue-test").commit();
+        org.json.JSONArray entries=new org.json.JSONArray();for(int i=0;i<75;i++){String key=String.format(java.util.Locale.ROOT,"%064x",i);entries.put(new JSONObject().put("key",key).put("track",new JSONObject().put("audioId","audio_"+i).put("ext",".mp3").put("size",4).put("title","Song "+i).put("artist","Artist").put("album","Album")));}
+        try{request("queueDownloads",new JSONObject().put("tracks",entries));assertEquals(75,GoogleCloud.get(context).pendingCount());}
+        finally{prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();androidx.work.WorkManager.getInstance(context).cancelUniqueWork("playerium-drive");androidx.work.WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-retry");java.lang.reflect.Field jobs=GoogleCloud.class.getDeclaredField("jobs");jobs.setAccessible(true);File[] files=((File)jobs.get(GoogleCloud.get(context))).listFiles();if(files!=null)for(File file:files)if(file.getName().startsWith("download-"))file.delete();}
+    }
 }

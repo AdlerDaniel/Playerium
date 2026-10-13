@@ -15,7 +15,7 @@ export function renderCloudSettings(ui,container){
   if(!section.isConnected)return;
   const connected=cloud.status.connected,busy=working||cloud.busy;
   const pending=Math.max(cloud.outbox.length,cloud.status.pending||0);
-  section.querySelector('[data-cloud-status]').textContent=cloud.error||cloud.status.error||(busy?'Синхронизация…':connected?`Подключён ${cloud.status.email||'Google Диск'}${pending?` · В очереди: ${pending}`:cloud.lastSync?' · Изменения сохранены':''}`:cloud.available?'Google Диск не подключён.':'Подключение доступно в приложении для Windows и Android.');
+  section.querySelector('[data-cloud-status]').textContent=cloud.error||cloud.status.error||(busy?cloud.progress?.total?`Загрузка треков: ${cloud.progress.done} из ${cloud.progress.total}`:'Синхронизация…':connected?`Подключён ${cloud.status.email||'Google Диск'}${pending?` · В очереди: ${pending}`:cloud.lastSync?' · Изменения сохранены':''}`:cloud.available?'Google Диск не подключён.':'Подключение доступно в приложении для Windows и Android.');
   buttons.forEach(b=>b.disabled=busy);
   section.querySelector('[data-connect]').hidden=connected&&!cloud.status.error;section.querySelector('[data-connect]').textContent=connected?'Войти повторно':'Подключить Google Диск';section.querySelector('[data-connect]').disabled=busy||!cloud.available;
   section.querySelector('[data-sync]').hidden=!connected;section.querySelector('[data-disconnect]').hidden=!connected;

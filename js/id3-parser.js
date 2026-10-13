@@ -202,7 +202,7 @@ export class ID3Parser {
       } else if (["TPE1", "TP1"].includes(frameId)) {
         result.artist = this.decodeText(data).trim() || result.artist;
       } else if (["TALB", "TAL"].includes(frameId)) {
-        // Ignore collection tags; artwork is parsed independently.
+        result.album = this.decodeText(data).trim();
       } else if (["TYER", "TDRC", "TYE"].includes(frameId)) {
         result.year = this.decodeText(data).trim();
       } else if (["TRCK", "TRK"].includes(frameId)) {
@@ -338,6 +338,8 @@ export class ID3Parser {
               const val = entry.slice(eqIdx + 1).trim();
               if (key === "TITLE") result.title = val;
               else if (key === "ARTIST") result.artist = val;
+              else if (key === "ALBUM") result.album = val;
+              else if (key === "GENRE") result.genre = val;
 
               else if (key === "DATE") result.year = val;
               else if (key === "TRACKNUMBER") result.trackNo = val;

@@ -5,6 +5,7 @@ import {renderSearchView} from './search-view.js';
 import { bindSlider, syncPlaybackControls } from './playback-controls.js';
 import { saveIcon } from "./design-icons.js";
 import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, createActionBar } from "./library-views.js";
+import {loadingRows} from './loading.js';
 import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
 import { renderRightQueue } from "./queue-view.js";
@@ -581,6 +582,7 @@ export class UIController {
         break;
     }
 
+    if(['home','allTracks','library','playlist','liked'].includes(view.type)&&(this.library.importing||this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total))container.append(loadingRows(3));
     if (focusedSearch) {
       const input = container.querySelector(".mobile-search-input");
       input?.focus(); if (input && caret !== null) input.setSelectionRange(caret, caret);

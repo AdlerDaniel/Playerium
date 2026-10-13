@@ -84,7 +84,7 @@ export class Library {
     const corrected = [];
     for (const t of tracks) {
       let reparsed = false;
-      if (t.folderSource?.startsWith('web:') && /\.(m4a|mp4)$/i.test(t.fileName || '') && t.metadataVersion !== 2) {
+      if (t.folderSource?.startsWith('web:') && /\.(m4a|mp4)$/i.test(t.fileName || '') && t.metadataVersion !== 3) {
         const stored = await this.getFromStore('files', t.id);
         try {
           const file = stored?.blob || (stored?.handle && await stored.handle.queryPermission({mode:'read'}) === 'granted' ? await stored.handle.getFile() : null);
@@ -92,15 +92,15 @@ export class Library {
             // Some storage/structured-clone implementations return a plain Blob.
             const namedFile = typeof file.name === 'string' ? file : new File([file],t.fileName,{type:file.type});
             const metadata = await ID3Parser.parseFile(namedFile);
-            for (const key of ['title','artist','year','genre','trackNo','duration']) if (metadata[key]) t[key] = metadata[key];
+            for (const key of ['title','artist','album','year','genre','trackNo','duration']) if (metadata[key]) t[key] = metadata[key];
             if (metadata.pictureBlob) t.pictureBlob = await resizeArtwork(metadata.pictureBlob);
-            t.metadataVersion = 2; reparsed = true;
+            t.metadataVersion = 3; reparsed = true;
           }
         } catch (error) { console.warn('Stored metadata repair failed', error); }
       }
       const title = normalizeTrackTitle(t.title);
-      if (reparsed || title !== t.title || "album" in t || "lyrics" in t || "lyricsModified" in t) {
-        t.title = title; delete t.album; delete t.lyrics; delete t.lyricsModified;
+      if (reparsed || title !== t.title || "lyrics" in t || "lyricsModified" in t) {
+        t.title = title; delete t.lyrics; delete t.lyricsModified;
         corrected.push({ ...t, pictureUrl: null });
       }
       t.pictureUrl = t.pictureBlob ? this.coverURL(t.id, t.pictureBlob) : null;
@@ -148,7 +148,7 @@ export class Library {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, "readwrite");
       const stored = storeName === "tracks" ? { ...item, pictureUrl: null } : item;
-      if(storeName === "tracks")delete stored.album;
+
       tx.objectStore(storeName).put(stored);
       tx.oncomplete = () => resolve();
       tx.onerror = tx.onabort = () => reject(tx.error || new Error("Не удалось сохранить библиотеку"));
@@ -200,7 +200,7 @@ export class Library {
     if(!track)throw Error('Не удалось добавить трек');
     const {pictureBase64,...metadata}=file.metadata || {};
     Object.assign(track,metadata,{downloadId:file.downloadId,catalog:false});
-    delete track.album;
+
     if(expected)track.recordingKey=`${expected.artist}|${expected.title}`;
     await this.putInStore('tracks',track);this.onLibraryChanged?.();return track;
   }
@@ -470,7 +470,7 @@ export class Library {
 
   syncFolderToPlaylist(...args) {
     // Watcher events and manual imports cannot mutate the same playlist concurrently.
-    const result = this.importChain.catch(() => {}).then(() => this.importFolder(...args));
+    const result = this.importChain.catch(() => {}).then(async()=>{this.importing=true;this.onLibraryChanged?.();try{return await this.importFolder(...args);}finally{this.importing=false;this.onLibraryChanged?.();}});
     this.importChain = result;
     return result;
   }
@@ -511,7 +511,7 @@ export class Library {
           track = candidates[0]; restoredLegacy.add(track.id);
         }
       }
-      const changed = !track || track.sourceKey !== key || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported;
+      const changed = !track || track.sourceKey !== key || track.fileSize !== f.size || track.lastModified !== f.lastModified || !track.metadataImported || track.metadataVersion!==3;
       if (changed) {
         const cleanName = f.name.replace(/\.[^/.]+$/, "");
         const parts = cleanName.split(" - ");
@@ -536,9 +536,9 @@ export class Library {
         const previous = track;
         track = { ...metadata, id, downloadId:f.downloadId || previous?.downloadId || null, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
           sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
-          liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, metadataVersion: 2, unavailable: false };
+          liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, metadataVersion: 3, unavailable: false };
         track.title = normalizeTrackTitle(track.title);
-        delete track.album; delete track.lyrics; delete track.lyricsModified;
+     delete track.lyrics; delete track.lyricsModified;
         delete track.picture; delete track.pictureBase64;
         if (track.pictureBlob) { track.pictureBlob = await resizeArtwork(track.pictureBlob); track.pictureUrl = this.coverURL(id, track.pictureBlob); }
         else {

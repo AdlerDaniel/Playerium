@@ -9,6 +9,7 @@ import { UIController } from "./ui-controller.js";
 import { ShortcutsManager } from "./shortcuts.js";
 import { MusicCatalog } from './music-catalog.js';
 import {CloudSync} from './cloud-sync.js';
+import {initWindowFrame} from './window-frame.js';
 
 class App {
   constructor() {
@@ -27,6 +28,7 @@ class App {
     try {
       // Expose globally for native Android WebView bridge & Electron IPC
       window.playerApp = this;
+      initWindowFrame().catch(console.warn);
 
       await this.library.init();
       const previousNativeUris = new Map(this.library.getTracks().map(track => [track.id,track.nativeUri]));
@@ -104,6 +106,7 @@ class App {
       setTimeout(()=>this.music.repairCovers().catch(console.warn),1000);
     } catch (e) {
       console.error("Failed to start Playerium:", e);
+      const container=document.getElementById('mainViewContent');container.replaceChildren();const message=document.createElement('p');message.className='artist-profile-status';message.textContent='Не удалось загрузить медиатеку. Попробуйте открыть приложение ещё раз.';container.append(message);
     }
   }
 

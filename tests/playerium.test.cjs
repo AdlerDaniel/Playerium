@@ -166,7 +166,7 @@ test('native playback sends URI queue without reading audio into JavaScript',asy
   p.applyNativeState({id:'native',playing:true,position:2000,duration:42000});assert.equal(p.getDuration(),42);assert.equal(p.isPlaying,true);
 });
 
-test('desktop playback starts before loudness analysis and late results cannot affect another selection',async()=>{
+test('desktop playback starts before loudness analysis and late results never change a started song',async()=>{
   const pending=new Map(),calls=[];
   window.electronAPI={getAudioSource:async file=>'music://'+file,getLoudness:file=>{
     calls.push(file);return new Promise(resolve=>pending.set(file,resolve));
@@ -182,7 +182,7 @@ test('desktop playback starts before loudness analysis and late results cannot a
   pending.get('a.mp3')({gain:2});await first;
   assert.equal(p.normalizationGain,1);assert.equal(p.currentTrack,b);
   p.pause();p.seekToTime(30);pending.get('b.mp3')({gain:.5});await second;
-  assert.equal(p.normalizationGain,.5);assert.equal(p.isPlaying,false);assert.equal(p.getCurrentTime(),30);
+  assert.equal(p.normalizationGain,1);assert.equal(b.normalizationGain,.5);assert.equal(p.isPlaying,false);assert.equal(p.getCurrentTime(),30);
   await p.playTrack(a,0,[a]);assert.equal(p.normalizationGain,2);await p.normalizationTask;
   assert.deepEqual(calls,['a.mp3','b.mp3']);assert.equal(gains.at(-1),2);
 });

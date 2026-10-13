@@ -45,7 +45,7 @@ test('one original recording combines providers, metadata and offline copy witho
   const cover={...official,title:'Повільне диско (cover)',rawTitle:'Повільне диско (cover)',artist:'Somebody'};
   const clip={...official,rawTitle:'KLER - Повільне диско (Official Music Video)'};
   const rows=mergeSongs([[official,other,cover,clip],[metadata]],'KLER Повільне диско');
-  assert.equal(rows.length,1);assert.equal(rows[0].sources.length,2);assert.equal(rows[0].album,undefined);assert.equal(rows[0].pictureUrl,metadata.pictureUrl);
+  assert.equal(rows.length,1);assert.equal(rows[0].sources.length,2);assert.equal(rows[0].album,metadata.album);assert.equal(rows[0].pictureUrl,metadata.pictureUrl);
   assert.match(rows[0].artist,/OTOY/);
   assert.match(mergeSongs([[official,{...metadata,artist:'KLER'}]],'KLER Повільне диско')[0].artist,/OTOY/);
   const local={id:'saved',title:'Повільне диско',artist:'KLER x OTOY',duration:253};
@@ -161,7 +161,7 @@ test('reopening cached multi-provider search keeps the results',async()=>{
   global.window={electronAPI:{musicRequest:async()=>assert.fail('cached results must not request providers')}};
   const {MusicCatalog}=await import('../js/music-catalog.js');const lib={search:()=>[]};const catalog=new MusicCatalog(lib,{});
   catalog.cache.set('song',{time:Date.now(),groups:[[{title:'Song',artist:'Artist',sources:[],catalog:true}],[{title:'Song',artist:'Artist',album:'Album',sources:[],catalog:true}]]});
-  let rows;catalog.schedule('Song',(results,busy)=>{rows=results;assert.equal(busy,false);});assert.equal(rows.length,1);assert.equal(rows[0].album,undefined);
+  let rows;catalog.schedule('Song',(results,busy)=>{rows=results;assert.equal(busy,false);});assert.equal(rows.length,1);assert.equal(rows[0].album,'Album');
 });
 test('decoded short previews are rejected before any download is published',async()=>{
   const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');const {DesktopMusic}=require('../desktop-music');
@@ -189,7 +189,7 @@ test('music search retains official audio credits and duration while excluding v
   ]}});
   const data={contents:[row('MUSIC_VIDEO_TYPE_ATV'),row('MUSIC_VIDEO_TYPE_OMV'),row('MUSIC_VIDEO_TYPE_ATV')]};
   const entries=youtubeMusicEntries(data);assert.equal(entries.length,1);
-  const song=audioCandidate(entries[0],'youtubeMusic');assert.equal(song.artist,'DOROFEEVA');assert.equal(song.album,undefined);assert.equal(song.duration,174);
+  const song=audioCandidate(entries[0],'youtubeMusic');assert.equal(song.artist,'DOROFEEVA');assert.equal(song.album,'');assert.equal(song.duration,174);
   assert.ok(sameRecording(song,{title:'747',artist:'DOROFEEVA',duration:173.963}));
   assert.equal(cleanTitle('DOROFEEVA - різнокольорова (Lyric Video)'),'DOROFEEVA - різнокольорова');
 });

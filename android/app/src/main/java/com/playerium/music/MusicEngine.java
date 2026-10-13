@@ -39,7 +39,7 @@ final class MusicEngine {
     private JSONObject records;
     private String musicClientVersion;
     private final Map<String,Double> knownLoudness=new ConcurrentHashMap<>();
-    double knownLoudness(Uri uri){Double gain=knownLoudness.get(uri.toString());return gain==null?1:gain;}
+    double knownLoudness(Uri uri){Double gain=knownLoudness.get(uri.toString());if(gain!=null)return gain;try{DocumentFile document=DocumentFile.fromSingleUri(context,uri);long size=document==null?0:document.length(),modified=document==null?0:document.lastModified();if("file".equals(uri.getScheme())){File f=new File(uri.getPath());size=f.length();modified=f.lastModified();}String saved=context.getSharedPreferences("playerium_loudness",Context.MODE_PRIVATE).getString(uri.toString()+"|"+size+"|"+modified+"|lufs-v1",null);if(saved!=null)return new JSONObject(saved).getDouble("gain");}catch(Exception ignored){}return 1;}
     private MusicEngine(Context context){this.context=context;runtime=new File(context.getNoBackupFilesDir(),"music-runtime-0.18.1-2026.08.19");}
     void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();Future<?> task=tasks.remove(id);if(task!=null)task.cancel(true);}
     void request(String id,String operation,String json) {
@@ -241,7 +241,7 @@ final class MusicEngine {
             while(keys.hasNext()){
                 JSONObject record=records.optJSONObject(keys.next());
                 JSONObject metadata=record==null?null:record.optJSONObject("metadata");
-                if(metadata!=null&&metadata.has("album")){metadata.remove("album");changed=true;}
+
             }
             if(changed)saveRecords();
         }
@@ -256,12 +256,7 @@ final class MusicEngine {
             try(InputStream in=context.getContentResolver().openInputStream(uri)){
                 metadata=new JSONObject(new String(read(in,1024*1024),StandardCharsets.UTF_8));
             }
-            if(metadata.has("album")){
-                metadata.remove("album");
-                try(OutputStream out=context.getContentResolver().openOutputStream(uri,"wt")){
-                    out.write(metadata.toString().getBytes(StandardCharsets.UTF_8));
-                }
-            }
+
         }catch(Exception error){android.util.Log.w("Playerium","Could not clean saved metadata yet",error);}
     }
     private synchronized void saveRecords() throws Exception {
@@ -337,7 +332,7 @@ final class MusicEngine {
                         byte[] header=new byte[12];try(InputStream in=new FileInputStream(input)){if(in.read(header)==12&&new String(header,4,4,StandardCharsets.US_ASCII).equals("ftyp"))info.put("ext","m4a");}
                         info.put("url",input.toURI().toString());
                     }
-                    info.remove("album");info.remove("meta_album");
+                    if(track.has("album")){info.put("album",track.optString("album"));info.put("meta_album",track.optString("album"));}
                     for(String field:new String[]{"title","artist","genre","isrc"})if(!track.optString(field).isEmpty()){info.put(field,track.getString(field));info.put("meta_"+field,track.getString(field));}
                     if(track.has("artist"))info.put("artists",new JSONArray().put(track.getString("artist")));
                     info.put("track",info.getString("title"));if(!track.optString("year").isEmpty()){info.put("release_year",track.opt("year"));info.put("meta_date",track.optString("year"));info.put("release_date",track.optString("year")+"0101");}if(track.has("trackNo"))info.put("track_number",track.opt("trackNo"));
@@ -359,7 +354,7 @@ final class MusicEngine {
                     double expected=track.optDouble("duration",candidate.optDouble("duration",0));
                     if(!(actual>0)||(expected>0&&Math.abs(expected-actual)>Math.max(8,expected*.04)))throw new IOException("Полная запись не совпадает с выбранной версией.");
                     info.put("duration",actual);
-                    JSONObject metadata=new JSONObject();for(String field:new String[]{"title","artist","genre","isrc","duration"})metadata.put(field,info.opt(field));metadata.put("year",info.opt("release_year"));metadata.put("trackNo",info.opt("track_number"));
+                    JSONObject metadata=new JSONObject();for(String field:new String[]{"title","artist","album","genre","isrc","duration"})metadata.put(field,info.opt(field));metadata.put("year",info.opt("release_year"));metadata.put("trackNo",info.opt("track_number"));
                     File cover=null;for(File file:staging.listFiles())if(file.getName().endsWith(".jpg")){cover=file;break;}
                     committed=publish(audio,cover,metadata,payload.optString("folderSource"),key);
                     synchronized(this){records().put(key,committed);saveRecords();}return withCover(committed);
