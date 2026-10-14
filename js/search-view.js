@@ -6,10 +6,10 @@ import {normalize} from './music-match.js';
 import {loadingRows} from './loading.js';
 import {enabled} from './visual-features.js';
 import {highlightText} from './visual-experience.js';
-import {mountArtistPortrait,mountPlaylistArt} from './visual-art.js';
+import {mountArtistPortrait,mountPlaylistArt,portraitFor} from './visual-art.js';
 const historyKey='playerium_search_history';
 function history(){try{return JSON.parse(localStorage.getItem(historyKey)||'[]').filter(q=>typeof q==='string').slice(0,8);}catch{return [];}}
-function remember(query,track){if(query.trim().length<2)return;try{localStorage.setItem(historyKey,JSON.stringify([query.trim(),...history().filter(q=>q!==query.trim())].slice(0,8)));if(track){const saved=JSON.parse(localStorage.getItem('playerium_search_cards')||'{}');saved[query.trim()]={id:track.id,title:track.title,artist:track.artist,pictureUrl:/^(https:|data:image)/.test(track.pictureUrl||'')?track.pictureUrl:null};localStorage.setItem('playerium_search_cards',JSON.stringify(Object.fromEntries(history().filter(q=>saved[q]).map(q=>[q,saved[q]]))));}}catch{}}
+function remember(query,track){if(query.trim().length<2)return;try{localStorage.setItem(historyKey,JSON.stringify([query.trim(),...history().filter(q=>q!==query.trim())].slice(0,8)));if(track){const saved=JSON.parse(localStorage.getItem('playerium_search_cards')||'{}');saved[query.trim()]=track.name?{kind:'artist',name:track.name,title:track.name,artist:track.name,pictureUrl:portraitFor(track.name)}:{id:track.id,title:track.title,artist:track.artist,pictureUrl:/^(https:|data:image)/.test(track.pictureUrl||'')?track.pictureUrl:null};localStorage.setItem('playerium_search_cards',JSON.stringify(Object.fromEntries(history().filter(q=>saved[q]).map(q=>[q,saved[q]]))));}}catch{}}
 export function renderSearchView(container) {
   const ui=this,raw=ui.searchQuery||'',query=raw.trim();
   const wrapper=document.createElement('section');wrapper.className='mobile-search-view spotify-search'+(query?' search-active':'');
@@ -26,7 +26,7 @@ export function renderSearchView(container) {
     if(recent.length){
       const section=document.createElement('section');section.className='search-recent';section.innerHTML='<h2>Недавние поиски</h2>';
       for(const q of recent){const row=document.createElement('div');row.className='search-recent-row';row.innerHTML=`<button class="search-recent-query">${icons.music}<span>${ui.escapeHTML(q)}</span></button><button class="search-history-remove" aria-label="Удалить из истории ${ui.escapeHTML(q)}">×</button>`;
-        if(enabled(17)){let saved;try{saved=JSON.parse(localStorage.getItem('playerium_search_cards')||'{}')[q];}catch{}const track=ui.library.getTrackById(saved?.id)||saved||ui.library.search(q)[0];const art=document.createElement('span');art.className='history-art';mountCover(art,track||{title:q},true);row.firstElementChild.querySelector('svg')?.remove();row.firstElementChild.prepend(art);}
+        if(enabled(17)){let saved;try{saved=JSON.parse(localStorage.getItem('playerium_search_cards')||'{}')[q];}catch{}const track=ui.library.getTrackById(saved?.id)||saved||ui.library.search(q)[0];const art=document.createElement('span');art.className='history-art';if(saved?.kind==='artist')mountArtistPortrait(ui,art,saved);else mountCover(art,track||{title:q},true);row.firstElementChild.querySelector('svg')?.remove();row.firstElementChild.prepend(art);}
         row.firstElementChild.onclick=()=>setQuery(q);row.lastElementChild.onclick=()=>{localStorage.setItem(historyKey,JSON.stringify(history().filter(item=>item!==q)));ui.refreshCurrentView();};section.append(row);}
       wrapper.append(section);
     }
@@ -54,7 +54,7 @@ export function renderSearchView(container) {
       const card=document.createElement('div');card.className='search-top-card';card.innerHTML=`<div class="search-top-cover"></div><h3>${ui.escapeHTML(tracks[0].title)}</h3><p>Песня <span>•</span> ${ui.escapeHTML(tracks[0].artist)}</p><button class="search-top-play" aria-label="Воспроизвести ${ui.escapeHTML(tracks[0].title)}">${icons.play}</button>`;
       mountCover(card.firstElementChild,tracks[0],true);card.querySelector('button').onclick=()=>{remember(query);playRow(ui,tracks[0],tracks,{...ui.currentView},true);};top.append(card);
       const bestArtist=artists.find(a=>normalize(a.name)===normalize(query));
-      if(bestArtist){card.classList.add('search-top-artist');card.replaceChildren();const cover=document.createElement('div');cover.className='search-top-cover';mountArtistPortrait(ui,cover,bestArtist);const open=document.createElement('button');open.className='search-artist-open';open.innerHTML=`<h3>${ui.escapeHTML(bestArtist.name)}</h3><p>Исполнитель</p>`;open.onclick=()=>ui.navigateTo({type:'artist',id:bestArtist.name,title:bestArtist.name,artist:bestArtist});card.append(cover,open);}
+      if(bestArtist){card.classList.add('search-top-artist');card.replaceChildren();const cover=document.createElement('div');cover.className='search-top-cover';mountArtistPortrait(ui,cover,bestArtist);const open=document.createElement('button');open.className='search-artist-open';open.innerHTML=`<h3>${ui.escapeHTML(bestArtist.name)}</h3><p>Исполнитель</p>`;open.onclick=()=>{remember(query,bestArtist);ui.navigateTo({type:'artist',id:bestArtist.name,title:bestArtist.name,artist:bestArtist});};card.append(cover,open);}
 
       const songs=document.createElement('section');songs.className='search-song-section';songs.innerHTML='<h2>Песни</h2>';songs.append(table(tracks.slice(0,4),true));if(tracks.length>4){const all=document.createElement('button');all.className='search-show-all';all.textContent='Все песни';all.onclick=()=>tabs.children[1].click();songs.append(all);}columns.append(top,songs);results.append(columns);
     }
@@ -64,7 +64,7 @@ export function renderSearchView(container) {
         const section=document.createElement('section');section.className='search-card-section';const h=document.createElement('h2');h.textContent=label;section.append(h);
         const grid=document.createElement('div');grid.className='search-entity-grid';
         for(const item of items.slice(0,ui.searchFilter==='all'?6:60)){
-          const card=document.createElement('button');card.className='search-entity-card '+kind;card.innerHTML=`<div class="search-entity-cover"></div><strong>${ui.escapeHTML(item.name)}</strong><span>${ui.escapeHTML(item.subtitle)}</span>`;if(kind==='artists')mountArtistPortrait(ui,card.firstElementChild,item);else if(item.playlist)mountPlaylistArt(card.firstElementChild,item.playlist,item.tracks);else mountCover(card.firstElementChild,item);card.onclick=item.action;grid.append(card);
+          const card=document.createElement('button');card.className='search-entity-card '+kind;card.innerHTML=`<div class="search-entity-cover"></div><strong>${ui.escapeHTML(item.name)}</strong><span>${ui.escapeHTML(item.subtitle)}</span>`;if(kind==='artists')mountArtistPortrait(ui,card.firstElementChild,item);else if(item.playlist)mountPlaylistArt(card.firstElementChild,item.playlist,item.tracks);else mountCover(card.firstElementChild,item);card.onclick=()=>{remember(query,kind==='artists'?item:null);item.action();};grid.append(card);
         }section.append(grid);results.append(section);
       };
       const artistMap=new Map();
