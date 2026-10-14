@@ -1,3 +1,4 @@
+import {viewFingerprint,captureViewState,restoreViewState} from './view-stability.js';
 import {mountCover} from './artwork.js';
 import {collectionMenu,editPlaylist} from './collection-menu.js';
 import {showTrackMenu} from './track-menu.js';
@@ -534,6 +535,14 @@ export class UIController {
   }
 
   refreshCurrentView() {
+    const stable=['home','allTracks','library','playlist','liked'].includes(this.currentView?.type);
+    const signature=stable?viewFingerprint(this):null;
+    if(stable&&this.viewSignature===signature&&document.getElementById('mainViewContent').childElementCount){
+      const container=document.getElementById('mainViewContent');
+      container.querySelectorAll('[data-cloud-loading]').forEach(node=>node.remove());
+      if(this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total){const rows=loadingRows(3);rows.dataset.cloudLoading='true';container.append(rows);}
+      syncPlaybackControls(this.player);return;
+    }
     this.loadView(this.currentView, true);
   }
 
@@ -554,6 +563,7 @@ export class UIController {
     const focusedSearch = document.activeElement?.classList.contains("mobile-search-input");
     const caret = focusedSearch ? document.activeElement.selectionStart : null;
     const container = document.getElementById("mainViewContent");
+    const shelfState=preserveScroll?captureViewState(container):[];
     container.innerHTML = "";
 
     try{switch (view.type) {
@@ -595,6 +605,8 @@ export class UIController {
     this.renderSidebar();
     // Scroll to top
     scroll.scrollTop = restoreScroll;
+    restoreViewState(container,shelfState);
+    this.viewSignature=viewFingerprint(this);
     syncPlaybackControls(this.player);
     container.classList.remove('view-enter');if(!preserveScroll){void container.offsetWidth;container.classList.add('view-enter');}
     const header=container.querySelector('.view-header');
@@ -757,13 +769,15 @@ export class UIController {
   }
 
   updateArtworkTheme(url) {
+    if(this.artworkThemeUrl===url)return;
+    this.artworkThemeUrl=url;const generation=(this.artworkThemeGeneration||0)+1;this.artworkThemeGeneration=generation;
     const mini = document.getElementById("mobileMiniPlayer");
     const full = document.getElementById("mobileFullscreenPlayer");
     mini.style.setProperty("--art-color", "#333333");full.style.setProperty("--art-color", "#454545");
     if (!url) return;
     const id=this.player.currentTrack?.id;
     const image=new Image();image.onload=()=>{
-      if(this.player.currentTrack?.id!==id)return;
+      if(this.player.currentTrack?.id!==id||this.artworkThemeGeneration!==generation)return;
       try {
         const canvas=document.createElement("canvas");canvas.width=canvas.height=1;
         const ctx=canvas.getContext("2d");ctx.drawImage(image,0,0,1,1);

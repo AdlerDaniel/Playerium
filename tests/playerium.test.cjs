@@ -282,3 +282,9 @@ test('moving a downloaded Android song keeps its ID, likes, playlist membership 
   await reopened.syncFolderToPlaylist('Music',old.folderSource,[{...moved,downloadId:undefined}],true);
   assert.equal(reopened.getTracks().length,1);assert.equal(reopened.getPlaylistTracks(playlist.id)[0].id,song.id);
 });
+test('restoring unchanged downloaded files keeps artwork URL and does not flash import skeletons',async()=>{
+ const lib=await library(),file={name:'Artist - Song.mp3',uri:'content://music/song.mp3',folderName:'Music',folderSource:'content://music/tree',size:100,lastModified:1,downloadId:'stable',metadata:{title:'Song',artist:'Artist',duration:42}};
+ const song=await lib.addDownloaded(file,null);song.pictureUrl='blob:stable';song.normalizationGain=.7;await lib.putInStore('tracks',song);let updates=0;lib.onLibraryChanged=()=>updates++;
+ for(let i=0;i<20;i++)assert.equal(await lib.addDownloaded(file,null),song);
+ assert.equal(updates,0);assert.equal(song.pictureUrl,'blob:stable');assert.equal(song.normalizationGain,.7);assert.equal(lib.importing,false);
+});

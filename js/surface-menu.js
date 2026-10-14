@@ -20,7 +20,8 @@ export function showSurfaceMenu(ui,{title,items,anchor}={}) {
   }
   root.addEventListener('click',e=>{if(e.target===root||e.target.classList.contains('mobile-sheet-overlay'))close();});
   panel.onkeydown=e=>{
-    const buttons=[...panel.querySelectorAll('button')],i=buttons.indexOf(document.activeElement);
+    if(e.target.matches('input[type="range"]')&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
+    const buttons=[...panel.querySelectorAll('button,input')],i=buttons.indexOf(document.activeElement);
     if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}
     else if(['ArrowDown','ArrowUp','Tab','Home','End'].includes(e.key)){e.preventDefault();buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowUp'||e.shiftKey?-1:1)+buttons.length)%buttons.length]?.focus();}
   };

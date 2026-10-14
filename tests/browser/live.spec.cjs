@@ -1,0 +1,16 @@
+const {test,expect}=require('@playwright/test');
+test('real WebRTC data channel sends state and controls bidirectionally',async({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{const {ConnectRtc}=await import('/js/connect-rtc.js');const messages=[],a=new ConnectRtc('a',async c=>{messages.push(c);}),b=new ConnectRtc('b',async c=>{messages.push(c);});a.reset('account');b.reset('account');a.publish({id:'a',state:{position:12}});b.publish({id:'b',state:{position:13}});
+ try{await a.discover([{id:'b',realtime:true}]);await b.discover([{id:'a',realtime:true,rtc:a.signal()}]);await a.discover([{id:'b',realtime:true,rtc:b.signal()}]);const deadline=Date.now()+10000;while(Date.now()<deadline&&(!a.devices().length||!b.devices().length)){a.publish(a.local);b.publish(b.local);await new Promise(r=>setTimeout(r,30));}const start=Date.now();a.send({id:'seek',target:'b',action:'seek',value:54});b.send({id:'volume',target:'a',action:'volume',value:.5});while(Date.now()-start<1500&&messages.length<2)await new Promise(r=>setTimeout(r,10));return {messages,latency:Date.now()-start,peers:a.devices().length};}finally{a.reset(null);b.reset(null);}});
+ expect(result.peers).toBe(1);expect(result.messages.map(c=>c.action).sort()).toEqual(['seek','volume']);expect(result.latency).toBeLessThan(1500);
+});
+test('real desktop seek and mute controls target the remote player and fast volume drags coalesce',async({page})=>{
+ await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
+ const result=await page.evaluate(async()=>{const a=window.playerApp,c=a.ui.connect||a.connect,p=a.player,t={id:'remote-test',cloudKey:'key',title:'Song',artist:'Artist',duration:180};a.library.tracks.set(t.id,t);c.saveLocal();c.selected='phone';c.remote={id:'phone',seenAt:Date.now(),state:{track:{key:'key'},queue:['key'],duration:180,position:10,volume:.8,playing:false}};p.currentTrack=t;const commands=[];c.send=async(id,action,value)=>{commands.push({action,value});await new Promise(r=>setTimeout(r,20));return {...c.remote,state:{...c.remote.state,[action==='seek'?'position':action==='volume'?'volume':action]:value},seenAt:Date.now()};};p.seek(50);await c.commandTail;p.toggleMute();await c.commandTail;for(let i=1;i<=20;i++)p.setVolume(i/20);await c.commandTail;return {commands,position:p.getCurrentTime(),volume:p.volume};});
+ expect(result.commands[0]).toEqual({action:'seek',value:90});expect(result.commands[1]).toEqual({action:'volume',value:0});expect(result.commands.length).toBeLessThanOrEqual(4);expect(result.commands.at(-1)).toEqual({action:'volume',value:1});expect(result.position).toBe(90);expect(result.volume).toBe(1);
+});
+test('unchanged library refresh keeps home covers and shelves mounted',async({page})=>{
+ await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
+ const same=await page.evaluate(()=>{const {ui,library}=window.playerApp;library.tracks.set('stable',{id:'stable',title:'Stable',artist:'Artist',duration:180});ui.navigateTo({type:'home'});ui.refreshCurrentView();const shelf=document.querySelector('.shelf-cards'),first=shelf.firstElementChild;for(let i=0;i<10;i++){ui.refreshCurrentView();ui.renderSidebar();}return shelf===document.querySelector('.shelf-cards')&&first===shelf.firstElementChild;});expect(same).toBe(true);
+});

@@ -6,8 +6,13 @@ import {showSurfaceMenu} from './surface-menu.js';
 import { bindCollectionPlay } from './playback-controls.js';
 import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
+import { viewFingerprint } from './view-stability.js';
 export function renderSidebar() {
     const list = document.getElementById("sidebarList");
+    const signature=JSON.stringify([viewFingerprint(this),this.sidebarFilter,this.libraryQuery,this.currentView?.type,this.currentView?.id]);
+    if(list.children.length&&this.sidebarSignature===signature)return;
+    this.sidebarSignature=signature;
+    const scroll=list.scrollTop;
     list.innerHTML = "";
 
     const likedTracks = this.library.getLikedTracks();
@@ -103,6 +108,7 @@ export function renderSidebar() {
       item.setAttribute("role", "button");
       item.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " ") {e.preventDefault();item.click();} });
     }
+    list.scrollTop=scroll;
 }
 
 export function renderHomeView(container) {

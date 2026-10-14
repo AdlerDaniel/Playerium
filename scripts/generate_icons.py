@@ -11,48 +11,9 @@ except ImportError:
     from PIL import Image, ImageDraw
 
 def create_master_icon(size=2048):
-    # Transparent background
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    # Scale factor from 1024 base
-    scale = size / 1024.0
-
-    # 1. White squircle background
-    radius = int(225 * scale)
-    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=radius, fill=(255, 255, 255, 255))
-
-    # 2. Black musical note
-    black = (0, 0, 0, 255)
-    
-    # Notehead (Circle)
-    cx = int(388 * scale)
-    cy = int(710 * scale)
-    r = int(132 * scale)
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=black)
-
-    # Stem
-    stem_left = int(494 * scale)
-    stem_top = int(175 * scale)
-    stem_right = int(546 * scale)
-    stem_bottom = int(710 * scale)
-    draw.rectangle([stem_left, stem_top, stem_right, stem_bottom], fill=black)
-
-    # Flag
-    p1 = (int(494 * scale), int(175 * scale))
-    p2 = (int(802 * scale), int(305 * scale))
-    p3 = (int(768 * scale), int(393 * scale))
-    p4 = (int(546 * scale), int(335 * scale))
-    draw.polygon([p1, p2, p3, p4], fill=black)
-
-    # Rounded cap on the flag tip
-    cap_x1 = int(750 * scale)
-    cap_y1 = int(300 * scale)
-    cap_x2 = int(825 * scale)
-    cap_y2 = int(405 * scale)
-    draw.ellipse([cap_x1, cap_y1, cap_x2, cap_y2], fill=black)
-
-    return img
+    source = os.path.join(os.path.dirname(__file__), "..", "assets", "icon-master.png")
+    with Image.open(source) as image:
+        return image.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
 
 def create_round_icon(master_img, size):
     img_resized = master_img.resize((size, size), Image.Resampling.LANCZOS)
@@ -110,6 +71,27 @@ def main():
         round_img.save(os.path.join(folder_path, "ic_launcher_round.png"), "PNG")
         print(f"Saved {folder}/ic_launcher.png and ic_launcher_round.png ({dim}x{dim})")
 
+    adaptive_dir = os.path.join(res_dir, "mipmap-anydpi-v26")
+    adaptive33_dir = os.path.join(res_dir, "mipmap-anydpi-v33")
+    drawable_dir = os.path.join(res_dir, "drawable")
+    os.makedirs(drawable_dir, exist_ok=True)
+    # Android applies the launcher mask; keep the complete vinyl inside its safe zone.
+    master.resize((432, 432), Image.Resampling.LANCZOS).save(os.path.join(drawable_dir, "ic_launcher_vinyl.png"))
+    foreground = '<inset xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/ic_launcher_vinyl" android:inset="18%" />'
+    with open(os.path.join(drawable_dir, "ic_launcher_foreground.xml"), "w", encoding="utf-8") as file:
+        file.write(foreground)
+    monochrome = '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M54,22 A32,32 0,1 1,54 86 A32,32 0,1 1,54 22 M47,40 L69,54 L47,68 Z" /></vector>'
+    with open(os.path.join(drawable_dir, "ic_launcher_monochrome.xml"), "w", encoding="utf-8") as file:
+        file.write(monochrome)
+    for directory, extra in [(adaptive_dir, ""), (adaptive33_dir, '<monochrome android:drawable="@drawable/ic_launcher_monochrome" />')]:
+        os.makedirs(directory, exist_ok=True)
+        xml = '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/icon_background" /><foreground android:drawable="@drawable/ic_launcher_foreground" />'+extra+'</adaptive-icon>'
+        for name in ["ic_launcher.xml", "ic_launcher_round.xml"]:
+            with open(os.path.join(directory, name), "w", encoding="utf-8") as file:
+                file.write(xml)
+    values_dir = os.path.join(res_dir, "values")
+    with open(os.path.join(values_dir, "icon_colors.xml"), "w", encoding="utf-8") as file:
+        file.write('<resources><color name="icon_background">#42210F</color></resources>')
     print("\nAll application icons generated successfully!")
 
 if __name__ == "__main__":

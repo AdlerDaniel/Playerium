@@ -4,6 +4,7 @@ const target = 'android/app/src/main/assets';
 fs.mkdirSync(target, { recursive: true });
 for (const removed of ['js/lyrics.js', 'css/lyrics.css']) fs.rmSync(`${target}/${removed}`, { force: true });
 for (const file of ['index.html','migration.html','js','css','assets']) fs.cpSync(file, `${target}/${file}`, { recursive: true });
+fs.rmSync(`${target}/assets/icon-master.png`,{force:true});
 fs.copyFileSync('MUSIC-NOTICES.md',`${target}/MUSIC-NOTICES.md`);
 // Android 10's bundled WebView predates optional chaining and nullish assignment.
 // Keep the editable modules while lowering their syntax for supported devices.

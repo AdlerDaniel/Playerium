@@ -40,7 +40,7 @@ export function renderHomeDashboard(container) {
   for (const item of quickItems.slice(0,8)) {
     const card=document.createElement('div');card.className='home-quick-card';
     card.innerHTML=`<div class="home-quick-art ${item.className||''}">${artwork(ui,item)}</div><span>${this.escapeHTML(item.title)}</span>`;
-    if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item);
+    if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item,true);
     activate(card,()=>this.navigateTo(item.view));quick.append(card);
   }
   home.append(quick);
@@ -51,11 +51,11 @@ export function renderHomeDashboard(container) {
     const h=document.createElement('h2');h.textContent=title;heading.append(h);
     const more=document.createElement('button');more.className='shelf-more';more.textContent='Показать все';
     more.addEventListener('click',()=>this.navigateTo(view));heading.append(more);section.append(heading);
-    const cards=document.createElement('div');cards.className='shelf-cards';
+    const cards=document.createElement('div');cards.className='shelf-cards';cards.dataset.scrollKey='shelf-'+view.type+'-'+title;
     for(const item of items.slice(0,12)) {
       const card=document.createElement('div');card.className='shelf-card'+(item.round?' artist':'');
       card.innerHTML=`<div class="shelf-art">${artwork(ui,item)}<button class="shelf-play" aria-label="Воспроизвести ${this.escapeHTML(item.title)}">${icons.play}</button></div><div class="shelf-title">${this.escapeHTML(item.title)}</div><div class="shelf-subtitle">${this.escapeHTML(item.subtitle)}</div>`;
-      if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item);
+      if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item,true);
       activate(card,()=>item.view?this.navigateTo(item.view):playRow(this,item.tracks[0],tracks,all.view));
       const button=card.querySelector('.shelf-play');
       if(item.view) bindCollectionPlay(this,button,item.tracks,item.view);

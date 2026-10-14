@@ -57,7 +57,7 @@ public class MediaNotificationService extends MediaSessionService {
     private final NormalizationProcessor normalization=new NormalizationProcessor();
     private final java.util.concurrent.ExecutorService loudnessWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
-    private final java.util.concurrent.ExecutorService connectWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService connectWorker=java.util.concurrent.Executors.newSingleThreadExecutor(),connectCloudWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean connecting;
     static void artworkChanged(String id){
         MediaNotificationService service=instance;
@@ -276,17 +276,28 @@ public class MediaNotificationService extends MediaSessionService {
         return !reset&&!currentId.isEmpty()&&currentId.equals(nextId)?Math.max(0,position):0;
     }
 
-    private long lastConnect;
+    private long lastConnect;private boolean cloudConnecting;
     private void pollConnect(JSONObject snapshot){
-        MainActivity activity=MainActivity.getInstance();if(connecting||(activity!=null&&activity.isForeground())||SystemClock.elapsedRealtime()-lastConnect<3000)return;
-        GoogleCloud cloud=GoogleCloud.get(this);if(!cloud.prefs.getBoolean("enabled",false))return;GoogleConnect connect=cloud.connect;JSONObject local=connect.local();if(local==null||local.optString("id").isEmpty())return;
-        connecting=true;lastConnect=SystemClock.elapsedRealtime();
-        connectWorker.submit(()->{try{
+        MainActivity activity=MainActivity.getInstance();if(activity!=null&&activity.isForeground())return;
+        GoogleCloud cloud=GoogleCloud.get(this);if(!cloud.prefs.getBoolean("enabled",false))return;
+        GoogleConnect connect=cloud.connect;JSONObject local=connect.local();if(local==null||local.optString("id").isEmpty())return;
+        try{
             String device=local.getString("id");JSONArray saved=snapshot.optJSONArray("tracks"),keys=new JSONArray();JSONObject track=null;int index=snapshot.optInt("index");
-            int start=saved==null?0:Math.max(0,Math.min(index-100,saved.length()-200));if(saved!=null)for(int i=start;i<Math.min(saved.length(),start+200);i++){JSONObject item=saved.getJSONObject(i);String key=item.optString("cloudKey");if(!key.isEmpty())keys.put(key);if(i==index)track=new JSONObject().put("key",key).put("title",item.optString("title")).put("artist",item.optString("artist"));}
+            int start=saved==null?0:Math.max(0,Math.min(index-100,saved.length()-200));
+            if(saved!=null)for(int i=start;i<Math.min(saved.length(),start+200);i++){JSONObject item=saved.getJSONObject(i);String key=item.optString("cloudKey");if(!key.isEmpty())keys.put(key);if(i==index)track=new JSONObject().put("key",key).put("title",item.optString("title")).put("artist",item.optString("artist"));}
             JSONObject state=new JSONObject().put("queue",keys).put("track",track).put("playing",snapshot.optBoolean("playing")).put("position",snapshot.optDouble("position")/1000).put("duration",snapshot.optDouble("duration")/1000).put("volume",snapshot.optDouble("volume",.8)).put("shuffle",snapshot.optBoolean("shuffle")).put("repeat",new String[]{"off","one","all"}[Math.max(0,Math.min(2,snapshot.optInt("repeat")))]);
-            local.put("state",state).put("seenAt",System.currentTimeMillis()).put("ack",connect.ack(device));connect.write("device",device,local);
-            JSONObject message=connect.command(device);if(message!=null){JSONObject queue=null;
+            local.put("state",state).put("seenAt",System.currentTimeMillis()).put("ack",connect.ack(device));
+            connect.live.publish(local);
+            JSONObject message=connect.live.take(device);
+            if(message!=null&&!connecting){connecting=true;connectWorker.submit(()->{try{applyConnectCommand(message,snapshot,connect);}catch(Exception ignored){}finally{handler.post(()->connecting=false);}});}
+            long interval=connect.live.devices().length()>0?15000:3000;
+            if(!cloudConnecting&&SystemClock.elapsedRealtime()-lastConnect>interval){cloudConnecting=true;lastConnect=SystemClock.elapsedRealtime();connectCloudWorker.submit(()->{try{connect.live.start();connect.write("device",device,new JSONObject(local.toString()).put("lan",connect.live.descriptor()));JSONObject incoming=connect.command(device);if(incoming!=null)connect.live.enqueue(incoming);}catch(Exception ignored){}finally{handler.post(()->cloudConnecting=false);}});}
+        }catch(Exception ignored){}
+    }
+    private void applyConnectCommand(JSONObject message,JSONObject snapshot,GoogleConnect connect)throws Exception{
+        String device=connect.local().getString("id");if(connect.wasAcknowledged(device,message.getString("id")))return;
+        GoogleCloud cloud=GoogleCloud.get(this);JSONArray saved=snapshot.optJSONArray("tracks");
+        JSONObject queue=null;
                 if("transfer".equals(message.optString("action"))){JSONObject incoming=message.getJSONObject("state");String key=incoming.getJSONObject("track").getString("key");
                     JSONArray supplied=message.optJSONArray("media");if(supplied==null)throw new java.io.IOException("Очередь треков не передана.");JSONArray tracks=new JSONArray();int selected=-1;
                     for(int i=0;i<Math.min(supplied.length(),200);i++){JSONObject entry=supplied.getJSONObject(i),file=cloud.localCopy(entry.getString("key"),entry.getJSONObject("track"));if(file==null)file=cloud.download(entry.getString("key"),entry.getJSONObject("track"));String id="remote_"+entry.getString("key");if(saved!=null)for(int j=0;j<saved.length();j++)if(file.getString("uri").equals(saved.getJSONObject(j).optString("uri"))){id=saved.getJSONObject(j).optString("id",id);break;}if(entry.getString("key").equals(key)){selected=tracks.length();if(file.has("coverBase64"))PlaybackArtwork.saveBase64(this,id,file.getString("coverBase64"));else if(PlaybackArtwork.find(this,id)==null&&entry.getJSONObject("track").has("coverId"))try{byte[] cover=cloud.media(entry.getJSONObject("track").getString("coverId"),4*1024*1024);PlaybackArtwork.save(this,id,cover);}catch(Exception ignored){}}
@@ -299,8 +310,6 @@ public class MediaNotificationService extends MediaSessionService {
                 if(!applied.await(15,java.util.concurrent.TimeUnit.SECONDS))throw new java.io.IOException("Команда не выполнена.");if(failure[0]!=null)throw failure[0];
                 if(prepared!=null&&prepared.optBoolean("play")){long readyUntil=SystemClock.elapsedRealtime()+5000;boolean ready=false;while(SystemClock.elapsedRealtime()<readyUntil){JSONObject current=new JSONObject(stateSnapshot);if(current.optBoolean("playing")&&current.optString("id").equals(prepared.getJSONArray("tracks").getJSONObject(prepared.getInt("index")).getString("id"))){ready=true;break;}Thread.sleep(100);}if(!ready)throw new java.io.IOException("Песня не запустилась.");}
                 connect.acknowledge(device,message.getString("id"));
-            }
-        }catch(Exception ignored){}finally{handler.post(()->connecting=false);}});
     }
 
     private void command(String command, double value) {
@@ -380,7 +389,7 @@ public class MediaNotificationService extends MediaSessionService {
         savePlayback();
         handler.removeCallbacksAndMessages(null);
         ++normalizationVersion;loudnessWorker.shutdownNow();
-        artworkWorker.shutdownNow();connectWorker.shutdownNow();if(instance==this)instance=null;
+        artworkWorker.shutdownNow();connectWorker.shutdownNow();connectCloudWorker.shutdownNow();if(instance==this)instance=null;
         if (equalizer != null) equalizer.release();
         session.release(); player.release(); stateSnapshot = "{}";
         super.onDestroy();

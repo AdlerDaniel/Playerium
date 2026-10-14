@@ -1,1 +1,3 @@
 .playback-device-button{display:grid;place-items:center;width:32px;height:32px;color:var(--sp-text-secondary);background:transparent;border:0;border-radius:6px;flex-shrink:0}.playback-device-button svg{width:22px;height:22px}.playback-device-button:hover,.playback-device-button.remote-active{color:var(--sp-green)}.mobile-fs-progress .playback-device-button{margin-left:auto;margin-bottom:8px}
+.connect-volume-control{display:flex;align-items:center;gap:16px;padding:16px;color:var(--sp-text-secondary);font-size:13px;border-top:1px solid rgba(255,255,255,.08)}
+.connect-volume-control input{flex:1;min-width:0;accent-color:var(--sp-green);touch-action:none}

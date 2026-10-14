@@ -197,6 +197,21 @@ export class Library {
   async addDownloaded(file, expected) {
     const sourceKey=file.fullPath||file.uri;
     if(this.removedSources.delete(sourceKey))await this.putInStore('settings',{key:'removedTracks',value:[...this.removedSources]});
+    await this.importChain.catch(()=>{});
+    const existing=this.getTracks().find(t=>t.sourceKey===sourceKey);
+    const unchanged=existing&&existing.fileSize===(file.size||0)&&existing.lastModified===file.lastModified&&existing.metadataImported&&existing.metadataVersion===3&&!(file.metadata?.pictureBase64&&!existing.pictureBlob);
+    if(unchanged){
+      let changed=!!existing.unavailable;
+      existing.unavailable=false;
+      // Native restore is also called on every WebView re-entry. Keep existing
+      // blobs and URLs when bytes and metadata have not changed.
+      for(const [key,value] of Object.entries(file.metadata||{}))if(!['pictureBase64','picture','pictureBlob','pictureUrl','lyrics'].includes(key)&&value!==undefined&&value!==null&&value!==''&&existing[key]!==value){existing[key]=value;changed=true;}
+      const title=normalizeTrackTitle(existing.title);if(title!==existing.title){existing.title=title;changed=true;}
+      if(file.downloadId&&existing.downloadId!==file.downloadId){existing.downloadId=file.downloadId;changed=true;}
+      if(expected&&existing.recordingKey!==`${expected.artist}|${expected.title}`){existing.recordingKey=`${expected.artist}|${expected.title}`;changed=true;}
+      if(changed){await this.putInStore('tracks',existing);this.onLibraryChanged?.();}
+      return existing;
+    }
     await this.syncFolderToPlaylist(file.folderName,file.folderSource,[file],!!file.uri,null,false);
     const track=this.getTracks().find(t=>t.sourceKey===(file.fullPath||file.uri));
     if(!track)throw Error('Не удалось добавить трек');
@@ -544,10 +559,8 @@ export class Library {
      delete track.lyrics; delete track.lyricsModified;
         delete track.picture; delete track.pictureBase64;
         if (track.pictureBlob) { track.pictureBlob = await resizeArtwork(track.pictureBlob); track.pictureUrl = this.coverURL(id, track.pictureBlob); }
-        else {
-          if (this.coverUrls.has(id)) URL.revokeObjectURL(this.coverUrls.get(id));
-          this.coverUrls.delete(id); track.pictureUrl = null;
-        }
+        else if(previous?.pictureBlob){track.pictureBlob=previous.pictureBlob;track.pictureUrl=previous.pictureUrl;}
+        else track.pictureUrl = null;
         // Never store ephemeral object URLs produced by the parser.
         if (metadata.pictureUrl) URL.revokeObjectURL(metadata.pictureUrl);
         if (f.file) await this.putInStore("files", { id, ...(f.handle ? { handle: f.handle } : { blob: f.file }) });

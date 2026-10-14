@@ -13,6 +13,22 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class ConnectTest {
+ @Test public void nativeLocalChannelControlsBothDirectionsWithoutDriveAndRejectsWrongAccount()throws Exception{
+  LocalConnect a=new LocalConnect(()->"fixture",(device,command)->false),b=new LocalConnect(()->"fixture",(device,command)->false);
+  try{a.start();b.start();a.publish(new JSONObject().put("id","pc").put("state",new JSONObject().put("position",63)));b.publish(new JSONObject().put("id","phone").put("state",new JSONObject().put("volume",.8)));
+   JSONObject lan=b.descriptor().put("addresses",new JSONArray().put("127.0.0.1"));a.learn(new JSONObject(b.local.toString()).put("lan",lan));
+   long started=System.currentTimeMillis();JSONObject seek=new JSONObject().put("id","seek").put("target","phone").put("action","seek").put("value",73);assertTrue(a.send(seek));assertEquals(73,b.take("phone").getInt("value"));b.acknowledge("phone","seek");assertTrue(a.exchange(a.peers.get("phone"),null));assertEquals("seek",a.devices().getJSONObject(0).getString("ack"));
+   // Phone has no route to the PC server, so the PC's outbound heartbeat carries its command.
+   JSONObject volume=new JSONObject().put("id","volume").put("target","pc").put("action","volume").put("value",.25);assertTrue(b.send(volume));assertTrue(a.exchange(a.peers.get("phone"),null));assertEquals(.25,a.take("pc").getDouble("value"),.001);assertTrue(System.currentTimeMillis()-started<1500);
+   b.localAccount="different";assertFalse(a.exchange(a.peers.get("phone"),null));
+  }finally{a.close();b.close();}
+ }
+ @Test public void acknowledgedCommandsDoNotReplayAndSliderBurstsKeepLatestValue()throws Exception{
+  LocalConnect live=new LocalConnect(()->"fixture",(device,command)->command.equals("old"));
+  try{live.publish(new JSONObject().put("id","phone"));live.enqueue(new JSONObject().put("id","old").put("target","phone").put("action","next"));assertNull(live.take("phone"));
+   for(int i=0;i<20;i++)live.enqueue(new JSONObject().put("id","volume_"+i).put("target","phone").put("action","volume").put("value",i/20.0));assertEquals(.95,live.take("phone").getDouble("value"),.001);assertEquals(1,live.inboxes.get("phone").size());
+  }finally{live.close();}
+ }
  @Test public void nativeDeviceStateUpdatesCommandsAndAcknowledgementsRemainScopedAndPersistent()throws Exception{
   Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);GoogleCloud.Connections original=cloud.connections;boolean enabled=cloud.prefs.getBoolean("enabled",false);String account=cloud.prefs.getString("account",null);
   java.lang.reflect.Field token=GoogleCloud.class.getDeclaredField("token"),until=GoogleCloud.class.getDeclaredField("tokenUntil");token.setAccessible(true);until.setAccessible(true);Object oldToken=token.get(cloud);long oldUntil=until.getLong(cloud);
