@@ -8,8 +8,8 @@ android {
         applicationId "com.playerium.music"
         minSdk 22
         targetSdk 34
-        versionCode 34
-        versionName "1.7.20"
+        versionCode 35
+        versionName "1.7.21"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 

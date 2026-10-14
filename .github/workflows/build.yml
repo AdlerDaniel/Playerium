@@ -113,7 +113,7 @@ jobs:
       - name: Verify music processing on modern Android with 16 KB pages
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 36
           target: google_apis_ps16k
           arch: x86_64
           avd-name: playerium16k
@@ -122,7 +122,7 @@ jobs:
           script: |
             test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
             gradle -p android connectedDebugAndroidTest --no-daemon
-            adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-35.png
+            adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-36.png
       - name: Upload native music verification reports
         if: always()
         uses: actions/upload-artifact@v4

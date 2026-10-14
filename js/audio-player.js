@@ -363,6 +363,7 @@ export class AudioPlayer {
       if (this.queue.length) { this.originalQueue = [...this.queue]; this.nativePlayback = true; }
     }
     if (!this.nativePlayback) return;
+    if(Number.isFinite(state.volume)&&state.volume>=0&&state.volume<=1&&this.volume!==state.volume){this.volume=state.volume;this.onVolumeChange?.(this.volume);this.savePreferences();}
     // Replace provisional native metadata once the library has finished loading.
     this.queue = this.queue.map(track => this.library.getTrackById?.(track.id)
       || [...(this.library.tracks?.values() || [])].find(saved => saved.nativeUri === track.nativeUri)
