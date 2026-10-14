@@ -1,4 +1,9 @@
 const {test,expect}=require('@playwright/test');
+test('registering a restored native queue preserves position when remote IDs become local library IDs',async({page})=>{
+ await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
+ const submitted=await page.evaluate(async()=>{const a=window.playerApp,c=a.connect,p=a.player,t={id:'local-restored',nativeUri:'file:///cloud/song.mp3',title:'Song',artist:'Artist',duration:180};a.library.tracks.set(t.id,t);p.queue=[t];p.currentTrack=t;p.nativePlayback=true;p.nativeTime=42;p.isPlaying=true;p.nativeMediaIds=['remote-restored'];let queue;window.AndroidBridge={setPlaybackQueue:data=>queue=JSON.parse(data)};c.cloud.links={key:{localId:t.id}};c.cloud.status={connected:true,account:'fixture'};c.cloud.request=async op=>op==='connectScan'?{devices:[]}:true;c.named=true;c.info={name:'Phone',type:'phone'};await c.tick();return queue;});
+ expect(submitted.position).toBe(42000);expect(submitted.tracks[0].id).toBe('local-restored');expect(submitted.tracks[0].cloudKey).toBe('key');
+});
 test('real WebRTC data channel sends state and controls bidirectionally',async({page})=>{
  await page.goto('/');
  const result=await page.evaluate(async()=>{const {ConnectRtc}=await import('/js/connect-rtc.js');const messages=[],a=new ConnectRtc('a',async c=>{messages.push(c);}),b=new ConnectRtc('b',async c=>{messages.push(c);});a.reset('account');b.reset('account');a.publish({id:'a',state:{position:12}});b.publish({id:'b',state:{position:13}});

@@ -24,12 +24,22 @@ import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.junit.Before;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 @androidx.test.filters.SdkSuppress(minSdkVersion=23)
 public class MediaCardTest {
+    @Before public void grantPlaybackPermissions() throws Exception {
+        android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        Context context=instrumentation.getTargetContext();
+        if(Build.VERSION.SDK_INT>=33){
+            instrumentation.getUiAutomation().grantRuntimePermission(context.getPackageName(),android.Manifest.permission.POST_NOTIFICATIONS);
+            instrumentation.getUiAutomation().grantRuntimePermission(context.getPackageName(),android.Manifest.permission.READ_MEDIA_AUDIO);
+            assertTrue("Media-card verification needs the normal granted notification permission",((NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE)).areNotificationsEnabled());
+        }else instrumentation.getUiAutomation().grantRuntimePermission(context.getPackageName(),android.Manifest.permission.READ_EXTERNAL_STORAGE);
+    }
     @Test public void reopeningTheActivityRestoresThePlayingTrackWithoutRestartingIt() throws Exception {
         android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
         Context context=instrumentation.getTargetContext();
