@@ -7,6 +7,7 @@ import { bindCollectionPlay } from './playback-controls.js';
 import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
 import { viewFingerprint } from './view-stability.js';
+import {mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 export function renderSidebar() {
     const list = document.getElementById("sidebarList");
     const signature=JSON.stringify([viewFingerprint(this),this.sidebarFilter,this.libraryQuery,this.currentView?.type,this.currentView?.id]);
@@ -54,7 +55,7 @@ export function renderSidebar() {
         item.dataset.playlistId = pl.id;
 
         item.innerHTML = `
-          <div class="item-thumb">${cover ? `<img src="${this.escapeHTML(cover)}" alt="">` : icons.music}</div>
+          <div class="item-thumb"></div>
           <div class="item-info">
             <span class="item-title">${this.escapeHTML(pl.name)}</span>
             <span class="item-subtitle">Плейлист • ${pl.trackIds.length} треков</span>
@@ -65,6 +66,7 @@ export function renderSidebar() {
           this.navigateTo({ type: "playlist", id: pl.id, title: pl.name });
         });
 
+        mountPlaylistArt(item.querySelector('.item-thumb'),pl,this.library.getPlaylistTracks(pl.id));
         // Right-click context menu on playlist
         item.addEventListener("contextmenu", (e) => {
           e.preventDefault();
@@ -86,13 +88,14 @@ export function renderSidebar() {
           : `<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
 
         item.innerHTML = `
-          <div class="item-thumb round">${thumbHtml}</div>
+          <div class="item-thumb round"></div>
           <div class="item-info">
             <span class="item-title">${this.escapeHTML(art.name)}</span>
             <span class="item-subtitle">Исполнитель</span>
           </div>
         `;
 
+        mountArtistPortrait(this,item.querySelector('.item-thumb'),art);
         item.addEventListener("click", () => {
           this.navigateTo({ type: "artist", id: art.name, title: art.name });
         });
@@ -223,7 +226,7 @@ export function renderPlaylistView(container, playlistId) {
       </div>
     `;
 
-    if (playlistCover) mountCover(header.querySelector('.view-header-cover'),{pictureUrl:playlistCover},true);
+    mountPlaylistArt(header.querySelector('.view-header-cover'),pl,tracks);
     container.appendChild(header);
     container.appendChild(this.createActionBar(tracks, pl));
     container.appendChild(this.createTrackTable(tracks, pl));

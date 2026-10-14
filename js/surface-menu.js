@@ -14,6 +14,7 @@ export function showSurfaceMenu(ui,{title,items,anchor}={}) {
   ui.dismissSurface=close;
   for(const item of items){
     const b=document.createElement('button');b.className=(ui.isMobile?'mobile-sheet-item':'context-menu-item')+(item.danger?' danger':'');
+    b.setAttribute('aria-label',item.label);
     b.innerHTML=`${item.icon||icons.music}<span>${ui.escapeHTML(item.label)}</span>${item.selected?'<span class="surface-check">✓</span>':''}`;
     if(!ui.isMobile)b.setAttribute('role','menuitem');
     b.onclick=async()=>{close();try{await item.action();}catch(error){ui.showToast(error.message,'error');}};panel.append(b);

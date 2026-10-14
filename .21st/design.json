@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "project": {
+    "name": "playerium",
+    "productType": "Local and cloud music player",
+    "stack": [
+      "vanilla-es-modules",
+      "electron",
+      "android-webview"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "js/themes.js",
+      "css/visual-test.css"
+    ],
+    "components": [],
+    "assets": [
+      "assets"
+    ],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "six themed palettes",
+    "colors": {},
+    "typography": {},
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {},
+    "density": "comfortable or compact"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": [
+      "js/artwork.js",
+      "js/surface-menu.js",
+      "js/playback-controls.js"
+    ],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [
+    "Vanilla ES modules, Electron and Android WebView; preserve framework and native audio services.",
+    "Brown vinyl icon and six palettes retained. Artwork-first layouts; locally bundled Inter with Cyrillic.",
+    "Twenty numbered experiments are enabled in js/visual-features.js; reversible individually.",
+    "Waveforms contain actual decoded PCM peaks; no synthetic placeholder waveform.",
+    "Reuse existing surface menus, playback controls and artwork caching. No continuous blur/glow or entry animations on scrolling rows."
+  ],
+  "evidence": [],
+  "generatedAt": "2026-10-14T17:35:58.943Z"
+}

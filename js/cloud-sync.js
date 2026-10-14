@@ -97,9 +97,9 @@ export class CloudSync {
   for(const [id,old] of Object.entries(this.shadow))if(!this.library.getPlaylistById(id)&&!old.deleted){this.operation('playlist-delete',{playlist:id});old.deleted=true;}
   for(const pl of this.library.getPlaylists().filter(p=>!p.isFolderPlaylist)){
    const keys=pl.trackIds.map(id=>Object.keys(this.links).find(key=>this.links[key].localId===id)).filter(Boolean),old=this.shadow[pl.id];
-   if(!old||old.name!==pl.name||old.description!==(pl.description||''))this.operation('playlist',{playlist:pl.id,name:pl.name,description:pl.description||''});
+   if(!old||old.name!==pl.name||old.description!==(pl.description||'')||old.coverType!==(pl.coverType||'mosaic')||old.coverUrl!==(pl.coverUrl||null))this.operation('playlist',{playlist:pl.id,name:pl.name,description:pl.description||'',coverType:pl.coverType||'mosaic',coverUrl:pl.coverUrl||null});
    for(const key of new Set([...keys,...(old?.keys||[])]))if(keys.includes(key)!==(old?.keys||[]).includes(key))this.operation('member',{playlist:pl.id,key,present:keys.includes(key)});
-   this.shadow[pl.id]={name:pl.name,description:pl.description||'',keys};
+   this.shadow[pl.id]={name:pl.name,description:pl.description||'',coverType:pl.coverType||'mosaic',coverUrl:pl.coverUrl||null,keys};
   }
   await this.save();
  }
@@ -135,7 +135,7 @@ export class CloudSync {
     if(remote.deleted){if(this.library.getPlaylistById(remote.id))await this.library.deletePlaylist(remote.id);this.shadow[remote.id]={deleted:true};continue;}
     if(!remote.meta)continue;
     const keys=[...remote.members].filter(([key,op])=>op.present&&!view.tracks.get(key)?.deleted).map(([key])=>key),trackIds=keys.map(key=>this.links[key]?.localId).filter(id=>id&&this.library.getTrackById(id));
-    const pl={id:remote.id,name:remote.name,description:remote.description,trackIds,createdAt:Date.now(),updatedAt:Date.now()};this.library.playlists.set(pl.id,pl);await this.library.putInStore('playlists',pl);this.shadow[pl.id]={name:pl.name,description:pl.description,keys};
+    const pl={id:remote.id,name:remote.name,description:remote.description,coverType:remote.coverType,coverUrl:remote.coverUrl,trackIds,createdAt:Date.now(),updatedAt:Date.now()};this.library.playlists.set(pl.id,pl);await this.library.putInStore('playlists',pl);this.shadow[pl.id]={name:pl.name,description:pl.description,coverType:pl.coverType,coverUrl:pl.coverUrl,keys};
    }
    this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();this.ui.syncPlayerDisplay?.();
   }finally{this.applying=false;}

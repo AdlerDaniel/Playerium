@@ -125,6 +125,7 @@ class DesktopMusic {
   }
   async request(operation,payload,id) {
     if(!/^[\w-]{1,100}$/.test(id))throw Error('Недопустимый запрос');
+    if(operation==='waveform'){const file=await this.authorize(payload.filePath);if(!this.waveforms){const {WaveformAnalyzer}=require('./desktop-waveform');this.waveforms=new WaveformAnalyzer(path.join(this.tools,'ffmpeg.exe'),path.join(this.app.getPath('userData'),'waveforms'));}return this.waveforms.analyze(file);}
     if(operation==='artwork') {
       const valid=value=>{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&['mzstatic.com','dzcdn.net'].some(host=>u.hostname===host||u.hostname.endsWith('.'+host));};
       let url=String(payload.url||'');if(!valid(url))throw Error('Недопустимая обложка');

@@ -1,4 +1,10 @@
 export const icons = {
+  expand:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  close:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 14 14M19 5 5 19" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  previous:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h3v14H5zm14 0v14L9 12z"/></svg>',
+  next:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h3v14h-3zM5 5v14l10-7z"/></svg>',
+  device:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h12v11H3zm14 4h5v13h-5zM5 19h8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-4-4 4 4 4-4M4 18v3h16v-3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v8h8v2h-8v8h-2v-8H3v-2h8z"/></svg>',
   more: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
   search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',

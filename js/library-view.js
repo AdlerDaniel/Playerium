@@ -1,5 +1,6 @@
 import {icons} from './design-icons.js';
 import {mountCover} from './artwork.js';
+import {mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 import {showSurfaceMenu} from './surface-menu.js';
 import {collectionMenu} from './collection-menu.js';
 export function renderLibrary(ui,container) {
@@ -26,7 +27,7 @@ export function renderLibrary(ui,container) {
     if(sort==='title')items.sort((a,b)=>a.name.localeCompare(b.name,'ru'));if(sort==='recent')items.sort((a,b)=>(b.date||0)-(a.date||0));
     for(const item of items){const row=document.createElement('div');row.className='mobile-lib-row';row.tabIndex=0;row.setAttribute('role','button');
       row.innerHTML=`<div class="mobile-lib-thumb ${item.className||''} ${item.round?'round':''}"></div><div class="mobile-lib-meta"><span class="mobile-lib-name">${ui.escapeHTML(item.name)}</span><span class="mobile-lib-sub">${ui.escapeHTML(item.sub)}</span></div>`;
-      const cover=row.firstElementChild;if(item.pictureUrl)mountCover(cover,item);else cover.innerHTML=item.icon||icons.music;
+      const cover=row.firstElementChild;if(item.playlist)mountPlaylistArt(cover,item.playlist,item.tracks);else if(item.round)mountArtistPortrait(ui,cover,{name:item.name});else if(item.pictureUrl)mountCover(cover,item);else cover.innerHTML=item.icon||icons.music;
       row.onclick=()=>ui.navigateTo(item.view);row.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();row.click();}};
       if(item.playlist){const menu=document.createElement('button');menu.className='library-item-menu';menu.setAttribute('aria-label','Действия: '+item.name);menu.innerHTML=icons.more;menu.onclick=e=>{e.stopPropagation();collectionMenu(ui,{...item,anchor:menu});};row.append(menu);row.oncontextmenu=e=>{e.preventDefault();collectionMenu(ui,{...item,anchor:menu});};}
       list.append(row);

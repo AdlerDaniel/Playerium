@@ -1,10 +1,11 @@
+import {rowHeight as configuredRowHeight} from './visual-features.js';
 /** Keeps large libraries bounded in DOM while preserving original queue indices. */
 export function mountTrackRows(table, tracks, createRow) {
   if (tracks.length <= 200) { tracks.forEach((track, index) => table.appendChild(createRow(track, index))); return; }
   const body = document.createElement('div');
   body.className = 'virtual-track-body';
   body.style.position = 'relative';
-  const rowHeight = 64;
+  const rowHeight = configuredRowHeight();
   body.style.height = `${tracks.length * rowHeight}px`;
   table.appendChild(body);
   let frame = 0;

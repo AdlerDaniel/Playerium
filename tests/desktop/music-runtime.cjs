@@ -22,6 +22,7 @@ const {DesktopMusic}=require('../../desktop-music');
     assert.deepEqual(await analyzer.analyze(quiet),q,'Measured gain must persist');
     assert.equal((await fs.readFile(quiet)).equals(wav),true,'Normalization must not rewrite source audio');
     console.log('Real FFmpeg loudness analysis, normalized level and cache verified');
+    const wave=await engine.request('waveform',{filePath:quiet},'waveform-fixture');assert.equal(wave.peaks.length,192);assert.ok(Math.max(...wave.peaks)>.02&&Math.max(...wave.peaks)<.04);assert.deepEqual(await engine.request('waveform',{filePath:quiet},'waveform-cached'),wave);assert.equal((await fs.readFile(quiet)).equals(wav),true);console.log('Real decoded waveform and persistent cache verified');
     const nativeRun=engine.run.bind(engine);const run=async(...args)=>{try{return await nativeRun(...args);}catch(error){console.error(error.message);throw error;}};
     // Control only extractor responses. Audio transfer, conversion and embedding use bundled executables.
     engine.run=(args,...rest)=>args.includes('--dump-single-json')?Promise.resolve(JSON.stringify({id:'fixture',title:args.at(-1).endsWith('/wrong')?'Wrong recording':'Studio song',artist:'Playerium',uploader:'Playerium',duration:2,webpage_url:args.at(-1),ext:'wav',url:base+'/song.wav',thumbnails:[{url:base+(args.at(-1).endsWith('/no-cover')?'/missing.jpg':'/art.png'),id:'cover'}],extractor:'generic',extractor_key:'Generic',formats:[{format_id:'audio',url:base+'/song.wav',ext:'wav',acodec:'pcm_s16le',protocol:'http'}]})):run(args,...rest);

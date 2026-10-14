@@ -11,6 +11,7 @@ import { MusicCatalog } from './music-catalog.js';
 import {CloudSync} from './cloud-sync.js';
 import {initWindowFrame} from './window-frame.js';
 import {ConnectController} from './connect-controller.js';
+import {installVisualExperience} from './visual-experience.js';
 
 class App {
   constructor() {
@@ -38,6 +39,7 @@ class App {
       this.player.loadSavedPreferences();
       this.ui.init();
       this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);
+      installVisualExperience(this.ui);
       // A slow cloud connection must never delay restoring local playback.
       this.cloud.init().catch(error=>{this.cloud.error=error.message;this.cloud.changed?.();});
       if(!window.AndroidBridge)this.music.restore();

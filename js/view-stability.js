@@ -1,6 +1,6 @@
 export function viewFingerprint(ui){
  const tracks=ui.library.getTracks().map(t=>[t.id,t.title,t.artist,t.pictureUrl,t.duration,!!t.liked,t.dateAdded]);
- const playlists=ui.library.getPlaylists().map(p=>[p.id,p.name,p.description,p.trackIds,p.coverUrl]);
+ const playlists=ui.library.getPlaylists().map(p=>[p.id,p.name,p.description,p.trackIds,p.coverType,p.coverUrl]);
  return JSON.stringify([tracks,playlists,ui.library.folders,!!ui.library.importing,ui.isMobile,ui.homeFilter,ui.libraryTab,ui.librarySort,ui.libraryLayout,ui.sortBy,ui.sortAsc,ui.searchQuery]);
 }
 export function restoreViewState(container,state){

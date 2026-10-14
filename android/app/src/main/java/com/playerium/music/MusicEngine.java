@@ -97,6 +97,7 @@ final class MusicEngine {
             throw new IOException("Недопустимая обложка");
         }
         if(operation.equals("loudness"))return analyzeLoudness(Uri.parse(payload.getString("uri")));
+        if(operation.equals("waveform"))return analyzeWaveform(Uri.parse(payload.getString("uri")));
         if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {String key=keys.next();JSONObject record=saved.getJSONObject(key);if(exists(record)){cleanSidecar(record);try{record=protectDownloaded(record,key);}catch(IOException|SecurityException error){android.util.Log.w("Playerium","Could not hide downloaded media yet",error);}files.put(record);}}return files;}
         if(operation.equals("describe")){JSONObject record=records().optJSONObject(payload.getString("downloadId"));if(record==null)throw new IOException("Track unavailable");return withCover(record);}
         if(operation.equals("delete")) {String key=payload.getString("downloadId");JSONObject record=records().optJSONObject(key);if(record!=null){if(record.optJSONObject("legacyMedia")!=null){deleteOwned(record.getJSONObject("legacyMedia"));refreshGallery(record.getJSONObject("legacyMedia"));}deleteOwned(record);records().remove(key);saveRecords();}return true;}
@@ -156,6 +157,7 @@ final class MusicEngine {
         try(InputStream in=context.getAssets().open("music-runtime/yt-dlp");OutputStream out=new FileOutputStream(new File(runtime,"yt-dlp"))){copy(in,out);}
         new File(runtime,"ready").createNewFile();
     }
+    JSONObject analyzeWaveform(Uri uri) throws Exception {if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");initialize();return WaveformAnalyzer.analyze(context,uri,runtime);}
     synchronized JSONObject analyzeLoudness(Uri uri) throws Exception {
         if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");
         DocumentFile document=DocumentFile.fromSingleUri(context,uri);

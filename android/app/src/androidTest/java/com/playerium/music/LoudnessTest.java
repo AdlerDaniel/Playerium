@@ -29,7 +29,15 @@ public class LoudnessTest {
     assertEquals(q,MusicEngine.get(context).knownLoudness(android.net.Uri.fromFile(quiet)),.00001);
   }finally{quiet.delete();loud.delete();}
  }
+ @Test public void nativeWaveformUsesActualSignalAndSilenceAndCachesIt()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();File file=tone(context,"waveform-real.wav",8000);
+  try{try(java.io.RandomAccessFile audio=new java.io.RandomAccessFile(file,"rw")){audio.seek(40044);audio.write(new byte[40000]);}
+   org.json.JSONObject result=MusicEngine.get(context).analyzeWaveform(android.net.Uri.fromFile(file));org.json.JSONArray peaks=result.getJSONArray("peaks");assertEquals(192,peaks.length());assertTrue(peaks.getDouble(30)>.2);for(int i=110;i<192;i++)assertTrue(peaks.getDouble(i)<.001);assertEquals(result.toString(),MusicEngine.get(context).analyzeWaveform(android.net.Uri.fromFile(file)).toString());assertEquals(80044,file.length());
+   try{MusicEngine.get(context).analyzeWaveform(android.net.Uri.parse("file:///data/local/tmp/private.wav"));fail("Unauthorized audio must be rejected");}catch(SecurityException expected){}
+  }finally{file.delete();}
+ }
  @Test public void pcmGainKeepsChannelBalanceAndCannotOverflow()throws Exception{
+
   NormalizationProcessor processor=new NormalizationProcessor();processor.configure(new AudioProcessor.AudioFormat(48000,2,C.ENCODING_PCM_16BIT));processor.flush();processor.startTrack(2);
   ByteBuffer input=ByteBuffer.allocateDirect(8).order(ByteOrder.LITTLE_ENDIAN);input.putShort((short)1000).putShort((short)-1000).putShort((short)30000).putShort((short)-30000).flip();processor.queueInput(input);ByteBuffer out=processor.getOutput().order(ByteOrder.LITTLE_ENDIAN);
   assertEquals(2000,out.getShort());assertEquals(-2000,out.getShort());assertEquals(32767,out.getShort());assertEquals(-32767,out.getShort());

@@ -1,3 +1,4 @@
+import {enabled} from './visual-features.js';
 export const THEMES=[
  {id:'light-brown',name:'Светло-коричневая',scheme:'light',colors:['#ded0bd','#f6efe5','#eee3d4','#e5d6c1','#dcc9ae','#d0b895','#bea07a','#392b20','#6b5541','#795333','#563923','#ffffff','#bda17a']},
  {id:'dark-brown',name:'Тёмно-коричневая',scheme:'dark',colors:['#160f0c','#251b16','#30231c','#3b2b22','#463228','#574034','#705442','#f4e9da','#c8b49e','#d8ad78','#eac391','#24190f','#76523a']},
@@ -12,7 +13,8 @@ export function applyTheme(id,persist=true){
  const keys=['--sp-black','--sp-dark-900','--sp-dark-800','--sp-dark-700','--sp-dark-600','--sp-dark-500','--sp-dark-400','--sp-text-primary','--sp-text-secondary','--sp-green','--sp-green-hover','--sp-on-accent','--theme-hero'];
  keys.forEach((key,i)=>root.style.setProperty(key,c[i]));
   const mix = (a,b,weight) => '#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*weight+parseInt(b.slice(i,i+2),16)*(1-weight)).toString(16).padStart(2,'0')).join('');
-  root.style.setProperty('--theme-home-top',mix(c[12],c[1],.22));
+   if(enabled(1)){for(let i=0;i<7;i++)root.style.setProperty(keys[i],mix(c[i],theme.scheme==='light'?'#f4efe8':'#161616',.3));}
+   root.style.setProperty('--theme-home-top',mix(c[12],getComputedStyle(root).getPropertyValue('--sp-dark-900').trim()||c[1],enabled(1)?.08:.22));
  root.style.setProperty('--sp-text-subdued',c[8]);root.style.setProperty('--sp-green-active',c[9]);root.style.setProperty('--sp-theme-color',c[9]);
  root.style.setProperty('--theme-hover',theme.scheme==='light'?'#392b2010':'#ffffff10');root.style.setProperty('--theme-selection',theme.scheme==='light'?'#79533322':c[9]+'24');
  root.dataset.theme=theme.id;root.style.colorScheme=theme.scheme;

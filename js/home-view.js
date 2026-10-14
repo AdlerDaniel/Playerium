@@ -1,9 +1,10 @@
 import { bindCollectionPlay, playRow } from './playback-controls.js';
 import { icons } from './design-icons.js';
 import {mountCover} from './artwork.js';
+import {mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 
 function artwork(ui, item) {
-  return item.pictureUrl ? '<span class="card-cover"></span>' : icons[item.icon || 'music'];
+  return item.pictureUrl || item.playlist || item.round || item.tracks?.[0] ? '<span class="card-cover"></span>' : icons[item.icon || 'music'];
 }
 function activate(element, action) {
   element.tabIndex = 0;
@@ -19,7 +20,7 @@ export function renderHomeDashboard(container) {
   const playlists = this.library.getPlaylists().filter(p => !p.isFolderPlaylist).map(pl => ({
     title: pl.name, subtitle: `Плейлист • ${pl.trackIds.length} треков`,
     pictureUrl: this.library.getPlaylistTracks(pl.id).find(t => t.pictureUrl)?.pictureUrl,
-    view: {type:'playlist',id:pl.id,title:pl.name}, tracks: this.library.getPlaylistTracks(pl.id),
+    playlist:pl,view: {type:'playlist',id:pl.id,title:pl.name}, tracks: this.library.getPlaylistTracks(pl.id),
   }));
   const artists = this.library.getArtists().map(a => ({title:a.name,subtitle:'Исполнитель',pictureUrl:a.pictureUrl,icon:'artist',round:true,
     view:{type:'artist',id:a.name,title:a.name},tracks:a.tracks}));
@@ -40,7 +41,7 @@ export function renderHomeDashboard(container) {
   for (const item of quickItems.slice(0,8)) {
     const card=document.createElement('div');card.className='home-quick-card';
     card.innerHTML=`<div class="home-quick-art ${item.className||''}">${artwork(ui,item)}</div><span>${this.escapeHTML(item.title)}</span>`;
-    if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item,true);
+    const cover=card.querySelector('.card-cover');if(cover){if(item.playlist)mountPlaylistArt(cover,item.playlist,item.tracks);else if(item.round)mountArtistPortrait(ui,cover,{name:item.title,pictureUrl:item.pictureUrl});else mountCover(cover,item.tracks?.[0]||item,true);}
     activate(card,()=>this.navigateTo(item.view));quick.append(card);
   }
   home.append(quick);
@@ -55,7 +56,7 @@ export function renderHomeDashboard(container) {
     for(const item of items.slice(0,12)) {
       const card=document.createElement('div');card.className='shelf-card'+(item.round?' artist':'');
       card.innerHTML=`<div class="shelf-art">${artwork(ui,item)}<button class="shelf-play" aria-label="Воспроизвести ${this.escapeHTML(item.title)}">${icons.play}</button></div><div class="shelf-title">${this.escapeHTML(item.title)}</div><div class="shelf-subtitle">${this.escapeHTML(item.subtitle)}</div>`;
-      if(item.pictureUrl)mountCover(card.querySelector('.card-cover'),item,true);
+      const cover=card.querySelector('.card-cover');if(cover){if(item.playlist)mountPlaylistArt(cover,item.playlist,item.tracks);else if(item.round)mountArtistPortrait(ui,cover,{name:item.title,pictureUrl:item.pictureUrl});else mountCover(cover,item.tracks?.[0]||item,true);}
       activate(card,()=>item.view?this.navigateTo(item.view):playRow(this,item.tracks[0],tracks,all.view));
       const button=card.querySelector('.shelf-play');
       if(item.view) bindCollectionPlay(this,button,item.tracks,item.view);

@@ -30,7 +30,7 @@ export function cloudView(events) {
     if(op.playlist){
       if(!playlists.has(op.playlist))playlists.set(op.playlist,{id:op.playlist,members:new Map(),deleted:false});
       const pl=playlists.get(op.playlist);
-      if(op.kind==='playlist'&&newer(op,pl.meta)){pl.meta=op;pl.name=op.name;pl.description=String(op.description||'').slice(0,3000);}
+      if(op.kind==='playlist'&&newer(op,pl.meta)){pl.meta=op;pl.name=op.name;pl.description=String(op.description||'').slice(0,3000);pl.coverType=['custom','text','mosaic'].includes(op.coverType)?op.coverType:'mosaic';pl.coverUrl=typeof op.coverUrl==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(op.coverUrl)&&op.coverUrl.length<=200000?op.coverUrl:null;}
       if(op.kind==='playlist-delete')pl.deleted=true;
       if(op.kind==='member'&&newer(op,pl.members.get(op.key)))pl.members.set(op.key,op);
     }

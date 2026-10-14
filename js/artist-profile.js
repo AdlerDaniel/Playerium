@@ -3,6 +3,7 @@ import {icons} from './design-icons.js';
 import {artistCredits,belongsToArtist} from './music-artists.js';
 import {artistKey} from './music-match.js';
 import {loadingRows} from './loading.js';
+import {mountArtistPortrait} from './visual-art.js';
 
 export function renderArtistProfile(container,name) {
   const ui=this,requested=ui.currentView.artist||{name};
@@ -12,7 +13,7 @@ export function renderArtistProfile(container,name) {
     root.replaceChildren();const {artist,tracks}=profile;
     const header=document.createElement('div');header.className='view-header';
     header.innerHTML=`<div class="view-header-cover artist-hero-art">${icons.artist}</div><div class="view-header-details"><span class="view-type-badge">Исполнитель</span><h1 class="view-title">${ui.escapeHTML(artist.name)}</h1><div class="view-metadata">${tracks.length?`${tracks.length} треков`:''}</div></div>`;
-    const picture=artist.pictureUrl||tracks.find(t=>t.pictureUrl)?.pictureUrl;if(picture)mountCover(header.firstElementChild,{pictureUrl:picture},true);
+    mountArtistPortrait(ui,header.firstElementChild,artist);
     root.append(header);if(tracks.length)root.append(ui.createActionBar(tracks));
     if(busy&&!tracks.length)root.append(loadingRows(6));
     const status=document.createElement('p');status.className='artist-profile-status';status.setAttribute('role','status');status.textContent=busy?'Загрузка песен…':profile.offline?'Не удалось загрузить каталог. Показаны доступные треки.':'';root.append(status);
@@ -23,6 +24,7 @@ export function renderArtistProfile(container,name) {
     section('Совместные записи',features);
     if(!busy&&!tracks.length){const empty=document.createElement('p');empty.className='artist-profile-status';empty.textContent=profile.offline?'Проверьте подключение и попробуйте ещё раз.':'Песни этого исполнителя пока не найдены.';root.append(empty);}
     if(!busy&&profile.offline){const retry=document.createElement('button');retry.className='search-show-all';retry.textContent='Повторить';retry.onclick=()=>ui.refreshCurrentView();root.append(retry);}
+    if(ui.experience)ui.experience.compactHeader(root);
   };
   render();
   if(ui.music?.available)ui.music.artistProfile(requested).then(value=>{if(!root.isConnected||ui.currentView.type!=='artist'||ui.currentView.id!==name)return;profile=value;busy=false;render();}).catch(()=>{if(!root.isConnected)return;busy=false;profile.offline=true;render();});

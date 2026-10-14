@@ -25,7 +25,7 @@ test('mobile home and search have continuous themed surfaces and aligned history
   expect(home.child).toBe('none');await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.main-view-container')).backgroundImage.includes(getComputedStyle(document.querySelector('.topbar')).backgroundColor))).toBe(true);
   await page.screenshot({path:info.outputPath(id+'-home.png')});
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'search'}));
-  const xs=await page.locator('.search-recent-query svg').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().left));expect(new Set(xs).size).toBe(1);expect(xs[0]).toBeLessThan(25);
+  const xs=await page.locator('.search-recent-query .history-art').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().left));expect(new Set(xs).size).toBe(1);expect(xs[0]).toBeLessThan(40);
   await page.locator('.mobile-search-input').focus();
   expect(await page.locator('.mobile-search-input').evaluate(n=>getComputedStyle(n).outlineStyle)).toBe('none');
   const title=await page.locator('.mobile-search-title').boundingBox();expect(title.y).toBeGreaterThanOrEqual(24);
