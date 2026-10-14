@@ -11,7 +11,7 @@ for (const mobile of [false,true]) test(`shuffle keeps playback position and lyr
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   if(mobile)await page.setViewportSize({width:390,height:844});
   await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles([
     {name:'Nirvana - Smells Like Teen Spirit - Smells Like Teen Spirit.wav',mimeType:'audio/wav',buffer:wav(60)},
     {name:'Artist - Another Song.wav',mimeType:'audio/wav',buffer:wav(60)}
@@ -95,7 +95,7 @@ test('mobile controls open player, queue and equalizer after import',async({page
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width:390,height:844});
   await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.evaluate(() => window.playerApp.ui.navigateTo({type:'allTracks',title:'Все треки'}));
   await expect(page.locator('.track-name').first()).toHaveText('Song');
@@ -114,7 +114,7 @@ test('mobile controls open player, queue and equalizer after import',async({page
 });
 test('home shelves, library filters and navigation expose the imported collection',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await expect(page.locator('.shelf-title').first()).toHaveText('Song');
   await page.locator('.home-quick-card').filter({hasText:'Добавленные'}).click();
@@ -143,7 +143,7 @@ for (const mobile of [false, true]) {
     const errors=[]; page.on('pageerror', e=>errors.push(e.message));
     if (mobile) await page.setViewportSize({width:390,height:844});
     await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));
-    await page.goto('/'); await page.waitForFunction(()=>window.playerApp?.library.db);
+    await page.goto('/'); await page.waitForFunction(()=>window.playerApp?.ui.history.length);
     await page.locator('#hiddenAudioFilesPicker').setInputFiles([
       {name:'Artist - First.wav',mimeType:'audio/wav',buffer:wav(60)},
       {name:'Other - Second.wav',mimeType:'audio/wav',buffer:wav(60)}
@@ -184,7 +184,7 @@ for (const mobile of [false, true]) {
 
 test('imports go to Added without polluting the default library; explicit filters remain usable',async({page})=>{
   await page.setViewportSize({width:390,height:844});
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.locator('#mobileNavLibrary').click();
   await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные','Любимые треки']);
@@ -197,7 +197,7 @@ test('imports go to Added without polluting the default library; explicit filter
 
 test('scrollbars stay hidden even during scrolling while content remains scrollable',async({page})=>{
   await page.setViewportSize({width:320,height:640});
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   const filters=page.locator('#mainTopbar .home-filters');
   expect(await filters.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
@@ -209,7 +209,7 @@ test('scrollbars stay hidden even during scrolling while content remains scrolla
 });
 
 test('seek preview survives time updates and dragging commits once; volume supports keyboard',async({page})=>{
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));
   await page.locator('.track-name').click();await page.waitForFunction(()=>window.playerApp.player.isPlaying);
@@ -233,13 +233,13 @@ test('seek preview survives time updates and dragging commits once; volume suppo
 
 test('saved volume, shuffle and repeat are reflected at startup',async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('sp_audio_prefs',JSON.stringify({volume:.25,isShuffle:true,repeatMode:'one'})));
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await expect(page.locator('#volumeSliderContainer')).toHaveAttribute('aria-valuenow','25');
   await expect(page.locator('#btnShuffle')).toHaveAttribute('aria-pressed','true');
   await expect(page.locator('#btnRepeat')).toHaveAttribute('data-repeat','one');
 });
 test('changing track keeps an open queue visible and queue rows work with keyboard',async({page})=>{
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles([
     {name:'Artist - First.wav',mimeType:'audio/wav',buffer:wav(60)},
     {name:'Artist - Second.wav',mimeType:'audio/wav',buffer:wav(60)}
@@ -257,7 +257,7 @@ test('changing track keeps an open queue visible and queue rows work with keyboa
 });
 
 test('refresh and back navigation preserve scroll position in large collections',async({page})=>{
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.evaluate(()=>{
     for(let i=0;i<200;i++)window.playerApp.library.tracks.set(`t${i}`,{id:`t${i}`,title:`Song ${i}`,artist:'Artist',duration:42,dateAdded:i});
     window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'});
@@ -272,7 +272,7 @@ test('refresh and back navigation preserve scroll position in large collections'
 test('mobile home filters remain visible and search keeps focus while typing',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width:390,height:844});
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await expect(page.locator('#mainTopbar .home-filters')).toBeVisible();
   const box=await page.locator('#mainTopbar .home-filters').boundingBox();
   expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(80);

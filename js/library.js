@@ -138,8 +138,10 @@ export class Library {
   }
 
   coverURL(id, blob) {
-    if (this.coverUrls.has(id)) URL.revokeObjectURL(this.coverUrls.get(id));
+    this.coverBlobs||=new Map();if(this.coverBlobs.get(id)===blob&&this.coverUrls.has(id))return this.coverUrls.get(id);
+    this.retiredCoverUrls||=new Set();if(this.coverUrls.has(id))this.retiredCoverUrls.add(this.coverUrls.get(id));
     const url = URL.createObjectURL(blob);
+    this.coverBlobs.set(id,blob);
     this.coverUrls.set(id, url);
     return url;
   }
@@ -445,6 +447,7 @@ export class Library {
     this.tracks.clear();
     this.audioBlobs.clear();
     for (const url of this.coverUrls.values()) URL.revokeObjectURL(url);
+    for(const url of this.retiredCoverUrls||[])URL.revokeObjectURL(url);this.retiredCoverUrls?.clear();this.coverBlobs?.clear();
     this.coverUrls.clear();
     this.playlists.clear();
     this.folders = [];

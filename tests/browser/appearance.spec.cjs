@@ -46,7 +46,7 @@ test('mobile player restores native playback on reload and return without sendin
  await expect(page.locator('#mobileMiniPlayer')).toBeVisible();await expect(page.locator('#currentTimeLabel')).toHaveText('1:34');
  expect(await page.evaluate(()=>window.nativeWrites)).toEqual([]);
 });
-async function boot(page){await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);}
+async function boot(page){await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);}
 async function within(page,selector){await expect.poll(async()=>{const b=await page.locator(selector).boundingBox(),v=page.viewportSize();return !!b&&b.x>=7&&b.y>=7&&b.x+b.width<=v.width-7&&b.y+b.height<=v.height-7;}).toBe(true);}
 test('desktop tooltips flip at top, clamp at sides, show on keyboard focus and dismiss',async({page})=>{
  await page.setViewportSize({width:1000,height:700});await boot(page);
@@ -74,5 +74,5 @@ for(const mobile of [false,true])test(`six complete themes cover surfaces, retai
   backgrounds.push(colors.background);expect(colors.primary).toBeGreaterThanOrEqual(4.5);expect(colors.secondary).toBeGreaterThanOrEqual(4.5);expect(colors.button).toBeGreaterThanOrEqual(4.5);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:info.outputPath(id+'.png')});
  }
- expect(new Set(backgrounds).size).toBe(6);await page.reload();await page.waitForFunction(()=>window.playerApp?.library.db);await expect(page.locator('html')).toHaveAttribute('data-theme','yellow');await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('[data-theme-id="yellow"]')).toHaveAttribute('aria-pressed','true');
+ expect(new Set(backgrounds).size).toBe(6);await page.reload();await page.waitForFunction(()=>window.playerApp?.ui.history.length);await expect(page.locator('html')).toHaveAttribute('data-theme','yellow');await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('[data-theme-id="yellow"]')).toHaveAttribute('aria-pressed','true');
 });

@@ -143,7 +143,8 @@ export function bindMobileEvents() {
     miniPlayer.tabIndex=0;miniPlayer.setAttribute('role','button');miniPlayer.setAttribute('aria-label','Открыть плеер');miniPlayer.onkeydown=e=>{if(e.target===miniPlayer&&['Enter',' '].includes(e.key)){e.preventDefault();miniPlayer.click();}};
     fsPlayer.onkeydown=e=>{if(e.key==='Tab'){const targets=[...fsPlayer.querySelectorAll('button,input')],i=targets.indexOf(document.activeElement);e.preventDefault();targets[(i+(e.shiftKey?-1:1)+targets.length)%targets.length]?.focus();}};
     // Fullscreen Options Button
-    document.getElementById("btnMobileFsOptions")?.addEventListener("click", () => {
+    document.getElementById("btnMobileFsOptions")?.addEventListener("click", e => {
+      e.stopPropagation();
       if (this.player.currentTrack) {
         this.showMobileTrackOptionsSheet(this.player.currentTrack, this.player.queueIndex, this.player.queue, null);
       }

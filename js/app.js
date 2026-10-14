@@ -10,6 +10,7 @@ import { ShortcutsManager } from "./shortcuts.js";
 import { MusicCatalog } from './music-catalog.js';
 import {CloudSync} from './cloud-sync.js';
 import {initWindowFrame} from './window-frame.js';
+import {ConnectController} from './connect-controller.js';
 
 class App {
   constructor() {
@@ -33,14 +34,15 @@ class App {
       await this.library.init();
       const previousNativeUris = new Map(this.library.getTracks().map(track => [track.id,track.nativeUri]));
       // Android can relocate old downloads before exposing playable library rows.
-      if(window.AndroidBridge)await this.music.restore();
+      const restoreTask=window.AndroidBridge?this.music.restore():null;
       this.player.loadSavedPreferences();
       this.ui.init();
+      this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);
       // A slow cloud connection must never delay restoring local playback.
       this.cloud.init().catch(error=>{this.cloud.error=error.message;this.cloud.changed?.();});
       if(!window.AndroidBridge)this.music.restore();
       if (window.AndroidBridge?.getPlaybackState) {
-        let relocated = this.library.getTracks().some(track => previousNativeUris.has(track.id) && previousNativeUris.get(track.id) !== track.nativeUri);
+        let relocated = false;
         const restorePlayback = () => {
           try {
             this.player.applyNativeState(JSON.parse(window.AndroidBridge.getPlaybackState()));
@@ -49,6 +51,7 @@ class App {
           } catch (error) { console.warn('Playback display restoration failed', error); }
         };
         restorePlayback();
+        restoreTask?.then(()=>{relocated=this.library.getTracks().some(track=>previousNativeUris.has(track.id)&&previousNativeUris.get(track.id)!==track.nativeUri);restorePlayback();}).catch(console.warn);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) restorePlayback(); });
         window.addEventListener('pageshow', restorePlayback);
       }

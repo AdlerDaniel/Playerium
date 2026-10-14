@@ -1,6 +1,6 @@
 const { readdirSync, readFileSync } = require('node:fs');
 const { spawnSync } = require('node:child_process');
-for (const file of ['main.js', 'preload.js', 'desktop-files.js', 'desktop-updater.js', 'desktop-update-helper.js', 'desktop-music.js','desktop-cloud.js','desktop-cloud-http.js', ...readdirSync('scripts').filter(x => x.endsWith('.js')).map(x => `scripts/${x}`)]) {
+for (const file of ['main.js', 'preload.js', 'desktop-files.js', 'desktop-updater.js', 'desktop-update-helper.js', 'desktop-music.js','desktop-cloud.js','desktop-cloud-http.js','desktop-connect.js', ...readdirSync('scripts').filter(x => x.endsWith('.js')).map(x => `scripts/${x}`)]) {
   const result = spawnSync(process.execPath, ['--check', file], { stdio: 'inherit' });
   if (result.status) process.exit(result.status);
 }

@@ -393,10 +393,10 @@ public class MainActivity extends AppCompatActivity {
                 BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
                 BitmapFactory.decodeByteArray(art, 0, art.length, bounds);
                 BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1;
-                while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 512) options.inSampleSize *= 2;
+                while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 1600) options.inSampleSize *= 2;
                 Bitmap image = BitmapFactory.decodeByteArray(art, 0, art.length, options);
                 if (image != null) {
-                    ByteArrayOutputStream output = new ByteArrayOutputStream(); image.compress(Bitmap.CompressFormat.JPEG, 80, output); image.recycle();
+                    ByteArrayOutputStream output = new ByteArrayOutputStream(); image.compress(Bitmap.CompressFormat.JPEG, 94, output); image.recycle();
                     data.put("pictureBase64", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP));
                 }
             }

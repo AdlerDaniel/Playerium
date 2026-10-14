@@ -49,8 +49,8 @@ export function catalogTracks(provider,data) {
       return [{title,artist,duration,catalog:true,official:false,sources:[{provider,url,title,artist,duration,official:false}]}];
     });
   }
-  if(provider.startsWith('itunes'))return (data?.results||[]).filter(t=>t.trackName).map(t=>({title:t.trackName,artist:t.artistName,album:t.collectionName,itunesArtistId:t.artistId,year:t.releaseDate?.slice(0,4),duration:t.trackTimeMillis/1000,trackNo:t.trackNumber,genre:t.primaryGenreName,pictureUrl:t.artworkUrl100?.replace('100x100bb','600x600bb'),pictureUrls:[t.artworkUrl100?.replace('100x100bb','600x600bb'),t.artworkUrl100].filter(Boolean),official:true,catalog:true,sources:[]}));
-  if(provider==='deezer'||provider==='deezerArtistTop')return (data?.data||[]).map(t=>({title:t.title,artist:t.artist?.name,album:t.album?.title,deezerArtistId:t.artist?.id,contributors:t.contributors||[],popularity:popularityScore(t),duration:t.duration,pictureUrl:t.album?.cover_big,pictureUrls:[t.album?.cover_big,t.album?.cover_medium,t.album?.cover].filter(Boolean),isrc:t.isrc,official:true,catalog:true,sources:[]}));
+  if(provider.startsWith('itunes'))return (data?.results||[]).filter(t=>t.trackName).map(t=>({title:t.trackName,artist:t.artistName,album:t.collectionName,itunesArtistId:t.artistId,year:t.releaseDate?.slice(0,4),duration:t.trackTimeMillis/1000,trackNo:t.trackNumber,genre:t.primaryGenreName,pictureUrl:t.artworkUrl100?.replace('100x100bb','1200x1200bb'),pictureUrls:[t.artworkUrl100?.replace('100x100bb','1200x1200bb'),t.artworkUrl100].filter(Boolean),official:true,catalog:true,sources:[]}));
+  if(provider==='deezer'||provider==='deezerArtistTop')return (data?.data||[]).map(t=>({title:t.title,artist:t.artist?.name,album:t.album?.title,deezerArtistId:t.artist?.id,contributors:t.contributors||[],popularity:popularityScore(t),duration:t.duration,pictureUrl:t.album?.cover_xl||t.album?.cover_big,pictureUrls:[t.album?.cover_xl,t.album?.cover_big,t.album?.cover_medium,t.album?.cover].filter(Boolean),isrc:t.isrc,official:true,catalog:true,sources:[]}));
   if(provider==='musicbrainz')return (data.recordings||[]).filter(t=>t['artist-credit']?.length).map(t=>({title:t.title,artist:t['artist-credit'].map(a=>a.name+(a.joinphrase||'')).join(''),year:t['first-release-date']?.slice(0,4)||'',duration:(t.length||0)/1000,isrc:t.isrcs?.[0]||'',official:true,catalog:true,sources:[]}));
   if(provider==='audius')return (data.data||[]).map(t=>({title:t.title,artist:t.user?.name,duration:t.duration,genre:t.genre,pictureUrl:t.artwork?.['480x480'],pictureUrls:Object.values(t.artwork||{}).filter(url=>typeof url==='string'),official:!!t.user?.is_verified,catalog:true,sources:t.permalink?[{provider,url:`https://audius.co${t.permalink.startsWith('/')?'':'/'}${t.permalink}`,official:!!t.user?.is_verified}]:[]}));
   if(provider==='bandcamp') {
@@ -150,7 +150,7 @@ export class MusicCatalog {
           return catalogTracks(provider,data).find(t=>sameRecording(track,t));
         }));
         track={...track};
-        for(const result of metadata)if(result.status==='fulfilled'&&result.value)for(const field of ['year','trackNo','genre','isrc','pictureUrl','duration'])if(!track[field]&&result.value[field])track[field]=result.value[field];
+        for(const result of metadata)if(result.status==='fulfilled'&&result.value)for(const field of ['album','year','trackNo','genre','isrc','pictureUrl','duration'])if(!track[field]&&result.value[field])track[field]=result.value[field];
       }
       let sources=[...(track.sources||[]),...recordingSources(`${track.artist} ${track.title}`).filter(t=>sameRecording(track,t)).flatMap(t=>t.sources)],saved,lastError,discoveryError;
       const attempted=new Set();

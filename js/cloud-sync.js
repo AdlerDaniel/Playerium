@@ -14,7 +14,7 @@ export class CloudSync {
  }
  async init(){
   const state=await this.library.getFromStore('settings','cloudSync');this.states=state?.value||{};
-  const previous=this.library.onLibraryChanged;this.library.onLibraryChanged=()=>{previous?.();if(this.busy)this.resync=true;else this.schedule();};
+   const previous=this.library.onLibraryChanged;this.library.onLibraryChanged=()=>{this.captureDeletions();previous?.();if(this.busy)this.resync=true;else this.schedule();};
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)this.schedule(0);});window.addEventListener('online',()=>this.schedule(0));
   if(this.available){this.refreshStatus().catch(error=>{this.error=error.message;this.changed?.();});this.schedule(1000);this.interval=setInterval(()=>this.schedule(0),30000);}
  }
@@ -52,7 +52,12 @@ export class CloudSync {
    await this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))));
    this.lastSync=Date.now();await this.save();
     if(this.failures.length)throw Error(`Не завершено операций: ${this.failures.length}. ${this.failures[0]}`);
-  }finally{this.busy=false;this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
+  }finally{this.busy=false;globalThis.document?.querySelectorAll('.loading-rows[data-cloud-loading]').forEach(node=>node.remove());this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
+ }
+ captureDeletions(){if(!this.account||!this.links||!this.shadow)return;const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));let changed=false;
+  for(const [key,link] of Object.entries(this.links))if(link.localId&&!this.library.getTrackById(link.localId)&&!link.removed&&!view.tracks.get(key)?.deleted){this.operation('delete',{key});link.removed=true;changed=true;}
+  for(const [id,old] of Object.entries(this.shadow))if(!this.library.getPlaylistById(id)&&!old.deleted&&!view.playlists.get(id)?.deleted){this.operation('playlist-delete',{playlist:id});old.deleted=true;changed=true;}
+  if(changed)this.save().catch(error=>{this.error=error.message;});
  }
  async cover(track){
   if(!track.pictureBlob||track.pictureBlob.size>4*1024*1024)return null;
@@ -108,6 +113,7 @@ export class CloudSync {
    if(window.AndroidBridge&&downloads.length)await this.request('queueDownloads',{tracks:downloads.map(([key,remote])=>({key,track:remote.data}))});
    for(const [key,remote] of view.tracks){
     try{
+     if(this.outbox.some(op=>op.kind==='delete'&&op.key===key))remote.deleted=true;
     let link=this.links[key],track=link&&this.library.getTrackById(link.localId);
     if(remote.deleted){if(track){if(this.ui.player.currentTrack?.id===track.id)this.ui.player.stop();await this.library.removeTrack(track.id);this.ui.player.removeTrack?.(track.id);}await this.request('removeLocal',{key});if(link)link.removed=true;await this.save();continue;}
     if(!remote.data)continue;
@@ -122,9 +128,10 @@ export class CloudSync {
     link.coverSignature=await this.coverSignature(track);
     await this.save();
     if(downloads.some(([k])=>k===key)){this.progress.done++;this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();this.changed?.();}
-    }catch(error){this.failures?.push(error.message);await this.save();}
+    }catch(error){this.failures?.push(`${remote.data?.title||key}: ${error.message}`);await this.save();}
    }
    for(const remote of view.playlists.values()){
+    if(this.outbox.some(op=>op.kind==='playlist-delete'&&op.playlist===remote.id))remote.deleted=true;
     if(remote.deleted){if(this.library.getPlaylistById(remote.id))await this.library.deletePlaylist(remote.id);this.shadow[remote.id]={deleted:true};continue;}
     if(!remote.meta)continue;
     const keys=[...remote.members].filter(([key,op])=>op.present&&!view.tracks.get(key)?.deleted).map(([key])=>key),trackIds=keys.map(key=>this.links[key]?.localId).filter(id=>id&&this.library.getTrackById(id));

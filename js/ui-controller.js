@@ -6,6 +6,7 @@ import { bindSlider, syncPlaybackControls } from './playback-controls.js';
 import { saveIcon } from "./design-icons.js";
 import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, createActionBar } from "./library-views.js";
 import {loadingRows} from './loading.js';
+import {initSidebarCollapse} from './sidebar-collapse.js';
 import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
 import { renderRightQueue } from "./queue-view.js";
@@ -45,6 +46,7 @@ export class UIController {
     this.hideTooltip=installTooltips();
     this.initMobileState();
     this.bindDOM();
+    initSidebarCollapse(this);
     this.bindMobileEvents();
     this.bindPlayerEvents();
     this.renderSidebar();
@@ -52,6 +54,8 @@ export class UIController {
     this.setupDropZone();
     // The native service can report a track before the WebView finishes loading.
     this.syncPlayerDisplay();
+    const restoreView=()=>{if(!document.hidden){document.getElementById('mainViewContent')?.classList.remove('view-enter');this.refreshCurrentView();}};
+    document.addEventListener('visibilitychange',restoreView);window.addEventListener('pageshow',restoreView);
     setTimeout(() => this.updater.checkForUpdates(false), 2000);
   }
 
@@ -84,7 +88,7 @@ export class UIController {
       document.getElementById("searchClearBtn").classList.remove("visible");
       this.navigateTo({type:"home",title:"Главная"});
     });
-    document.getElementById("btnLibraryHeader").addEventListener("click", () => this.navigateTo({type:"library",title:"Моя медиатека"}));
+    document.getElementById("btnLibraryHeader").addEventListener("click", () => {if(this.isMobile)this.navigateTo({type:"library",title:"Моя медиатека"});});
     document.getElementById("librarySearchInput").addEventListener("input", e => {this.libraryQuery=e.target.value.trim();this.renderSidebar();});
     for(const id of ["btnPlayerLike","mobileMiniLike","btnMobileFsLike"]) {
       document.getElementById(id).innerHTML=saveIcon;
@@ -190,7 +194,7 @@ export class UIController {
 
 
     // Close context menu on any document click
-    document.addEventListener("click", e => {if(!e.target.closest("#appContextMenu"))this.closeContextMenu();});
+    document.addEventListener("click", e => {if(document.getElementById('appContextMenu').classList.contains('active')&&!e.target.closest("#appContextMenu"))this.closeContextMenu();});
     document.addEventListener("contextmenu", (e) => {
       if (!e.target.closest(".track-row") && !e.target.closest(".sidebar-item")) {
         this.closeContextMenu();
@@ -552,7 +556,7 @@ export class UIController {
     const container = document.getElementById("mainViewContent");
     container.innerHTML = "";
 
-    switch (view.type) {
+    try{switch (view.type) {
       case "allTracks":
         renderAllTracksView.call(this,container);
         break;
@@ -580,9 +584,10 @@ export class UIController {
       default:
         this.renderHomeView(container);
         break;
-    }
+    }}catch(error){console.error('View render failed',error);container.replaceChildren();const panel=document.createElement('section');panel.className='search-empty';const title=document.createElement('h2');title.textContent='Не удалось открыть страницу';const retry=document.createElement('button');retry.textContent='Повторить';retry.onclick=()=>this.refreshCurrentView();panel.append(title,retry);container.append(panel);}
 
-    if(['home','allTracks','library','playlist','liked'].includes(view.type)&&(this.library.importing||this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total))container.append(loadingRows(3));
+    if(['home','allTracks','library','playlist','liked'].includes(view.type)&&this.library.importing)container.append(loadingRows(3));
+    else if(['home','allTracks','library','playlist','liked'].includes(view.type)&&this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total){const loading=loadingRows(3);loading.dataset.cloudLoading='true';container.append(loading);}
     if (focusedSearch) {
       const input = container.querySelector(".mobile-search-input");
       input?.focus(); if (input && caret !== null) input.setSelectionRange(caret, caret);

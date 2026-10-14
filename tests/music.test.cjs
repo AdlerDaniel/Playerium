@@ -211,8 +211,8 @@ test('direct audio receives missing cover metadata before saving, while catalog 
   const lib={getTracks:()=>[],folders:[],addDownloaded:async(record,track)=>track};
   window.electronAPI={musicRequest:async(op,payload)=>{calls.push({op,payload});if(op==='download')return {};return {results:[{trackName:'Song',artistName:'Artist',collectionName:'Album',artworkUrl100:'https://is1-ssl.mzstatic.com/100x100bb.jpg',trackTimeMillis:180000,releaseDate:'2025-01-01'}]};}};
   const catalog=new MusicCatalog(lib,{renderSidebar:()=>{}});const saved=await catalog.ensureTrack(song);
-  assert.equal(saved.album,undefined);assert.equal(saved.duration,180);assert.match(saved.pictureUrl,/600x600bb/);
-  assert.equal(calls.at(-1).op,'download');assert.equal(calls.at(-1).payload.track.album,undefined);
+  assert.equal(saved.album,'Album');assert.equal(saved.duration,180);assert.match(saved.pictureUrl,/1200x1200bb/);
+  assert.equal(calls.at(-1).op,'download');assert.equal(calls.at(-1).payload.track.album,'Album');
   window.electronAPI.musicRequest=async(op)=>{if(op==='catalog')throw Error('Catalog unavailable');return {};};
   assert.equal((await catalog.ensureTrack(song)).title,'Song');
 });

@@ -309,8 +309,9 @@ export class AudioPlayer {
 
   syncNativeQueue(play = this.isPlaying, reset = false, position = null) {
     if (!this.nativePlayback) return;
+    this.nativeMediaIds=this.queue.map(t=>t.id);
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
-      title: t.title, artist: t.artist, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
+      title: t.title, artist: t.artist, cloudKey:t.cloudKey, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
       repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume,
       ...(Number.isFinite(position) ? {position:Math.max(0,Math.round(position * 1000))} : {}) }));
     this.publishNativeArtwork();
@@ -320,14 +321,15 @@ export class AudioPlayer {
     if(!this.nativePlayback||!window.AndroidBridge?.storePlaybackArtwork)return;
     for(const track of [this.currentTrack,this.queue[this.queueIndex+1]]) {
       const blob=track?.pictureBlob;
-      if(!blob||blob.size>4*1024*1024||this.nativeArtworkSent.get(track.id)===blob)continue;
-      this.nativeArtworkSent.set(track.id,blob);
+      const nativeId=this.nativeMediaIds?.[this.queue.indexOf(track)]||track?.id;
+      if(!blob||blob.size>4*1024*1024||this.nativeArtworkSent.get(nativeId)===blob)continue;
+      this.nativeArtworkSent.set(nativeId,blob);
       if(this.nativeArtworkSent.size>256)this.nativeArtworkSent.delete(this.nativeArtworkSent.keys().next().value);
       blob.arrayBuffer().then(buffer=>{
         const bytes=new Uint8Array(buffer),chunks=[];
         for(let i=0;i<bytes.length;i+=32768)chunks.push(String.fromCharCode(...bytes.subarray(i,i+32768)));
-        window.AndroidBridge?.storePlaybackArtwork?.(track.id,btoa(chunks.join('')));
-      }).catch(()=>{if(this.nativeArtworkSent.get(track.id)===blob)this.nativeArtworkSent.delete(track.id);});
+        window.AndroidBridge?.storePlaybackArtwork?.(nativeId,btoa(chunks.join('')));
+      }).catch(()=>{if(this.nativeArtworkSent.get(nativeId)===blob)this.nativeArtworkSent.delete(nativeId);});
     }
   }
 
@@ -347,13 +349,14 @@ export class AudioPlayer {
 
   applyNativeState(state) {
     if (!state) return;
+    if(state.queue)this.nativeMediaIds=state.queue;
     if (state.error) this.onError?.(state.error);
-    if (!this.nativePlayback && state.queue?.length && !this.currentTrack) {
+    if (state.queue?.length && ((!this.nativePlayback && !this.currentTrack) || state.queue.length!==this.queue.length || state.tracks?.some((saved,i)=>saved?.uri&&saved.uri!==this.queue[i]?.nativeUri))) {
       this.queue = state.queue.map((id, index) => {
         const saved = state.tracks?.[index];
         return this.library.getTrackById(id)
           || (saved?.uri && [...(this.library.tracks?.values() || [])].find(t => t.nativeUri === saved.uri))
-          || (saved?.uri ? {id, nativeUri:saved.uri, title:saved.title, artist:saved.artist, duration:Math.max(0,state.duration / 1000)} : null);
+          || (saved?.uri ? {id, nativeUri:saved.uri, title:saved.title, artist:saved.artist, cloudKey:saved.cloudKey, duration:Math.max(0,state.duration / 1000)} : null);
       });
       // Preserve native indices; never replace the playing queue with a partial import.
       if (this.queue.some(track => !track)) { this.queue = []; return; }

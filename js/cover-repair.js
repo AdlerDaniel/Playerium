@@ -10,10 +10,15 @@ export function verifiedCover(track, candidate) {
 export function installCoverRepair(music, catalogTracks) {
   const pending = new Map();
   music.repairCover = async track => {
-    if (!music.available || !track?.id || !music.library.getTrackById || typeof createImageBitmap !== 'function' || track.pictureBlob || track.catalog || Date.now() - (track.coverCheckedAt || 0) < 86400000) return;
+    if (!music.available || !track?.id || !music.library.getTrackById || typeof createImageBitmap !== 'function' || track.catalog || Date.now() - (track.coverUpgradeAttemptAt || 0) < 86400000 || !track.pictureBlob&&Date.now()-(track.coverCheckedAt||0)<86400000) return;
+    if(track.pictureBlob&&track.coverQualityVersion===2)return;
     if (pending.has(track.id)) return pending.get(track.id);
     const job = (async () => {
-      let received = false, matched = false, failed = false;
+      let received = false, matched = false, failed = false, oldSize = 0;
+      const oldBlob=track.pictureBlob;
+      if(oldBlob){try{const current=await createImageBitmap(oldBlob);oldSize=Math.min(current.width,current.height);const good=oldSize>=1000;current.close();if(good){track.coverQualityVersion=2;await music.library.putInStore('tracks',track);return;}}catch{}}
+      track.coverUpgradeAttemptAt=Date.now();
+      await music.library.putInStore('tracks',{...track,pictureUrl:null});
       for (const provider of ['itunesUA','itunes','deezer']) {
         try {
           const response = await music.request('catalog',{provider,query:`${artistKey(track.artist)} ${track.title}`});
@@ -26,11 +31,12 @@ export function installCoverRepair(music, catalogTracks) {
               const blob = new Blob([Uint8Array.from(atob(image.base64),c=>c.charCodeAt(0))],{type:image.type});
               if (!blob.size || blob.size > 4 * 1024 * 1024) continue;
               const bitmap = await createImageBitmap(blob);
-              const valid = bitmap.width >= 32 && bitmap.height >= 32; bitmap.close();
-              if (!valid || music.library.getTrackById(track.id) !== track || track.pictureBlob) continue;
+              const valid = Math.min(bitmap.width,bitmap.height) >= 32 && Math.min(bitmap.width,bitmap.height)>oldSize; bitmap.close();
+              if (!valid || music.library.getTrackById(track.id) !== track || track.pictureBlob!==oldBlob) continue;
               track.pictureBlob = await resizeArtwork(blob);
               track.pictureUrl = music.library.coverURL(track.id,track.pictureBlob);
               track.coverCheckedAt = Date.now();
+              track.coverQualityVersion=2;
               track.pictureSource = {provider,url:candidate.pictureUrl,title:candidate.title,artist:candidate.artist,duration:candidate.duration,isrc:candidate.isrc||'',verifiedAt:Date.now()};
               await music.library.putInStore('tracks',{...track,pictureUrl:null});
               music.ui?.player?.publishNativeArtwork?.();
@@ -59,7 +65,7 @@ export function installCoverRepair(music, catalogTracks) {
     queue=(async()=>{
       do {
         rerun=false;
-        const tracks=music.library.getTracks().filter(t=>!t.pictureBlob&&!t.catalog);
+        const tracks=music.library.getTracks().filter(t=>(!t.pictureBlob||t.coverQualityVersion!==2)&&!t.catalog);
         // A small sequential queue avoids flooding catalogs on large imports.
         for(const track of tracks) await music.repairCover(track).catch(()=>{});
       } while(rerun);

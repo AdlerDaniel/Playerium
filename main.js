@@ -77,7 +77,7 @@ function startWatchingFolder(root) {
 function createWindow() {
   mainWindow = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, frame:process.platform!=='win32', title: 'Playerium', backgroundColor: '#121212', autoHideMenuBar: true,
     icon: fs.existsSync(path.join(__dirname, 'build/icon.ico')) ? path.join(__dirname, 'build/icon.ico') : undefined,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling:false } });
   mainWindow.loadFile('index.html');
   const sendWindowState=()=>mainWindow.webContents.send('window:state',{maximized:mainWindow.isMaximized(),fullscreen:mainWindow.isFullScreen()});
   for(const event of ['maximize','unmaximize','enter-full-screen','leave-full-screen'])mainWindow.on(event,sendWindowState);

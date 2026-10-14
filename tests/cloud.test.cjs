@@ -70,3 +70,8 @@ test('more than 30 songs finish around a failed file and resume without duplicat
  assert.equal(phone.lib.getTracks().find(t=>t.title==='Song 30').album,'Album 30');
  const original=pc.lib.getTracks()[0];original.album='Corrected album';await pc.cloud.sync();await phone.cloud.sync();assert.equal(phone.lib.getTracks().find(t=>t.title===original.title).album,'Corrected album');
 });
+test('playlist deletion during an incoming transfer is saved before the old snapshot can recreate it',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net),track=add(pc,net,'Song','song');pc.lib.playlists.set('mix',{id:'mix',name:'Mix',trackIds:[track.id]});await pc.cloud.sync();await phone.cloud.sync();
+ pc.lib.playlists.delete('mix');pc.cloud.captureDeletions();await pc.cloud.apply(model.cloudView(pc.cloud.events));assert.equal(pc.lib.getPlaylistById('mix'),undefined);assert.ok(pc.cloud.outbox.some(op=>op.kind==='playlist-delete'));
+ await pc.cloud.sync();await phone.cloud.sync();assert.equal(phone.lib.getPlaylistById('mix'),undefined);
+});

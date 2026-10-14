@@ -32,7 +32,7 @@ for(const android of [false,true])test(`search, save, metadata persistence and d
     if(android)window.AndroidBridge={musicRequest:(id,operation,json)=>{request(operation,JSON.parse(json)).then(data=>window.onMusicResponse({id,data}));},getPlaybackState:()=> '{}',setPlaybackQueue:()=>{},rescanFolder:()=>{}};
     else window.electronAPI={musicRequest:request,getMetadata:async()=>metadata,onFolderUpdated:()=>{},watchFolder:async()=>[],getAudioSource:async()=>''};
   },android);
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   if(android){await page.locator('#mobileNavSearch').click();await page.locator('.mobile-search-input').fill('KLER Повільне диско');}
   else await page.locator('#mainSearchInput').fill('KLER Повільне диско');
   const results=page.locator('.song-search-results');await expect(results.locator('.track-row')).toHaveCount(1);
@@ -54,7 +54,7 @@ for(const android of [false,true])test(`search, save, metadata persistence and d
   await page.locator(android?'#sheetOptSaveOrRemove':'#ctxSaveOrRemove').click();
   await page.locator('.form-dialog button[type=submit]').click();
   await expect.poll(()=>page.evaluate(()=>window.playerApp.library.getTracks().length)).toBe(0);
-  await page.reload();await page.waitForFunction(()=>window.playerApp?.library.db);expect(await page.evaluate(()=>window.playerApp.library.getTracks().length)).toBe(0);
+  await page.reload();await page.waitForFunction(()=>window.playerApp?.ui.history.length);expect(await page.evaluate(()=>window.playerApp.library.getTracks().length)).toBe(0);
   expect(errors).toEqual([]);
 });
 
@@ -73,7 +73,7 @@ for(const android of [false,true])test(`Muzend merges with catalog metadata and 
     if(android)window.AndroidBridge={musicRequest:(id,op,json)=>request(op,JSON.parse(json)).then(data=>window.onMusicResponse({id,data}),error=>window.onMusicResponse({id,error:error.message})),getPlaybackState:()=>'{}',setPlaybackQueue:()=>{}};
     else window.electronAPI={musicRequest:request,getMetadata:async()=>({}),onFolderUpdated:()=>{}};
   },android);
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   if(android){await page.setViewportSize({width:390,height:844});await page.locator('#mobileNavSearch').click();await page.locator('.mobile-search-input').fill('Дорофеева 747');}
   else await page.locator('#mainSearchInput').fill('Дорофеева 747');
   const rows=page.locator('.song-search-results .track-row');await expect(rows).toHaveCount(1);
@@ -98,7 +98,7 @@ test('Android restores relocated downloads before rebuilding its paused playback
       setPlaybackQueue:json=>window.nativeQueues.push({ready:window.restoreFinished,...JSON.parse(json)})
     };
   });
-  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.library.db&&window.restoreFinished);
+  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length&&window.restoreFinished);
   const expected=await page.evaluate(async()=>{
     const lib=window.playerApp.library;
     const old={name:'Artist - Song [ab12].mp3',uri:'content://music/old.mp3',folderName:'Music',folderSource:'content://music/tree',size:100,lastModified:1,downloadId:'song_ab12',metadata:{title:'Song',artist:'Artist',duration:120}};
