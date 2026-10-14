@@ -49,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
     private static volatile MainActivity instance;
     private WebView webView;
     private ValueCallback<Uri[]> uploadMessage;
+    private boolean uploadImages;
     private final static int FILECHOOSER_RESULTCODE = 1001;
     private final static int FOLDER_PICKER_RESULTCODE = 1002;
     private final static int PERMISSION_REQUEST_CODE = 2001;
@@ -122,11 +123,9 @@ public class MainActivity extends AppCompatActivity {
                     uploadMessage = null;
                 }
                 uploadMessage = filePathCallback;
+                uploadImages = WebFileChooser.images(fileChooserParams);
 
-                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/*");
-                intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                Intent intent = WebFileChooser.intent(fileChooserParams);
                 try {
                     startActivityForResult(intent, FILECHOOSER_RESULTCODE);
                 } catch (Exception e) {
@@ -430,6 +429,7 @@ public class MainActivity extends AppCompatActivity {
         if(requestCode==GoogleCloud.AUTH_REQUEST){GoogleCloud.get(this).authorizationResult(resultCode==RESULT_OK?data:null);return;}
         if (requestCode == FILECHOOSER_RESULTCODE) {
             if (uploadMessage == null) return;
+            if(uploadImages){uploadMessage.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode,data));uploadMessage=null;uploadImages=false;return;}
             // Import persistent native URIs; no full audio files cross the WebView bridge.
             uploadMessage.onReceiveValue(null);
             uploadMessage = null;
