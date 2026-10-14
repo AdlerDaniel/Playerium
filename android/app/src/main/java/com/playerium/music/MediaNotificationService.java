@@ -286,7 +286,7 @@ public class MediaNotificationService extends MediaSessionService {
             int start=saved==null?0:Math.max(0,Math.min(index-100,saved.length()-200));
             if(saved!=null)for(int i=start;i<Math.min(saved.length(),start+200);i++){JSONObject item=saved.getJSONObject(i);String key=item.optString("cloudKey");if(!key.isEmpty())keys.put(key);if(i==index)track=new JSONObject().put("key",key).put("title",item.optString("title")).put("artist",item.optString("artist"));}
             JSONObject state=new JSONObject().put("queue",keys).put("track",track).put("playing",snapshot.optBoolean("playing")).put("position",snapshot.optDouble("position")/1000).put("duration",snapshot.optDouble("duration")/1000).put("volume",snapshot.optDouble("volume",.8)).put("shuffle",snapshot.optBoolean("shuffle")).put("repeat",new String[]{"off","one","all"}[Math.max(0,Math.min(2,snapshot.optInt("repeat")))]);
-            local.put("state",state).put("seenAt",System.currentTimeMillis()).put("ack",connect.ack(device));
+            local.put("state",state).put("seenAt",System.currentTimeMillis()).put("ack",connect.ack(device)).put("ackHistory",connect.ackHistory(device));
             connect.live.publish(local);
             JSONObject message=connect.live.take(device);
             if(message!=null&&!connecting){connecting=true;connectWorker.submit(()->{try{applyConnectCommand(message,snapshot,connect);}catch(Exception ignored){}finally{handler.post(()->connecting=false);}});}

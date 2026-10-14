@@ -27,6 +27,7 @@ public class ConnectTest {
   LocalConnect live=new LocalConnect(()->"fixture",(device,command)->command.equals("old"));
   try{live.publish(new JSONObject().put("id","phone"));live.enqueue(new JSONObject().put("id","old").put("target","phone").put("action","next"));assertNull(live.take("phone"));
    for(int i=0;i<20;i++)live.enqueue(new JSONObject().put("id","volume_"+i).put("target","phone").put("action","volume").put("value",i/20.0));assertEquals(.95,live.take("phone").getDouble("value"),.001);assertEquals(1,live.inboxes.get("phone").size());
+   live.enqueue(new JSONObject().put("id","next").put("target","phone").put("action","next"));live.peerAcknowledgements(new JSONObject().put("id","phone").put("ack","next").put("ackHistory",new JSONArray().put("volume_19").put("next")));assertNull(live.take("phone"));
   }finally{live.close();}
  }
  @Test public void nativeDeviceStateUpdatesCommandsAndAcknowledgementsRemainScopedAndPersistent()throws Exception{
