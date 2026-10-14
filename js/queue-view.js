@@ -1,7 +1,18 @@
 import {icons} from './design-icons.js';
 import {mountCover} from './artwork.js';
 export function renderRightQueue() {
-  const ui=this,container=document.getElementById('rightPanelContent');container.replaceChildren();
+  const ui=this,container=document.getElementById('rightPanelContent');
+  delete container.dataset.nowPlayingSignature;
+  const signature=JSON.stringify([this.player.queueIndex,this.player.currentTrack?.id,this.player.queue.map(t=>[t.id,t.title,t.artist,t.pictureUrl])]);
+  if(container.dataset.queueSignature===signature&&container.querySelector('.queue-list')){
+    const toggle=container.querySelector('.queue-current-toggle');
+    if(toggle){const playing=String(this.player.isPlaying);if(toggle.dataset.playing!==playing)toggle.innerHTML=this.player.isPlaying?icons.pause:icons.play;toggle.dataset.playing=playing;toggle.setAttribute('aria-label',this.player.isPlaying?'Пауза':'Воспроизвести');}
+    container.querySelector('.queue-shuffle').setAttribute('aria-pressed',String(this.player.isShuffle));
+    const repeat=container.querySelector('.queue-repeat');repeat.dataset.repeat=this.player.repeatMode;repeat.setAttribute('aria-pressed',String(this.player.repeatMode!=='off'));
+    return;
+  }
+  container.dataset.queueSignature=signature;
+  const scrollTop=container.scrollTop;container.replaceChildren();
   const first=this.player.queueIndex+1,upcoming=this.player.queue.slice(first);
   const selected=new Set();
   const currentHeading=document.createElement('h3');currentHeading.className='queue-section-title';currentHeading.textContent='Сейчас играет';container.append(currentHeading);
@@ -36,4 +47,5 @@ export function renderRightQueue() {
   controls=document.createElement('div');controls.className='queue-controls';controls.innerHTML=`<button class="queue-shuffle" aria-pressed="${this.player.isShuffle}">${icons.shuffle}<span>Перемешать</span></button><button class="queue-repeat" aria-label="Повтор" data-repeat="${this.player.repeatMode}" aria-pressed="${this.player.repeatMode!=='off'}">${icons.repeat}<span>Повтор</span></button><button class="queue-remove-selected" hidden>Удалить выбранные</button>`;
   controls.querySelector('.queue-shuffle').onclick=()=>{this.player.toggleShuffle();this.renderRightQueue();};controls.querySelector('.queue-repeat').onclick=()=>{this.player.toggleRepeat();this.renderRightQueue();};
   controls.querySelector('.queue-remove-selected').onclick=()=>{for(const i of [...selected].sort((a,b)=>b-a))this.player.removeFromQueue(i);};container.append(controls);
+  container.scrollTop=scrollTop;
 }

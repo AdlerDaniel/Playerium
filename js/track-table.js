@@ -32,15 +32,11 @@ export function createTrackTable(tracks, playlistContext = null) {
     `;
     table.appendChild(header);
 
-    const createRow = (track, index) => {
+    const createRow = (track, index, virtual = false) => {
       const row = document.createElement("div");
       const isCurrent = this.player.currentTrack && this.player.currentTrack.id === track.id;
       row.className = `track-row compact-columns ${isCurrent ? "playing" : ""} ${isCurrent && this.player.isPlaying ? "is-playing" : ""}`;
       row.dataset.trackId = track.id;
-
-      const coverHtml = track.pictureUrl
-        ? `<img src="${this.escapeHTML(track.pictureUrl)}" alt="" loading="lazy" />`
-        : `<svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>`;
 
       row.innerHTML = `
         <div class="track-col-num">
@@ -56,7 +52,7 @@ export function createTrackTable(tracks, playlistContext = null) {
           </div>
         </div>
         <div class="track-col-title">
-          <div class="track-mini-thumb">${coverHtml}</div>
+          <div class="track-mini-thumb"></div>
           <div class="track-meta">
             <span class="track-name">${this.escapeHTML(track.title)}</span>
             <span class="track-artist" data-artist="${this.escapeHTML(track.artist)}">${this.escapeHTML(track.artist)}</span>
@@ -75,7 +71,7 @@ ${saveIcon}
         </div>
       `;
 
-      mountCover(row.querySelector('.track-mini-thumb'),track);
+      mountCover(row.querySelector('.track-mini-thumb'),track,virtual || index < 12);
       // The entire row plays; only explicit action buttons intercept the click.
       row.addEventListener("click", (e) => {
         if (e.detail > 1 || e.target.closest('button')) return;

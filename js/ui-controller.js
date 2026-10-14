@@ -323,7 +323,7 @@ export class UIController {
         if (button) { button.title = isPlaying ? 'Пауза' : 'Воспроизвести'; button.setAttribute('aria-label', button.title); }
       }
       syncPlaybackControls(this.player);
-      const currentButton=document.querySelector('.queue-current-toggle');if(currentButton){currentButton.innerHTML=isPlaying?'<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>':'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';currentButton.setAttribute('aria-label',isPlaying?'Пауза':'Воспроизвести');}
+      if(this.isRightPanelOpen&&this.activeRightTab==='queue')this.renderRightQueue();
       // Update table play states
       document.querySelectorAll(".track-row").forEach((row) => {
         if (row.dataset.trackId === this.player.currentTrack?.id) {
@@ -340,7 +340,7 @@ export class UIController {
         document.getElementById('mobileFullscreenPlayer').classList.remove('active');
         document.getElementById('nowPlayingTitle').textContent = 'Выберите трек';
         document.getElementById('nowPlayingArtist').textContent = '';
-        document.getElementById('nowPlayingCover').innerHTML = '';
+        mountCover(document.getElementById('nowPlayingCover'),{});
         if (this.activeRightTab === 'nowPlaying') this.renderRightNowPlaying(null);
         this.player.onTimeUpdate?.(0, 0);
         syncPlaybackControls(this.player);
@@ -539,8 +539,9 @@ export class UIController {
     const signature=stable?viewFingerprint(this):null;
     if(stable&&this.viewSignature===signature&&document.getElementById('mainViewContent').childElementCount){
       const container=document.getElementById('mainViewContent');
-      container.querySelectorAll('[data-cloud-loading]').forEach(node=>node.remove());
-      if(this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total){const rows=loadingRows(3);rows.dataset.cloudLoading='true';container.append(rows);}
+      const loading=container.querySelector('[data-cloud-loading]');
+      if(this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total){if(!loading){const rows=loadingRows(3);rows.dataset.cloudLoading='true';container.append(rows);}}
+      else loading?.remove();
       syncPlaybackControls(this.player);return;
     }
     this.loadView(this.currentView, true);
@@ -669,6 +670,10 @@ export class UIController {
 
   renderRightNowPlaying(track) {
     const container = document.getElementById("rightPanelContent");
+    delete container.dataset.queueSignature;
+    const signature=JSON.stringify(track?[track.id,track.title,track.artist,track.pictureUrl,track.pictureUrls,track.year,track.duration,track.fileName,track.fileSize,track.folderName]:null);
+    if(container.dataset.nowPlayingSignature===signature&&container.childElementCount)return;
+    container.dataset.nowPlayingSignature=signature;
     if (!track) {
       container.innerHTML = `<div style="color: var(--sp-text-subdued); text-align: center; margin-top: 40px;">Нет играющего трека</div>`;
       return;
@@ -698,7 +703,7 @@ export class UIController {
         </div>
         <div class="panel-card-row">
           <span class="panel-card-label">Размер</span>
-          <span class="panel-card-val">${(track.fileSize / (1024 * 1024)).toFixed(1)} МБ</span>
+          <span class="panel-card-val">${Number.isFinite(track.fileSize) ? (track.fileSize / (1024 * 1024)).toFixed(1) + ' МБ' : '—'}</span>
         </div>
         <div class="panel-card-row">
           <span class="panel-card-label">Папка</span>

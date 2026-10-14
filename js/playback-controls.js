@@ -31,7 +31,7 @@ export function bindCollectionPlay(ui, button, tracks, context) {
 
 function updateCollectionButton(player, button) {
   const playing = player.isPlaying && !!player.currentTrack && button.dataset.playbackContext === contextKey(player.playbackContext);
-  button.innerHTML = playing ? icons.pause : icons.play;
+  if (button.dataset.playing !== String(playing)) button.innerHTML = playing ? icons.pause : icons.play;
   button.title = playing ? 'Пауза' : 'Воспроизвести';
   button.setAttribute('aria-label', button.title);
   button.dataset.playing = String(playing);
@@ -42,7 +42,8 @@ export function syncPlaybackControls(player) {
   document.querySelectorAll('[data-playback-context]').forEach(button => updateCollectionButton(player, button));
   document.querySelectorAll('[data-track-play-id]').forEach(button => {
     const playing = player.isPlaying && button.dataset.trackPlayId === player.currentTrack?.id;
-    button.innerHTML = playing ? icons.pause : icons.play;
+    if (button.dataset.playing !== String(playing)) button.innerHTML = playing ? icons.pause : icons.play;
+    button.dataset.playing = String(playing);
     button.title = playing ? 'Пауза' : 'Воспроизвести';
     button.setAttribute('aria-label', button.title);
   });
@@ -51,8 +52,10 @@ export function syncPlaybackControls(player) {
     row.classList.toggle('playing', current);
     row.classList.toggle('is-playing', current && player.isPlaying);
     const button = row.querySelector('.track-row-play');
-    button.innerHTML = current && player.isPlaying ? icons.pause : icons.play;
-    button.title = current && player.isPlaying ? 'Пауза' : 'Воспроизвести';
+    const playing = current && player.isPlaying;
+    if (button.dataset.playing !== String(playing)) button.innerHTML = playing ? icons.pause : icons.play;
+    button.dataset.playing = String(playing);
+    button.title = playing ? 'Пауза' : 'Воспроизвести';
     button.setAttribute('aria-label', button.title);
   });
 }
