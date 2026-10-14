@@ -8,7 +8,7 @@ export function positionFloating(panel,{x,y,anchor,prefer='below'}={}){
  if(a&&top<b.top&&a.bottom+height+8<=b.bottom)top=a.bottom+8;
  panel.style.left=Math.max(b.left,Math.min(left,b.right-width))+'px';panel.style.top=Math.max(b.top,Math.min(top,b.bottom-height))+'px';
 }
-export function watchFloating(panel,options){const place=()=>positionFloating(panel,options);place();window.addEventListener('resize',place);window.visualViewport?.addEventListener('resize',place);return()=>{window.removeEventListener('resize',place);window.visualViewport?.removeEventListener('resize',place);};}
+export function watchFloating(panel,options){let frame=0;const place=()=>{if(panel.isConnected)positionFloating(panel,options);};const schedule=()=>{if(!frame)frame=requestAnimationFrame(()=>{frame=0;place();});};place();const resize=new ResizeObserver(schedule);resize.observe(panel);window.addEventListener('resize',place);window.visualViewport?.addEventListener('resize',place);return()=>{resize.disconnect();cancelAnimationFrame(frame);window.removeEventListener('resize',place);window.visualViewport?.removeEventListener('resize',place);};}
 export function installTooltips(){
  const tip=document.createElement('div');tip.className='app-tooltip';tip.id='playerium-tooltip';tip.setAttribute('role','tooltip');tip.hidden=true;document.body.append(tip);
  let target,timer;

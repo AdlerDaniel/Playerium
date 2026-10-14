@@ -75,7 +75,7 @@
 .audio-waveform:focus-within { outline:2px solid var(--sp-green);outline-offset:2px;border-radius:6px; }
 .waveform-status { position:absolute;inset:0;display:grid;place-items:center;font-size:11px;color:var(--sp-text-subdued);pointer-events:none; }
 /* 13/14: shared cinema mode and adaptable mobile playback page. */
-.cinema-overlay { position:fixed;inset:0;z-index:1500;overflow:auto;background:var(--sp-black);padding:max(24px,var(--sp-mobile-safe-top,0px)) 24px max(24px,var(--sp-mobile-safe-bottom,0px)); }
+.cinema-overlay { position:fixed;inset:0;z-index:1150;overflow:auto;background:var(--sp-black);padding:max(24px,var(--sp-mobile-safe-top,0px)) 24px max(24px,var(--sp-mobile-safe-bottom,0px)); }
 .cinema-player { width:min(100%,660px);margin:auto;display:grid;gap:16px; }
 .cinema-top { display:flex;justify-content:space-between;align-items:center;color:var(--sp-text-secondary); }
 .cinema-top button { width:44px;height:44px;display:grid;place-items:center; }.cinema-top svg { width:24px;height:24px;fill:currentColor; }
