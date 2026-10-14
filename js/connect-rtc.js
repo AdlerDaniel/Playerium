@@ -17,5 +17,5 @@ export class ConnectRtc {
   }catch{if(p){p.negotiating=false;p.failed=Date.now();}}
  }}
  publish(device){if(!device)return;this.local=device;for(const p of this.peers.values())if(this.ready(p)&&p.channel.bufferedAmount<262144)p.channel.send(JSON.stringify({account:this.account,device}));}
- send(command){const peer=this.peers.get(command.target);if(!this.ready(peer||{})||peer.channel.bufferedAmount>=262144)return false;peer.channel.send(JSON.stringify({account:this.account,device:this.local,command}));return true;}
+ send(command){const peer=this.peers.get(command.target);if(!this.ready(peer||{})||!peer.device||Date.now()-peer.device.seenAt>1500||peer.channel.bufferedAmount>=262144)return false;peer.channel.send(JSON.stringify({account:this.account,device:this.local,command}));return true;}
 }
