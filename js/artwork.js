@@ -17,7 +17,7 @@ export async function resizeArtwork(blob) {
 const retained=new Map();let retainedCount=0,releaseScheduled=false;
 export function retainArtwork(root){
  if(!releaseScheduled){releaseScheduled=true;Promise.resolve().then(()=>{retained.clear();retainedCount=0;releaseScheduled=false;});}
- for(const host of root?.querySelectorAll('[data-cover-identity]')||[]){const image=host.querySelector('img'),key=host.dataset.coverIdentity;if(!key||!image?.complete||!image.naturalWidth)continue;image.onload=image.onerror=null;const images=retained.get(key)||[];if(!images.includes(image)){images.push(image);retained.set(key,images);retainedCount++;}}
+ for(const host of root?.querySelectorAll('[data-cover-identity]')||[]){const image=host.querySelector('img'),key=host.dataset.coverIdentity;if(!key||!image?.complete||!image.naturalWidth||!key.split('|').includes(image.src)||host.classList.contains('cover-loading'))continue;host.coverGeneration=(host.coverGeneration||0)+1;image.onload=image.onerror=null;const images=retained.get(key)||[];if(!images.includes(image)){images.push(image);retained.set(key,images);retainedCount++;}}
  while(retainedCount>160){const key=retained.keys().next().value;retainedCount-=retained.get(key).length;retained.delete(key);}
 }
 
