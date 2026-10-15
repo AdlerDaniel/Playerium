@@ -15,7 +15,8 @@ function secondPass(s){
  return `${FILTER}:measured_I=${s.input_i}:measured_TP=${s.input_tp}:measured_LRA=${s.input_lra}:measured_thresh=${s.input_thresh}:offset=${s.target_offset}:linear=true`;
 }
 class PreparedAudio{
- constructor(executable,directory){this.executable=executable;this.directory=directory;this.pending=new Map();this.tail=Promise.resolve();}
+ constructor(executable,directory){this.executable=executable;this.directory=directory;this.pending=new Map();this.tail=Promise.resolve();this.errors=new Set();}
+ async status(files){let ready=0,failed=0;for(const file of new Set(files)){try{if(await this.cached(file))ready++;else if(this.errors.has(file))failed++;}catch{failed++;}}return {total:new Set(files).size,ready,failed,pending:this.pending.size,active:this.pending.size>0};}
  async key(file){const s=await fs.stat(file);return createHash('sha256').update(`${file}|${s.size}|${s.mtimeMs}|${PROFILE}`).digest('hex');}
  async cached(file){const key=await this.key(file),target=path.join(this.directory,key+'.m4a');try{const s=await fs.stat(target);return s.size>32?target:null;}catch{return null;}}
  async prepare(file){
@@ -31,7 +32,7 @@ class PreparedAudio{
     await fs.rename(temporary,target);return target;
    }finally{await fs.rm(temporary,{force:true});}
   });
-  this.tail=task;this.pending.set(key,task);try{return await task;}finally{this.pending.delete(key);}
+  this.tail=task;this.pending.set(key,task);try{const ready=await task;this.errors.delete(file);return ready;}catch(error){this.errors.add(file);throw error;}finally{this.pending.delete(key);}
  }
 }
 module.exports={PreparedAudio,PROFILE,FILTER,run,stats,secondPass};

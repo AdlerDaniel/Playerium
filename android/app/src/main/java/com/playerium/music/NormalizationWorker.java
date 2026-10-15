@@ -26,13 +26,14 @@ public final class NormalizationWorker extends Worker {
             for(String value:pending){
                 if(isStopped()||android.os.SystemClock.elapsedRealtime()-started>360000)return Result.retry();
                 Uri uri=Uri.parse(value);
-                try{MusicEngine.get(c).prepareAudio(uri);PreparedAudio.complete(c,value);}
+                PreparedAudio.preferences(c).edit().putLong("activeUntil",System.currentTimeMillis()+300000).apply();
+                try{MusicEngine.get(c).prepareAudio(uri);PreparedAudio.succeeded(c,value);}
                 catch(java.io.FileNotFoundException error){PreparedAudio.failed(c,value,"Missing recording");PreparedAudio.complete(c,value);}
                 catch(SecurityException error){PreparedAudio.failed(c,value,"Нет доступа к файлу");PreparedAudio.complete(c,value);}
                 catch(Exception error){retry=true;PreparedAudio.failed(c,value,String.valueOf(error.getMessage()));}
                 progress(total,++completed);
             }
             return retry?Result.retry():Result.success();
-        }catch(Exception error){return Result.retry();}
+        }catch(Exception error){return Result.retry();}finally{PreparedAudio.preferences(c).edit().remove("activeUntil").apply();}
     }
 }

@@ -28,16 +28,26 @@ final class PreparedAudio {
         try{File file=new File(directory(c),key(c,original)+".m4a");if(file.isFile()&&file.length()>32)return Uri.fromFile(file);}catch(Exception ignored){}
         return original;
     }
-    static synchronized void enqueue(Context c,JSONArray uris)throws Exception{
+    static void enqueue(Context c,JSONArray uris)throws Exception{enqueue(c,uris,false);}
+    static synchronized void enqueue(Context c,JSONArray uris,boolean retryNow)throws Exception{
         Set<String> pending=new HashSet<>(preferences(c).getStringSet("pending",Collections.emptySet()));
         for(int i=0;i<uris.length();i++){
             Uri uri=Uri.parse(uris.getString(i));if(!MainActivity.hasMusicPermission(c,uri))continue;
             if(playable(c,uri).equals(uri))pending.add(uri.toString());
         }
         preferences(c).edit().putStringSet("pending",pending).apply();
-        if(!pending.isEmpty())WorkManager.getInstance(c).enqueueUniqueWork("playerium-normalize-audio",ExistingWorkPolicy.APPEND_OR_REPLACE,new OneTimeWorkRequest.Builder(NormalizationWorker.class).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,java.util.concurrent.TimeUnit.SECONDS).build());
+        if(!pending.isEmpty())WorkManager.getInstance(c).enqueueUniqueWork("playerium-normalize-audio",retryNow?ExistingWorkPolicy.REPLACE:ExistingWorkPolicy.APPEND_OR_REPLACE,new OneTimeWorkRequest.Builder(NormalizationWorker.class).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,java.util.concurrent.TimeUnit.SECONDS).build());
     }
     static synchronized Set<String> pending(Context c){return new HashSet<>(preferences(c).getStringSet("pending",Collections.emptySet()));}
     static synchronized void complete(Context c,String uri){Set<String> p=pending(c);p.remove(uri);preferences(c).edit().putStringSet("pending",p).apply();}
-    static synchronized void failed(Context c,String uri,String message){preferences(c).edit().putString("lastError",message).apply();}
+    static synchronized void failed(Context c,String uri,String message){preferences(c).edit().putString("error:"+uri,message).apply();}
+    static synchronized void succeeded(Context c,String uri){complete(c,uri);preferences(c).edit().remove("error:"+uri).putLong("updatedAt",System.currentTimeMillis()).apply();}
+    static org.json.JSONObject status(Context c,JSONArray uris)throws Exception{
+        int ready=0,failed=0,queued=0;Set<String> pending=pending(c);Set<String> unique=new HashSet<>();
+        for(int i=0;i<uris.length();i++)unique.add(uris.getString(i));
+        for(String value:unique){Uri uri=Uri.parse(value);if(!playable(c,uri).equals(uri))ready++;else{if(pending.contains(value))queued++;if(preferences(c).contains("error:"+value)||!MainActivity.hasMusicPermission(c,uri))failed++;}}
+        boolean active=false;
+        try{for(WorkInfo work:WorkManager.getInstance(c).getWorkInfosForUniqueWork("playerium-normalize-audio").get(2,java.util.concurrent.TimeUnit.SECONDS))if(work.getState()==WorkInfo.State.RUNNING)active=true;}catch(Exception ignored){}
+        return new org.json.JSONObject().put("total",unique.size()).put("ready",ready).put("pending",queued).put("failed",failed).put("active",active).put("updatedAt",preferences(c).getLong("updatedAt",0));
+    }
 }

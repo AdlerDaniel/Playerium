@@ -11,7 +11,8 @@ export class NativeEqualizer {
     this.sync();
   }
   sync() {
-    window.AndroidBridge.setEqualizer(JSON.stringify({ enabled: this.isEnabled, gains: this.gains }));
+    const settings=JSON.stringify({ enabled: this.isEnabled, gains: this.gains });
+    if(settings!==this.nativeSettings){window.AndroidBridge.setEqualizer(settings);this.nativeSettings=settings;}
     localStorage.setItem('sp_equalizer', JSON.stringify({ enabled: this.isEnabled, preset: this.currentPreset, gains: this.gains }));
   }
   setGain(i, value) { this.gains[i] = Math.max(-12, Math.min(12, Number(value) || 0)); this.currentPreset = 'custom'; this.sync(); }

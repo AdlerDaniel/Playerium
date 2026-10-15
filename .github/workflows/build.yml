@@ -111,6 +111,7 @@ jobs:
           script: |
             gradle -p android connectedDebugAndroidTest --no-daemon
             adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-29.png
+            adb shell run-as com.playerium.music cat files/playlist-start.json > android/app/build/outputs/androidTest-results/playlist-start-29.json
       - name: Verify music processing on modern Android with 16 KB pages
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -124,6 +125,7 @@ jobs:
             test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
             gradle -p android connectedDebugAndroidTest --no-daemon
             adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-36.png
+            adb shell run-as com.playerium.music cat files/playlist-start.json > android/app/build/outputs/androidTest-results/playlist-start-36.json
       - name: Upload native music verification reports
         if: always()
         uses: actions/upload-artifact@v4

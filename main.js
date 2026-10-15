@@ -152,6 +152,11 @@ app.whenReady().then(async () => {
   handle('file:loudnessCached',async file=>loudness.cached(await authorize(file)));
   const preparedAudio=new (require('./desktop-normalization').PreparedAudio)(loudness.executable,path.join(app.getPath('userData'),'normalized-audio'));
   handle('file:prepareAudio',async file=>{await preparedAudio.prepare(await authorize(file));return true;});
+  handle('file:preparationStatus',async files=>{
+    if(!Array.isArray(files)||files.some(file=>typeof file!=='string'))throw Error('Invalid audio files');
+    const allowed=[];let denied=0;for(const file of new Set(files)){try{allowed.push(await authorize(file));}catch{denied++;}}
+    const status=await preparedAudio.status(allowed);return {...status,total:status.total+denied,failed:status.failed+denied};
+  });
   // Node fetch exposes manual redirects; Electron net.fetch cancels them.
   // The updater must validate each redirect before following it.
   const updater = new DesktopUpdater({ app,

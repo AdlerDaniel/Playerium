@@ -1,15 +1,28 @@
 // Preparing durable audio copies is independent of navigation and playback.
 export function installAudioPreparation(app){
- const {library,ui}=app;let timer,running=false,again=false,nativeSignature='';const done=new Set();
- async function scan(){
-  if(running){again=true;return;}running=true;
+ const {library,ui}=app;let timer,running=false,again=false,nativeSignature='',checking=null;const done=new Set(),listeners=new Set();
+ const state={supported:!!(window.AndroidBridge?.musicRequest||window.electronAPI?.prepareAudio),total:0,ready:0,failed:0,pending:0,active:false,checked:false,error:null};
+ const tracks=()=>library.getTracks().filter(t=>!t.catalog);
+ const notify=()=>listeners.forEach(listener=>listener({...state,running}));
+ async function refresh(){
+  if(checking)return checking;
+  checking=(async()=>{try{
+   let result;if(window.AndroidBridge?.musicRequest)result=await app.music.request('normalizationStatus',{uris:[...new Set(tracks().map(t=>t.nativeUri).filter(Boolean))]});
+   else if(window.electronAPI?.audioPreparationStatus)result=await window.electronAPI.audioPreparationStatus([...new Set(tracks().map(t=>t.filePath).filter(Boolean))]);
+   Object.assign(state,result||{},{checked:true,error:null});
+  }catch(error){state.error='Не удалось проверить готовность музыки. Попробуйте ещё раз.';}finally{notify();checking=null;}})();
+  return checking;
+ }
+ async function scan(manual=false){
+  if(manual){done.clear();nativeSignature='';}
+  if(running){again=true;return;}running=true;notify();
   try{
-   const tracks=library.getTracks().filter(t=>!t.unavailable&&!t.catalog);
+   const available=tracks().filter(t=>!t.unavailable);
    if(window.AndroidBridge?.musicRequest){
-    const uris=[...new Set(tracks.map(t=>t.nativeUri).filter(Boolean))].sort();const signature=JSON.stringify(tracks.filter(t=>t.nativeUri).map(t=>[t.nativeUri,t.fileSize,t.lastModified]).sort());
-    if(signature!==nativeSignature&&uris.length){await app.music.request('prepareLibrary',{uris});nativeSignature=signature;}
+    const uris=[...new Set(available.map(t=>t.nativeUri).filter(Boolean))].sort();const signature=JSON.stringify(available.filter(t=>t.nativeUri).map(t=>[t.nativeUri,t.fileSize,t.lastModified]).sort());
+    if(signature!==nativeSignature&&uris.length){await app.music.request('prepareLibrary',{uris,retryNow:manual});nativeSignature=signature;}
    }else if(window.electronAPI?.prepareAudio){
-    const files=tracks.filter(t=>t.filePath);let failed=0;
+    const files=available.filter(t=>t.filePath);let failed=0;
     for(const track of files){
      const key=`${track.filePath}|${track.fileSize}|${track.lastModified}`;if(done.has(key))continue;
      try{await window.electronAPI.prepareAudio(track.filePath);done.add(key);}catch(error){failed++;console.warn('Audio preparation failed',track.id,error);}
@@ -17,10 +30,10 @@ export function installAudioPreparation(app){
     }
     if(failed)ui.showToast(`Не удалось подготовить громкость ${failed} треков. Проверьте свободное место и доступ к файлам.`,'error');
    }
-  }catch(error){console.warn('Audio preparation',error);}finally{running=false;if(again){again=false;schedule();}}
+  }catch(error){state.error='Не удалось запустить нормализацию. Проверьте доступ к файлам и свободное место.';console.warn('Audio preparation',error);}finally{running=false;await refresh();if(again){again=false;schedule();}}
  }
  function schedule(){clearTimeout(timer);timer=setTimeout(scan,1500);}
  const previous=library.onLibraryChanged;library.onLibraryChanged=(...args)=>{previous?.(...args);schedule();};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)schedule();});
- schedule();return {scan,schedule};
+ schedule();return {scan,schedule,refresh,state,subscribe(listener){listeners.add(listener);listener({...state,running});return ()=>listeners.delete(listener);}};
 }

@@ -4,6 +4,7 @@ export function mountTrackRows(table, tracks, createRow) {
   if (tracks.length <= 200) { tracks.forEach((track, index) => table.appendChild(createRow(track, index))); return; }
   const body = document.createElement('div');
   body.className = 'virtual-track-body';
+  body.setAttribute('role','rowgroup');
   body.style.position = 'relative';
   const rowHeight = configuredRowHeight();
   body.style.height = `${tracks.length * rowHeight}px`;

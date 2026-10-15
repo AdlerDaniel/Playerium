@@ -107,7 +107,8 @@ final class MusicEngine {
             throw new IOException("Недопустимая обложка");
         }
         if(operation.equals("loudness"))return analyzeLoudness(Uri.parse(payload.getString("uri")));
-        if(operation.equals("prepareLibrary")){PreparedAudio.enqueue(context,payload.getJSONArray("uris"));return true;}
+        if(operation.equals("prepareLibrary")){PreparedAudio.enqueue(context,payload.getJSONArray("uris"),payload.optBoolean("retryNow"));return true;}
+        if(operation.equals("normalizationStatus"))return PreparedAudio.status(context,payload.getJSONArray("uris"));
         if(operation.equals("waveform"))return analyzeWaveform(Uri.parse(payload.getString("uri")));
         if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {String key=keys.next();JSONObject record=saved.getJSONObject(key);if(exists(record)){cleanSidecar(record);try{record=protectDownloaded(record,key);}catch(IOException|SecurityException error){android.util.Log.w("Playerium","Could not hide downloaded media yet",error);}files.put(record);}}return files;}
         if(operation.equals("describe")){JSONObject record=records().optJSONObject(payload.getString("downloadId"));if(record==null)throw new IOException("Track unavailable");return withCover(record);}

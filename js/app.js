@@ -42,6 +42,7 @@ class App {
       this.player.loadSavedPreferences();
       this.ui.init();
       this.audioPreparation=installAudioPreparation(this);
+      this.ui.audioPreparation=this.audioPreparation;
       this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);
       installVisualExperience(this.ui);
       // A slow cloud connection must never delay restoring local playback.

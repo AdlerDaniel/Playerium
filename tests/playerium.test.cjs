@@ -183,6 +183,16 @@ test('pausing during asynchronous source lookup cancels the pending start',async
  const p=await player(),a={id:'a',filePath:'a.mp3'};const task=p.playTrack(a,0,[a]);while(!finish)await new Promise(r=>setTimeout(r,0));p.pause();finish('music://a');await task;assert.equal(p.isPlaying,false);
 });
 
+test('playlist row changes select an existing native source without resending the library or equalizer',async()=>{
+ const queues=[],selected=[],eq=[];window.AndroidBridge={setPlaybackQueue:s=>queues.push(JSON.parse(s)),selectPlaybackTrack:(...args)=>{selected.push(args);return true;},setEqualizer:s=>eq.push(s)};
+ const p=await player(),tracks=Array.from({length:300},(_,i)=>({id:'fast'+i,nativeUri:'content://music/'+i,title:'Song '+i}));
+ p.equalizer=new (await import('../js/native-equalizer.js')).NativeEqualizer();
+ await p.playTrack(tracks[0],0,tracks);await p.playTrack(tracks[200],200);await p.playTrack(tracks[250],250,tracks);
+ assert.equal(queues.length,1);assert.equal(selected.length,2);assert.equal(selected[0][0],'fast200');assert.equal(selected[1][1],250);assert.equal(eq.length,1);
+ window.AndroidBridge.selectPlaybackTrack=()=>false;await p.playTrack(tracks[25],25);assert.equal(queues.length,2);assert.equal(queues[1].index,25);
+ const reordered=[...tracks].reverse();await p.playTrack(reordered[0],0,reordered);assert.equal(queues.length,3);
+});
+
 test('Android notification artwork sends durable image bytes once and follows automatic native transitions',async()=>{
   const pictures=[],commands=[],queues=[];
   window.AndroidBridge={setPlaybackQueue:s=>queues.push(JSON.parse(s)),storePlaybackArtwork:(id,bytes)=>pictures.push({id,bytes}),playbackCommand:(...args)=>commands.push(args),setEqualizer:()=>{}};

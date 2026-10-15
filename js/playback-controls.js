@@ -12,7 +12,8 @@ export function playRow(ui, track, tracks, context, toggle = false) {
     else if (!player.isPlaying) player.play();
     return;
   }
-  if (contextKey(player.playbackContext) === contextKey(context)) {
+  const sameOrder=tracks.length===player.queue.length&&tracks.every((item,index)=>item.id===player.queue[index]?.id);
+  if (contextKey(player.playbackContext) === contextKey(context) && (sameOrder||player.isShuffle||!ui.tableSortExplicit)) {
     const index = player.queue.findIndex(t => t.id === track.id);
     if (index >= 0) return player.playTrack(track, index);
   }

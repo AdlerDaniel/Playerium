@@ -58,6 +58,7 @@ public class LoudnessTest {
     long deadline=System.currentTimeMillis()+90000;
     while(System.currentTimeMillis()<deadline&&(!PreparedAudio.pending(c).isEmpty()))Thread.sleep(200);
     for(File input:new File[]{a,b}){android.net.Uri original=android.net.Uri.fromFile(input),ready=PreparedAudio.playable(c,original);assertFalse("Background migration left a recording unprepared",ready.equals(original));outputs.add(new File(ready.getPath()));}
+    org.json.JSONObject status=PreparedAudio.status(c,uris);assertEquals(2,status.getInt("total"));assertEquals(2,status.getInt("ready"));assertEquals(0,status.getInt("pending"));assertEquals(0,status.getInt("failed"));
    }finally{a.delete();b.delete();for(File output:outputs)output.delete();}
   }
   @Test public void preparedFilesHaveEqualFixedLoudnessWithoutRewritingOrAnalyzingOnOpen()throws Exception{

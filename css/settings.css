@@ -358,3 +358,10 @@ input:checked + .slider-toggle:before {
 @keyframes update-installing { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .update-progress.indeterminate #updateProgressBarFill { animation: none; width: 100% !important; } }
 @media (prefers-reduced-motion: reduce) { #updateProgressBarFill { transition: none; } }
+.normalization-progress{display:block;width:100%;height:7px;margin:10px 0;accent-color:var(--sp-green)}
+.normalization-progress[hidden]{display:none}
+.normalization-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+.normalization-status{min-height:1.5em}
+.normalization-settings[data-state="complete"] .normalization-status{color:var(--sp-green)}
+.normalization-settings .settings-desc{margin-top:8px}
+@media(max-width:768px){.normalization-actions button{min-height:48px}}

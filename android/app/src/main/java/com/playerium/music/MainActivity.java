@@ -224,9 +224,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void setPlaybackQueue(final String queue) {
-            runOnUiThread(() -> {
-                MediaNotificationService.submitQueue(MainActivity.this, queue);
-            });
+            MediaNotificationService.submitQueue(MainActivity.this, queue);
+        }
+        @JavascriptInterface public boolean selectPlaybackTrack(String id,int index,boolean play,double position,double requestedAt){
+            return MediaNotificationService.selectTrack(id,index,play,Math.max(0,(long)position),(long)requestedAt);
         }
         @JavascriptInterface public void playbackCommand(final String command, final double value) {
             runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class)

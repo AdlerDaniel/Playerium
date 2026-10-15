@@ -48,6 +48,8 @@ public class MediaNotificationService extends MediaSessionService {
     }
     public static void submitQueue(Context context, String queue) {
         pendingQueue.set(queue);
+        MediaNotificationService service=instance;
+        if(service!=null){service.handler.post(()->{String next=pendingQueue.getAndSet(null);if(next!=null)try{service.setQueue(new JSONObject(next));}catch(Exception error){service.error="Не удалось обновить очередь воспроизведения";}});return;}
         // Large libraries must not be serialized into Binder Intent extras.
         context.startService(new Intent(context, MediaNotificationService.class).setAction("playerium.SET_QUEUE"));
     }
@@ -64,6 +66,20 @@ public class MediaNotificationService extends MediaSessionService {
     private String equalizerSettings;
     private String error;
     private SharedPreferences playbackPrefs;
+    private volatile java.util.Map<String,Integer> selectionIndices=java.util.Collections.emptyMap();
+    private long requestedStartAt;
+    private String requestedStartId="";
+    private long startLatencyMs=-1;
+    private int equalizerSession;
+    static boolean selectTrack(String id,int index,boolean play,long position,long requestedAt){
+        MediaNotificationService service=instance;
+        if(service==null||pendingQueue.get()!=null||!java.util.Objects.equals(service.selectionIndices.get(id),index))return false;
+        service.handler.post(()->{
+            if(service.player==null||index>=service.player.getMediaItemCount()||!service.player.getMediaItemAt(index).mediaId.equals(id))return;
+            service.requestedStartAt=requestedAt>0?requestedAt:System.currentTimeMillis();service.requestedStartId=id;service.startLatencyMs=-1;
+            service.player.seekTo(index,position);if(service.player.getPlaybackState()==Player.STATE_IDLE)service.player.prepare();service.player.setPlayWhenReady(play);
+        });return true;
+    }
     private long lastSaved;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable publishState = new Runnable() {
@@ -83,17 +99,28 @@ public class MediaNotificationService extends MediaSessionService {
         super.onCreate();
         instance=this;
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
+        equalizerSettings=playbackPrefs.getString("equalizer",null);
 
         androidx.media3.datasource.DataSource.Factory source=()->new androidx.media3.datasource.ResolvingDataSource(new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource(),new androidx.media3.datasource.ResolvingDataSource.Resolver(){
             private Uri original,resolved;
             @Override public androidx.media3.datasource.DataSpec resolveDataSpec(androidx.media3.datasource.DataSpec spec){
                 // Pin the source for this media period: finishing preparation during
                 // playback must not change byte offsets when seeking the original.
-                if(!spec.uri.equals(original)){original=spec.uri;resolved=PreparedAudio.playable(MediaNotificationService.this,original);}
+                if(!spec.uri.equals(original)){
+                    if(!MainActivity.hasMusicPermission(MediaNotificationService.this,spec.uri))throw new SecurityException("Unauthorized URI");
+                    original=spec.uri;resolved=PreparedAudio.playable(MediaNotificationService.this,original);
+                }
                 return spec.withUri(resolved);
             }
         });
-        player = new ExoPlayer.Builder(this).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
+        androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(5000,20000,150,300).setPrioritizeTimeOverSizeThresholds(true).build();
+        player = new ExoPlayer.Builder(this).setLoadControl(loadControl).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
+        player.addAnalyticsListener(new androidx.media3.exoplayer.analytics.AnalyticsListener(){
+            @Override public void onAudioPositionAdvancing(EventTime time,long playoutStartSystemTimeMs){
+                String id=time.timeline.isEmpty()?"":time.timeline.getWindow(time.windowIndex,new androidx.media3.common.Timeline.Window()).mediaItem.mediaId;
+                if(requestedStartAt>0&&startLatencyMs<0&&requestedStartId.equals(id)){startLatencyMs=Math.max(0,playoutStartSystemTimeMs-requestedStartAt);android.util.Log.i("PlayeriumStart","audioMs="+startLatencyMs+" queue="+player.getMediaItemCount());}
+            }
+        });
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true);
         player.setHandleAudioBecomingNoisy(true);
         player.setWakeMode(C.WAKE_MODE_LOCAL);
@@ -153,7 +180,7 @@ public class MediaNotificationService extends MediaSessionService {
                     if (queue != null) setQueue(new JSONObject(queue));
                 }
                 if (intent.hasExtra("command")) command(intent.getStringExtra("command"), intent.getDoubleExtra("value", 0));
-                if (intent.hasExtra("equalizer")) { equalizerSettings = intent.getStringExtra("equalizer"); configureEqualizer(player.getAudioSessionId()); }
+                if (intent.hasExtra("equalizer")) { String settings=intent.getStringExtra("equalizer");if(!java.util.Objects.equals(settings,equalizerSettings)){equalizerSettings=settings;playbackPrefs.edit().putString("equalizer",settings).apply();configureEqualizer(player.getAudioSessionId());} }
             } catch (Exception e) { error = "Не удалось обновить очередь воспроизведения"; }
         }
         return player.getPlayWhenReady()&&player.getMediaItemCount()>0?START_STICKY:result;
@@ -161,26 +188,30 @@ public class MediaNotificationService extends MediaSessionService {
 
     private void setQueue(JSONObject data) throws Exception {
         JSONArray tracks = data.getJSONArray("tracks");
+        if(data.optBoolean("play")&&data.optBoolean("reset")){requestedStartAt=data.optLong("requestedAt",System.currentTimeMillis());if(requestedStartAt<=0)requestedStartAt=System.currentTimeMillis();startLatencyMs=-1;}
         List<MediaItem> items = new ArrayList<>();
+        java.util.Map<String,Integer> indices=new java.util.HashMap<>();
         for (int i = 0; i < tracks.length(); i++) {
             JSONObject t = tracks.getJSONObject(i);
             Uri uri = Uri.parse(t.getString("uri"));
-            if (!MainActivity.hasMusicPermission(this, uri)) throw new SecurityException("Unauthorized URI");
             android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));extras.putString("cloudKey",t.optString("cloudKey"));
             MediaMetadata metadata = new MediaMetadata.Builder().setTitle(t.optString("title"))
-                .setArtist(t.optString("artist")).setArtworkUri(PlaybackArtwork.find(this,t.getString("id"))).setExtras(extras).build();
+                .setArtist(t.optString("artist")).setExtras(extras).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
+            indices.put(t.getString("id"),i);
         }
+        selectionIndices=java.util.Collections.unmodifiableMap(indices);
         if (items.isEmpty()) { player.stop(); player.clearMediaItems(); stopSelf(); return; }
         boolean play = data.optBoolean("play");
         String currentId = player.getCurrentMediaItem() == null ? "" : player.getCurrentMediaItem().mediaId;
         int index = Math.max(0, Math.min(items.size() - 1, data.optInt("index")));
+        if(data.optBoolean("play")&&data.optBoolean("reset"))requestedStartId=items.get(index).mediaId;
         MediaItem current = player.getCurrentMediaItem();
         boolean preserve = !data.optBoolean("reset") && current != null
             && items.get(index).mediaId.equals(currentId)
             && java.util.Objects.equals(items.get(index).localConfiguration, current.localConfiguration);
         boolean sameQueue=items.size()==player.getMediaItemCount();
-        for(int i=0;sameQueue&&i<items.size();i++)sameQueue=items.get(i).equals(player.getMediaItemAt(i));
+        for(int i=0;sameQueue&&i<items.size();i++){MediaItem before=player.getMediaItemAt(i),after=items.get(i);sameQueue=before.mediaId.equals(after.mediaId)&&java.util.Objects.equals(before.localConfiguration,after.localConfiguration)&&java.util.Objects.equals(before.mediaMetadata.title,after.mediaMetadata.title)&&java.util.Objects.equals(before.mediaMetadata.artist,after.mediaMetadata.artist)&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("cloudKey",""),after.mediaMetadata.extras.getString("cloudKey",""));}
         if(sameQueue){
             // A song selection in the existing queue reuses prepared media sources.
             if(data.optBoolean("reset")||index!=player.getCurrentMediaItemIndex()||data.has("position"))
@@ -319,8 +350,7 @@ public class MediaNotificationService extends MediaSessionService {
     private void configureEqualizer(int sessionId) {
         try {
             if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId == 0) return;
-            if (equalizer != null) equalizer.release();
-            equalizer = new Equalizer(0, sessionId);
+            if(equalizer==null||equalizerSession!=sessionId){if(equalizer!=null)equalizer.release();equalizer=new Equalizer(0,sessionId);equalizerSession=sessionId;}
             if (equalizerSettings == null) return;
             JSONObject settings = new JSONObject(equalizerSettings);
             JSONArray gains = settings.getJSONArray("gains");
@@ -361,6 +391,7 @@ public class MediaNotificationService extends MediaSessionService {
             data.put("shuffle",player.getShuffleModeEnabled());
             data.put("playing", player.isPlaying()); data.put("position", player.getCurrentPosition());
             data.put("duration", Math.max(0, player.getDuration()));data.put("volume",player.getVolume());
+            if(startLatencyMs>=0)data.put("startLatencyMs",startLatencyMs);
             if (error != null) data.put("error", error);
         } catch (Exception ignored) {}
         return data;

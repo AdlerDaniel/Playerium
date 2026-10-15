@@ -8,6 +8,7 @@ import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
 import { viewFingerprint } from './view-stability.js';
 import {mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
+import {changeTrackSort} from './track-sort.js';
 export function renderSidebar() {
     const list = document.getElementById("sidebarList");
     const signature=JSON.stringify([viewFingerprint(this),this.sidebarFilter,this.libraryQuery,this.currentView?.type,this.currentView?.id]);
@@ -244,6 +245,6 @@ export function createActionBar(tracks, playlist = null) {
     bar.querySelector('.collection-more').onclick=e=>collectionMenu(this,{tracks,playlist,anchor:e.currentTarget});
     if(playlist){bar.querySelector('.collection-add').onclick=()=>this.navigateTo({type:'search',title:'Поиск'});bar.querySelector('.collection-edit').onclick=()=>editPlaylist(this,playlist);}
     const labels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',duration:'По длительности'};
-    bar.querySelector('.collection-sort').onclick=e=>showSurfaceMenu(this,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(labels).map(([value,label])=>({label,selected:this.sortBy===value,icon:icons.sort,action:()=>{this.sortBy=value;this.sortAsc=['title','artist'].includes(value);this.refreshCurrentView();}}))});
+    bar.querySelector('.collection-sort').onclick=e=>showSurfaceMenu(this,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(labels).map(([value,label])=>({label,selected:this.sortBy===value,icon:icons.sort,action:()=>changeTrackSort(this,value,false)}))});
     return bar;
 }

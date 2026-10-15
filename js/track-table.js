@@ -2,10 +2,14 @@ import {mountCover} from './artwork.js';
 import { saveIcon, icons } from "./design-icons.js";
 import { mountTrackRows } from "./virtual-list.js";
 import { playRow } from './playback-controls.js';
+import {changeTrackSort} from './track-sort.js';
 export function createTrackTable(tracks, playlistContext = null) {
+    if(this.tableSortExplicit)tracks=this.library.sortTracks(tracks,this.sortBy,this.sortAsc);
     const playbackContext = { ...this.currentView };
     const table = document.createElement("div");
     table.className = "track-table";
+    table.setAttribute('role','table');
+    table.setAttribute('aria-colcount','4');table.setAttribute('aria-rowcount',String(tracks.length+1));
 
     if (tracks.length === 0) {
       table.innerHTML = `
@@ -22,21 +26,29 @@ export function createTrackTable(tracks, playlistContext = null) {
 
     const header = document.createElement("div");
     header.className = "track-table-header compact-columns";
+    header.setAttribute('role','row');
     header.innerHTML = `
-      <div class="th-num">#</div>
-      <div>Название</div>
-      <div class="th-date">Дата добавления</div>
-      <div class="th-duration">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm9-3.25V8H5.75a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 .75-.75V4.75a.75.75 0 0 0-1.5 0z"/></svg>
+      <div class="th-num" role="columnheader">#</div>
+      <div role="columnheader" data-sort-column="title"><button class="track-sort-button" data-track-sort="title">Название</button></div>
+      <div class="th-date" role="columnheader" data-sort-column="dateAdded"><button class="track-sort-button" data-track-sort="dateAdded">Дата добавления</button></div>
+      <div class="th-duration" role="columnheader" data-sort-column="duration">
+        <button class="track-sort-button" data-track-sort="duration" aria-label="Сортировать по длительности"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm9-3.25V8H5.75a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 .75-.75V4.75a.75.75 0 0 0-1.5 0z"/></svg></button>
       </div>
     `;
     table.appendChild(header);
+    for(const button of header.querySelectorAll('[data-track-sort]')){
+      const field=button.dataset.trackSort,active=this.sortBy===field&&(this.tableSortExplicit||['allTracks','liked','playlist'].includes(this.currentView.type));
+      button.parentElement.setAttribute('aria-sort',active?(this.sortAsc?'ascending':'descending'):'none');
+      if(active){const arrow=document.createElement('span');arrow.className='track-sort-direction';arrow.setAttribute('aria-hidden','true');arrow.textContent=this.sortAsc?'▴':'▾';button.append(arrow);}
+      button.onclick=()=>changeTrackSort(this,field);
+    }
 
     const createRow = (track, index, virtual = false) => {
       const row = document.createElement("div");
       const isCurrent = this.player.currentTrack && this.player.currentTrack.id === track.id;
       row.className = `track-row compact-columns ${isCurrent ? "playing" : ""} ${isCurrent && this.player.isPlaying ? "is-playing" : ""}`;
       row.dataset.trackId = track.id;
+      row.setAttribute('role','row');row.setAttribute('aria-rowindex',String(index+2));
       const pending=this.pendingPlayback?.id===track.id;row.setAttribute('aria-busy',String(pending));row.classList.toggle('track-pending',pending&&this.playbackLoadingVisible);
 
       row.innerHTML = `
@@ -73,6 +85,7 @@ ${saveIcon}
       `;
 
       mountCover(row.querySelector('.track-mini-thumb'),track,virtual || index < 12);
+      for(const cell of row.children)cell.setAttribute('role','cell');
       // The entire row plays; only explicit action buttons intercept the click.
       row.addEventListener("click", (e) => {
         if (e.detail > 1 || e.target.closest('button')) return;

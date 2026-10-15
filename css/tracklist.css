@@ -186,6 +186,12 @@
   text-align: right;
   padding-right: 16px;
 }
+.track-sort-button{display:inline-flex;align-items:center;gap:6px;min-height:32px;max-width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:inherit;cursor:pointer}
+.track-sort-button:hover{color:var(--sp-text-primary)}
+.track-sort-button:focus-visible{outline:2px solid var(--sp-green);outline-offset:3px;border-radius:3px}
+[aria-sort="ascending"] .track-sort-button,[aria-sort="descending"] .track-sort-button{color:var(--sp-text-primary)}
+.track-sort-direction{color:var(--sp-green);font-size:13px;line-height:1}
+.th-duration .track-sort-button{justify-content:flex-end}
 
 /* Track Row */
 .track-row {

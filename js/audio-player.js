@@ -173,6 +173,7 @@ export class AudioPlayer {
   async playTrack(track, queueIndex = 0, newQueue = null, context = null) {
     if (!track) return;
     const request = ++this.playRequest;
+    this.nativePlayRequestedAt=Date.now();
     this.pendingTrack=track;this.onLoadingChange?.(track);
     try {
     if(track.catalog) {
@@ -318,10 +319,15 @@ export class AudioPlayer {
   syncNativeQueue(play = this.isPlaying, reset = false, position = null) {
     if (!this.nativePlayback) return;
     this.nativeMediaIds=this.queue.map(t=>t.id);
-    window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
-      title: t.title, artist: t.artist, cloudKey:t.cloudKey })), index: this.queueIndex, play, reset,
+    const tracks=this.queue.map(t=>({id:t.id,uri:t.nativeUri,title:t.title,artist:t.artist,cloudKey:t.cloudKey})),signature=JSON.stringify(tracks);
+    const requestedAt=play&&reset?this.nativePlayRequestedAt||Date.now():0;
+    if(reset&&play&&signature===this.nativeQueueSignature&&window.AndroidBridge.selectPlaybackTrack?.(tracks[this.queueIndex]?.id,this.queueIndex,true,Number.isFinite(position)?Math.round(position*1000):0,requestedAt)){
+      this.publishNativeArtwork();return;
+    }
+    window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks, index: this.queueIndex, play, reset,requestedAt,
       repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume,
       ...(Number.isFinite(position) ? {position:Math.max(0,Math.round(position * 1000))} : {}) }));
+    this.nativeQueueSignature=signature;
     this.publishNativeArtwork();
   }
 
@@ -357,6 +363,7 @@ export class AudioPlayer {
 
   applyNativeState(state) {
     if (!state) return;
+    if(Number.isFinite(state.startLatencyMs))this.lastNativeStartMs=state.startLatencyMs;
     if(state.queue)this.nativeMediaIds=state.queue;
     if (state.error) this.onError?.(state.error);
     if (state.queue?.length && ((!this.nativePlayback && !this.currentTrack) || state.queue.length!==this.queue.length || state.tracks?.some((saved,i)=>saved?.uri&&saved.uri!==this.queue[i]?.nativeUri))) {

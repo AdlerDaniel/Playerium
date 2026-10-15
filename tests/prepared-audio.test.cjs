@@ -12,6 +12,7 @@ test('prepared recordings converge to -14 LUFS, preserve originals and skip proc
    const s=stats(await run(executable,['-i',output,'-af','loudnorm=I=-14:TP=-1:LRA=11:print_format=json','-f','null','-']));results.push(Number(s.input_i));
    assert.ok(Math.abs(Number(s.input_i)+14)<1,JSON.stringify(s));assert.ok(Number(s.input_tp)<=-.5,JSON.stringify(s));
    const reopened=new PreparedAudio('nonexistent-ffmpeg',path.join(root,'prepared'));assert.equal(await reopened.prepare(input),output);
+   assert.deepEqual(await reopened.status([input,input]),{total:1,ready:1,failed:0,pending:0,active:false});
    await fs.appendFile(input,Buffer.from([0]));assert.equal(await reopened.cached(input),null);
   }
   assert.ok(Math.abs(results[0]-results[1])<.5);
