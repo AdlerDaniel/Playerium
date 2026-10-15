@@ -182,6 +182,8 @@ export class AudioPlayer {
       }catch(error){if(request===this.playRequest)this.onError?.(error.message);return;}
     }
     if(track.nativeUri && newQueue && window.AndroidBridge?.setPlaybackQueue){newQueue=newQueue.filter(t=>t.nativeUri);queueIndex=newQueue.findIndex(t=>t.id===track.id);}
+    let nativeMeasurement;
+    if(track.nativeUri&&window.AndroidBridge?.setPlaybackQueue){try{nativeMeasurement=await this.measureLoudness(track);}catch{}if(request!==this.playRequest)return;}
     this.audio.pause();
     this.audio.removeAttribute("src");
     this.audio.load();
@@ -222,8 +224,7 @@ export class AudioPlayer {
     if (this.nativePlayback) {
       // The native service applies cached gain and measures in its own background worker.
       // Sending the queue must never wait for a full-file analysis through the bridge.
-      try{const measured=await this.measureLoudness(track);if(request!==this.playRequest)return;if(measured)this.applyNormalization(measured.gain,false);}catch{}
-      if(request!==this.playRequest)return;
+      if(nativeMeasurement)this.applyNormalization(nativeMeasurement.gain,false);
       this.syncNativeQueue(true, true);
       this.equalizer?.sync?.();
       this.onTrackChange?.(track);
@@ -434,6 +435,7 @@ export class AudioPlayer {
   }
 
   pause() {
+    ++this.playRequest;
     if (this.nativePlayback) window.AndroidBridge.playbackCommand("pause", 0);
     this.audio.pause();
   }

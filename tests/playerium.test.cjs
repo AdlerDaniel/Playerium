@@ -192,6 +192,15 @@ test('Android selection sends measured gain before the native queue starts',asyn
   assert.equal(messages.length,2);assert.equal(messages[1].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[1].tracks[1].normalizationGain,.5);
 });
 
+test('pausing during first loudness preparation cancels the start, while old native updates cannot replace a newly selected song',async()=>{
+ let finish;const messages=[];window.AndroidBridge={setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{},playbackCommand:()=>{}};
+ const p=await player({getLoudness:()=>new Promise(r=>finish=r)}),a={id:'old',nativeUri:'content://music/old'},b={id:'new',nativeUri:'content://music/new'};
+ p.queue=[a];p.currentTrack=a;p.nativePlayback=true;p.queueIndex=0;
+ const cancelled=p.playTrack(b,1,[a,b]);while(!finish)await new Promise(r=>setTimeout(r,0));p.pause();finish({gain:2});await cancelled;assert.equal(messages.length,0);
+ p.browserLoudnessCache.clear();finish=null;const start=p.playTrack(b,1,[a,b]);while(!finish)await new Promise(r=>setTimeout(r,0));p.applyNativeState({id:'old',index:0,playing:true,position:2000,duration:180000});finish({gain:2});await start;
+ assert.equal(messages.length,1);assert.equal(messages[0].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[0].tracks[1].normalizationGain,2);
+});
+
 test('Android notification artwork sends durable image bytes once and follows automatic native transitions',async()=>{
   const pictures=[],commands=[],queues=[];
   window.AndroidBridge={setPlaybackQueue:s=>queues.push(JSON.parse(s)),storePlaybackArtwork:(id,bytes)=>pictures.push({id,bytes}),playbackCommand:(...args)=>commands.push(args),setEqualizer:()=>{}};
