@@ -222,6 +222,8 @@ export class AudioPlayer {
     if (this.nativePlayback) {
       // The native service applies cached gain and measures in its own background worker.
       // Sending the queue must never wait for a full-file analysis through the bridge.
+      try{const measured=await this.measureLoudness(track);if(request!==this.playRequest)return;if(measured)this.applyNormalization(measured.gain,false);}catch{}
+      if(request!==this.playRequest)return;
       this.syncNativeQueue(true, true);
       this.equalizer?.sync?.();
       this.onTrackChange?.(track);
@@ -245,6 +247,8 @@ export class AudioPlayer {
       let cached=this.browserLoudnessCache.get(this.loudnessKey(track,file));
       if(!cached&&track.filePath&&window.electronAPI?.getCachedLoudness)cached=await window.electronAPI.getCachedLoudness(track.filePath).catch(()=>null);
       if(!cached&&track.normalizationKey===this.loudnessKey(track,file))cached={gain:track.normalizationGain};
+      if(!cached){try{cached=await this.measureLoudness(track,file);}catch{}}
+      if(request!==this.playRequest)return;
       if(cached)this.applyNormalization(cached.gain,false);
       if(request!==this.playRequest)return;
       await this.audio.play();
@@ -266,7 +270,7 @@ export class AudioPlayer {
   }
 
   loudnessKey(track,file) {
-    return `${track.filePath||track.id}|${file?.size??track.fileSize}|${file?.lastModified??track.lastModified}`;
+    return `${track.filePath||track.nativeUri||track.id}|${file?.size??track.fileSize}|${file?.lastModified??track.lastModified}`;
   }
 
   applyNormalization(gain,smooth=true) {
@@ -284,7 +288,8 @@ export class AudioPlayer {
     if(this.browserLoudnessCache.has(key))return this.browserLoudnessCache.get(key);
     if(this.loudnessPending.has(key))return this.loudnessPending.get(key);
     let task;
-    if(track.filePath&&window.electronAPI?.getLoudness)task=window.electronAPI.getLoudness(track.filePath);
+    if(track.nativeUri&&this.library.getLoudness)task=this.library.getLoudness(track);
+    else if(track.filePath&&window.electronAPI?.getLoudness)task=window.electronAPI.getLoudness(track.filePath);
     else if(file&&file.size<=64*1024*1024&&this.audioCtx&&this.normalizationNode)task=browserLoudness(file,this.audioCtx);
     else return null;
     const pending=Promise.resolve(task).then(result=>{

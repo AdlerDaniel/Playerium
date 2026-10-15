@@ -17,4 +17,8 @@ test('handoff preserves position, queue and modes; both clients control the sele
  await pc.connect.select('phone');assert.equal(pc.connect.selected,'phone');assert.equal(pc.connect.localSnapshot.playing,false);assert.equal(phone.player.isPlaying,true);assert.equal(phone.player.time,63);assert.equal(phone.player.isShuffle,true);assert.equal(phone.player.repeatMode,'all');
  await pc.connect.control('pause');assert.equal(phone.player.isPlaying,false);await pc.connect.control('seek',80);assert.equal(phone.player.time,80);await pc.connect.control('volume',0);assert.equal(phone.player.volume,0);
  pc.player.toggleRepeat();await pc.connect.commandTail;assert.equal(phone.player.repeatMode,'one');pc.player.togglePlay();await pc.connect.commandTail;assert.equal(phone.player.isPlaying,true);await pc.connect.control('play');assert.equal(phone.player.isPlaying,true);await pc.connect.select('pc');assert.equal(pc.player.isPlaying,true);assert.equal(pc.player.time,80);assert.equal(phone.player.isPlaying,false);assert.equal(pc.player.volume,0);assert.ok(commands.some(c=>c.action==='transfer'&&c.media[0].key===key));
-});
+  phone.player.currentTrack=null;phone.player.isPlaying=false;phone.connect.devices=[{id:'pc',state:pc.connect.snapshot(),seenAt:Date.now()}];phone.connect.followRemote();assert.equal(phone.connect.selected,'pc');assert.equal(phone.connect.explicitTarget,null);
+  await phone.player.playTrack(phone.track,0,[phone.track]);assert.equal(phone.connect.selected,'phone');assert.equal(phone.player.isPlaying,true);await new Promise(r=>setTimeout(r,0));assert.equal(pc.player.isPlaying,false);
+  await phone.connect.select('pc');assert.equal(phone.connect.explicitTarget,'pc');assert.equal(pc.player.isPlaying,true);
+  await phone.player.playTrack(phone.track,0,[phone.track]);assert.equal(phone.connect.selected,'pc');assert.equal(pc.player.isPlaying,true);
+ });

@@ -54,11 +54,7 @@ export function bindMobileEvents() {
 
     document.getElementById("mobileMiniLike")?.addEventListener("click", async (e) => {
       e.stopPropagation();
-      if (this.player.currentTrack) {
-        const liked = await this.library.toggleLike(this.player.currentTrack.id);
-        this.updateLikeButtons(this.player.currentTrack.id, liked);
-        this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
-      }
+      await this.toggleCurrentLike();
     });
 
     // 3. Mobile Fullscreen Player Controls
@@ -87,11 +83,7 @@ export function bindMobileEvents() {
     });
 
     document.getElementById("btnMobileFsLike")?.addEventListener("click", async () => {
-      if (this.player.currentTrack) {
-        const liked = await this.library.toggleLike(this.player.currentTrack.id);
-        this.updateLikeButtons(this.player.currentTrack.id, liked);
-        this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
-      }
+      await this.toggleCurrentLike();
     });
 
     // Fullscreen Scrubber slider

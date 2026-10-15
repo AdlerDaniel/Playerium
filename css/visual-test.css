@@ -97,3 +97,54 @@
 @media(prefers-reduced-motion:reduce){.visual-12 :is(.track-row-play,.btn-play-pause,.continue-play,.cinema-play){transition:none;}}
 
 @media(max-width:768px),(pointer:coarse) and (max-width:1024px){#btnMobileCinema{min-width:44px;min-height:44px;}}
+
+/* Continuous app canvas, stronger surfaces and useful desktop density. */
+.visual-1 #app { padding:0;gap:0; }
+.visual-1 .app-body { gap:0; }
+.visual-1 :is(.sidebar,.main-view-container,.right-panel,.bottom-player) { border-radius:0; }
+.visual-1 .sidebar { background:var(--sp-black);border-right:1px solid var(--theme-border); }
+.visual-1 .right-panel { border-left:1px solid var(--theme-border); }
+.visual-1 .right-panel.hidden { margin-left:0;border:0; }
+.visual-1 .main-view-container { background:var(--sp-dark-900); }
+.visual-1[data-view="home"] .main-view-container { background-image:radial-gradient(ellipse at 95% 0,var(--theme-accent-soft),transparent 65%),linear-gradient(180deg,var(--theme-home-top),var(--sp-dark-900) 520px); }
+.visual-1 #mainViewContent { min-height:100%; }
+.visual-1 .home-dashboard { position:relative;background:transparent; }
+.visual-1 :is(.settings-card,.search-top-card,.search-recent-row,.home-quick-card,.next-song-card) { background:var(--sp-dark-800);box-shadow:inset 0 0 0 1px var(--theme-border); }
+.visual-1 :is(.settings-card,.surface-panel,.modal-card) { border:1px solid var(--theme-border); }
+.visual-1 :is(.home-filters,.sidebar-filters,.search-filters) .pill-btn { background:var(--sp-dark-700);color:var(--sp-text-primary);box-shadow:inset 0 0 0 1px var(--theme-border); }
+.visual-1 :is(.home-filters,.sidebar-filters,.search-filters) .pill-btn.active { background:var(--sp-green);color:var(--sp-on-accent);box-shadow:none; }
+.visual-1 :is(.collection-tool,.settings-btn,.visual-options select) { background:var(--sp-dark-700);box-shadow:inset 0 0 0 1px var(--theme-border); }
+.visual-1 :is(#btnPlayerLike,#mobileMiniLike,#btnMobileFsLike).liked { color:var(--sp-green); }
+.visual-1 .continue-card { background:linear-gradient(115deg,var(--sp-dark-700),var(--sp-dark-800) 65%,var(--theme-accent-soft));box-shadow:inset 0 0 0 1px var(--theme-border); }
+.visual-1 .continue-info progress { width:100%;max-width:none;accent-color:var(--sp-green); }
+@media(min-width:769px) and (pointer:fine) {
+ .visual-1 .home-dashboard { padding:24px 28px 32px; }
+ .visual-1 .home-customize { position:absolute;top:16px;right:24px;margin:0;background:var(--sp-dark-700);border-radius:50%; }
+ .visual-1 .home-filters { padding-right:56px;margin-bottom:0; }
+ .visual-1 .home-quick-grid { grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px; }
+ .visual-1 .home-quick-card { height:76px; }
+ .visual-1 .home-quick-art { width:76px;height:76px; }
+ .visual-1 .continue-card { padding:24px;gap:28px;min-height:208px; }
+ .visual-1 .continue-cover { width:160px;height:160px; }
+ .visual-1 .continue-info { gap:10px; }
+ .visual-1 .continue-info h2 { font-size:clamp(28px,3vw,42px); }
+ .visual-1 .continue-play { width:64px;height:64px;margin-inline:8px; }
+ .visual-1 .shelf-card { background:var(--sp-dark-800);margin:0 6px;width:calc(100% - 12px); }
+ .visual-1 .shelf-cards { grid-auto-columns:clamp(180px,13vw,224px); }
+ .visual-1 .bottom-player { border-top:1px solid var(--theme-border);background:var(--sp-black); }
+}
+@media(max-width:768px),(pointer:coarse) and (max-width:1024px) {
+ .visual-1 .home-customize { display:none!important; }
+ .visual-1 .main-view { padding:0!important;background:transparent; }
+ .visual-1 #mainViewContent { padding-bottom:calc(var(--sp-mobile-nav-height) + var(--sp-mobile-mini-height) + var(--sp-mobile-safe-bottom) + 24px); }
+ .visual-1 .home-dashboard { padding:12px 16px 0!important; }
+ body.visual-1[data-view] :is(.view-header,.collection-header) { border-radius:0;margin:0;width:100%;padding-inline:16px; }
+ .visual-1 .view-actions { padding-inline:16px; }
+ .visual-1 .track-table { margin-inline:0;width:100%;padding-inline:12px; }
+ .visual-1 .track-table-header { margin-inline:0; }
+ .visual-1 :is(.collection-actions,.action-bar) { padding-inline:16px; }
+ .visual-1 :is(.settings-view,.spotify-search,.library-view) { padding-inline:16px; }
+ .visual-1 .content-history { background:var(--sp-dark-900); }
+ .visual-1 .sidebar { border:0; }
+ .visual-1 .mobile-mini-player { box-shadow:0 2px 12px #0005,inset 0 0 0 1px var(--theme-border); }
+}

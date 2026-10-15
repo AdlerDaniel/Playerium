@@ -166,7 +166,7 @@ test('native playback sends URI queue without reading audio into JavaScript',asy
   p.applyNativeState({id:'native',playing:true,position:2000,duration:42000});assert.equal(p.getDuration(),42);assert.equal(p.isPlaying,true);
 });
 
-test('desktop playback starts before loudness analysis and late results never change a started song',async()=>{
+test('first desktop playback uses measured gain; stale analysis cannot change a newer selection and cached playback is immediate',async()=>{
   const pending=new Map(),calls=[];
   window.electronAPI={getAudioSource:async file=>'music://'+file,getLoudness:file=>{
     calls.push(file);return new Promise(resolve=>pending.set(file,resolve));
@@ -175,24 +175,21 @@ test('desktop playback starts before loudness analysis and late results never ch
   p.audioCtx={currentTime:10};
   const gains=[];p.normalizationNode={gain:{cancelScheduledValues:()=>{},setValueAtTime:v=>gains.push(v),setTargetAtTime:v=>gains.push(v)}};
   const a={id:'a',filePath:'a.mp3'},b={id:'b',filePath:'b.mp3'};
-  await Promise.race([p.playTrack(a),new Promise((_,reject)=>setTimeout(()=>reject(Error('Playback waited for analysis')),200))]);
-  assert.equal(p.isPlaying,true);assert.equal(p.audio.src,'music://a.mp3');
-  const first=p.normalizationTask;
-  await p.playTrack(b,0,[b]);const second=p.normalizationTask;
-  pending.get('a.mp3')({gain:2});await first;
-  assert.equal(p.normalizationGain,1);assert.equal(p.currentTrack,b);
-  p.pause();p.seekToTime(30);pending.get('b.mp3')({gain:.5});await second;
-  assert.equal(p.normalizationGain,1);assert.equal(b.normalizationGain,.5);assert.equal(p.isPlaying,false);assert.equal(p.getCurrentTime(),30);
-  await p.playTrack(a,0,[a]);assert.equal(p.normalizationGain,2);await p.normalizationTask;
+  const first=p.playTrack(a);while(!pending.has('a.mp3'))await new Promise(r=>setTimeout(r,0));assert.equal(p.isPlaying,false);
+  const second=p.playTrack(b,0,[b]);while(!pending.has('b.mp3'))await new Promise(r=>setTimeout(r,0));pending.get('b.mp3')({gain:.5});await second;
+  assert.equal(p.isPlaying,true);assert.equal(p.normalizationGain,.5);
+  pending.get('a.mp3')({gain:2});await first;assert.equal(p.normalizationGain,.5);assert.equal(p.currentTrack,b);
+  p.pause();p.seekToTime(30);assert.equal(p.getCurrentTime(),30);
+  await Promise.race([p.playTrack(a,0,[a]),new Promise((_,reject)=>setTimeout(()=>reject(Error('Cached playback waited')),200))]);assert.equal(p.normalizationGain,2);
   assert.deepEqual(calls,['a.mp3','b.mp3']);assert.equal(gains.at(-1),2);
 });
 
-test('Android song selection does not queue loudness work through the JavaScript bridge',async()=>{
+test('Android selection sends measured gain before the native queue starts',async()=>{
   const messages=[];window.AndroidBridge={setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{}};
-  const p=await player({getLoudness:()=>{throw Error('Playback must not request analysis');}});
+  const p=await player({getLoudness:async()=>({gain:.5})});
   const a={id:'a',nativeUri:'content://music/a'},b={id:'b',nativeUri:'content://music/b'};
   await p.playTrack(a,0,[a,b]);await p.playTrack(b,1);
-  assert.equal(messages.length,2);assert.equal(messages[1].index,1);assert.equal(p.currentTrack,b);
+  assert.equal(messages.length,2);assert.equal(messages[1].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[1].tracks[1].normalizationGain,.5);
 });
 
 test('Android notification artwork sends durable image bytes once and follows automatic native transitions',async()=>{

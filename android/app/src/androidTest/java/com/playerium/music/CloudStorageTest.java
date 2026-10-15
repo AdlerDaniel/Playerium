@@ -22,7 +22,7 @@ public class CloudStorageTest {
         try{assertTrue(MainActivity.hasMusicPermission(context,Uri.fromFile(file)));assertTrue(new File(file.getParentFile(),".nomedia").isFile());JSONObject info=(JSONObject)request("fingerprint",new JSONObject().put("source",saved.getString("source")));assertEquals("63f75c890b05405e6e1f047072642b40949dab5912aa9c0ae6f2e654dff943dd",info.getString("key"));assertEquals(4,info.getInt("size"));assertEquals(".mp3",info.getString("ext"));}finally{assertTrue(file.delete());}
     }
     @Test public void disconnectedStatusNeverContainsTokensAndRejectsArbitraryFiles()throws Exception{
-        JSONObject status=(JSONObject)request("status",new JSONObject());assertFalse(status.has("accessToken"));assertFalse(status.has("refreshToken"));
+        JSONObject status=(JSONObject)request("status",new JSONObject());assertFalse(status.has("accessToken"));assertFalse(status.has("refreshToken"));assertTrue(status.getBoolean("canFlush"));assertEquals(Boolean.TRUE,request("flush",new JSONObject()));
         try{request("fingerprint",new JSONObject().put("source","file:///system/build.prop"));fail("Arbitrary file accepted");}catch(java.io.IOException expected){}
         try{request("removeLocal",new JSONObject().put("key","../outside"));fail("Traversal accepted");}catch(java.io.IOException expected){}
     }

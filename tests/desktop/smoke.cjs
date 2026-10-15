@@ -29,6 +29,7 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     assert.equal(tracks.length,1, `Expected one audio track, got ${tracks.length}; errors: ${errors.join("; ")}`);
     const track=tracks[0];
     assert.equal(track.title,'Song');assert.equal(track.duration,20);assert.equal(track.lyrics,undefined);
+    const measured=await win.evaluate(async()=>{const a=window.playerApp;return a.player.measureLoudness(a.library.getTracks().find(t=>t.filePath?.includes('Artist - Song.wav')));});assert.ok(measured.gain>0);
     await app.evaluate(()=>{
       const {createRequire}=process.getBuiltinModule('module');
       const {LoudnessAnalyzer}=createRequire(process.cwd()+'/.latency-test.cjs')('./desktop-loudness.js');
@@ -58,13 +59,14 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
       return {audible,context:player.audioCtx.state,volume:player.volume,position:player.audio.currentTime};
     });
     assert.equal(sound.audible,true,`Streaming audio must reach Web Audio: ${JSON.stringify(sound)}`);
-    assert.ok(startup<2000,'An unresolved analysis must not hold the first audible frame');
+    assert.ok(startup<2000,'Cached loudness must not hold the first audible frame');
     await app.evaluate(()=>{
-      global.releaseLoudness({gain:1});
+      global.releaseLoudness?.({gain:1});
       const {createRequire}=process.getBuiltinModule('module');
       createRequire(process.cwd()+'/.latency-test.cjs')('./desktop-loudness.js').LoudnessAnalyzer.prototype.analyze=global.originalLoudness;
     });
-    console.log('Audible playback starts while full-file loudness analysis is still pending:',Math.round(startup),'ms');
+    assert.equal(await win.evaluate(()=>window.playerApp.player.normalizationGain),measured.gain);
+    console.log('Audible playback starts immediately with measured, cached loudness:',Math.round(startup),'ms');
     const range=await app.evaluate(async({net},src)=>{const r=await net.fetch(src,{headers:{Range:'bytes=44-63'}});return {status:r.status,range:r.headers.get('content-range'),bytes:(await r.arrayBuffer()).byteLength};},await win.evaluate(()=>window.playerApp.player.audio.src));
     assert.deepEqual(range,{status:206,range:'bytes 44-63/320044',bytes:20},'Audio protocol must deliver the requested byte interval for seeking');
     await win.evaluate(()=>window.playerApp.player.seekToTime(12));

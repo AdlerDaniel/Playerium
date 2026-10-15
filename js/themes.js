@@ -13,10 +13,11 @@ export function applyTheme(id,persist=true){
  const keys=['--sp-black','--sp-dark-900','--sp-dark-800','--sp-dark-700','--sp-dark-600','--sp-dark-500','--sp-dark-400','--sp-text-primary','--sp-text-secondary','--sp-green','--sp-green-hover','--sp-on-accent','--theme-hero'];
  keys.forEach((key,i)=>root.style.setProperty(key,c[i]));
   const mix = (a,b,weight) => '#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*weight+parseInt(b.slice(i,i+2),16)*(1-weight)).toString(16).padStart(2,'0')).join('');
-   if(enabled(1)){for(let i=0;i<7;i++)root.style.setProperty(keys[i],mix(c[i],theme.scheme==='light'?'#f4efe8':'#161616',.3));}
-   root.style.setProperty('--theme-home-top',mix(c[12],getComputedStyle(root).getPropertyValue('--sp-dark-900').trim()||c[1],enabled(1)?.08:.22));
+   if(enabled(1)){for(let i=0;i<7;i++)root.style.setProperty(keys[i],mix(c[i],theme.scheme==='light'?'#faf7f2':'#101011',.78));}
+   root.style.setProperty('--theme-home-top',mix(c[12],getComputedStyle(root).getPropertyValue('--sp-dark-900').trim()||c[1],enabled(1)?.32:.22));
  root.style.setProperty('--sp-text-subdued',c[8]);root.style.setProperty('--sp-green-active',c[9]);root.style.setProperty('--sp-theme-color',c[9]);
- root.style.setProperty('--theme-hover',theme.scheme==='light'?'#392b2010':'#ffffff10');root.style.setProperty('--theme-selection',theme.scheme==='light'?'#79533322':c[9]+'24');
+  root.style.setProperty('--theme-border',theme.scheme==='light'?'#392b2038':'#ffffff30');root.style.setProperty('--theme-accent-soft',c[9]+(theme.scheme==='light'?'24':'26'));
+  root.style.setProperty('--theme-hover',theme.scheme==='light'?'#392b201a':'#ffffff18');root.style.setProperty('--theme-selection',theme.scheme==='light'?'#79533330':c[9]+'38');
  root.dataset.theme=theme.id;root.style.colorScheme=theme.scheme;
  document.querySelectorAll('meta[name="theme-color"]').forEach(meta=>meta.content=c[0]);document.querySelector('meta[name="color-scheme"]')?.setAttribute('content',theme.scheme);
  if(persist)try{localStorage.setItem('playerium_theme',theme.id);}catch{}

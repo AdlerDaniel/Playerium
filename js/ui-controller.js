@@ -141,11 +141,7 @@ export class UIController {
     document.getElementById("btnShuffle").addEventListener("click", () => this.player.toggleShuffle());
     document.getElementById("btnRepeat").addEventListener("click", () => this.player.toggleRepeat());
     document.getElementById("btnPlayerLike").addEventListener("click", async () => {
-      if (this.player.currentTrack) {
-        const liked = await this.library.toggleLike(this.player.currentTrack.id);
-        this.updateLikeButtons(this.player.currentTrack.id, liked);
-        this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
-      }
+      await this.toggleCurrentLike();
     });
 
     // Scrubber / Progress slider
@@ -795,7 +791,22 @@ export class UIController {
 
   // --- UI Helpers ---
 
+  async toggleCurrentLike() {
+    const track=this.player.currentTrack;if(!track||this.likingTrack)return;
+    this.likingTrack=true;
+    try {
+      let local=this.library.getTrackById(track.id)||this.library.getTracks().find(t=>track.cloudKey&&t.cloudKey===track.cloudKey),liked;
+      if(!local&&track.catalog)local=await this.music.ensureTrack(track);
+      if(local)liked=await this.library.toggleLike(local.id);
+      else if(track.cloudKey&&this.cloud?.account){liked=!track.liked;this.cloud.operation('like',{key:track.cloudKey,liked});await this.cloud.save();this.cloud.schedule(0);}
+      else throw Error('Трек ещё не появился в медиатеке. Дождитесь синхронизации.');
+      track.liked=liked;this.updateLikeButtons(track.id,liked);if(local&&local.id!==track.id)this.updateLikeButtons(local.id,liked);
+      this.showToast(liked?'Добавлено в «Любимые треки»':'Удалено из «Любимых треков»');
+    }catch(error){this.showToast(error.message,'error');}finally{this.likingTrack=false;}
+  }
+
   updateLikeButtons(trackId, isLiked) {
+    isLiked=!!isLiked;
     document.querySelectorAll(`.track-like-btn[data-like-id="${trackId}"]`).forEach((btn) => {
       btn.classList.toggle("liked", isLiked);
       btn.setAttribute("aria-pressed", String(isLiked));
@@ -803,9 +814,11 @@ export class UIController {
     });
 
     if (this.player.currentTrack && this.player.currentTrack.id === trackId) {
+      this.player.currentTrack.liked=isLiked;
       for(const id of ["btnPlayerLike","mobileMiniLike","btnMobileFsLike"]) {
         const button=document.getElementById(id);button.classList.toggle("liked",isLiked);
-        button.setAttribute("aria-pressed",String(isLiked));button.title=isLiked?"Удалить из любимых":"Добавить в любимые";
+        button.setAttribute("aria-pressed",String(isLiked));button.title=isLiked?"Удалить из любимых":"Добавить в любимые";button.setAttribute('aria-label',button.title);
+        button.innerHTML=isLiked?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m7 12 3 3 7-7" fill="none" stroke="var(--sp-on-accent)" stroke-width="2"/></svg>':saveIcon;
       }
     }
   }

@@ -36,16 +36,19 @@ export class CloudSync {
    await this.capture();
    const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
-   for(const op of [...this.outbox]){
+    let published=false;
+    for(const op of [...this.outbox]){
      try{
     const link=this.links[op.key];
     if(op.kind==='track'){
      const track=link&&this.library.getTrackById(link.localId);if(!track){this.outbox=this.outbox.filter(p=>p.id!==op.id);continue;}
      await this.request('publish',{operation:op,source:await this.source(track),cover:await this.cover(track)});
-    }else await this.request('publish',{operation:op});
+     }else await this.request('publish',{operation:op});
+     published=true;
      }catch(error){this.failures.push(error.message);}
    }
-   const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;
+    if(this.status.canFlush&&(published||this.status.pending))await this.request('flush');
+    const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
    // Preserve edits made while native transfers were running.
    await this.capture();

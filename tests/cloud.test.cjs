@@ -75,3 +75,14 @@ test('playlist deletion during an incoming transfer is saved before the old snap
  pc.lib.playlists.delete('mix');pc.cloud.captureDeletions();await pc.cloud.apply(model.cloudView(pc.cloud.events));assert.equal(pc.lib.getPlaylistById('mix'),undefined);assert.ok(pc.cloud.outbox.some(op=>op.kind==='playlist-delete'));
  await pc.cloud.sync();await phone.cloud.sync();assert.equal(phone.lib.getPlaylistById('mix'),undefined);
 });
+test('foreground sync waits for durable native uploads before its final pull so a new phone song reaches PC immediately',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net),base=phone.cloud.transport,staged=[];
+ phone.cloud.transport=async(name,payload)=>{
+  if(name==='status')return {...await base(name,payload),canFlush:true,pending:staged.length};
+  if(name==='publish'){staged.push(payload);return {queued:true};}
+  if(name==='flush'){for(const job of staged.splice(0))await base('publish',job);return true;}
+  return base(name,payload);
+ };
+ add(phone,net,'New phone recording','new recording');await phone.cloud.sync();assert.equal(staged.length,0);assert.equal(phone.cloud.outbox.length,0);
+ await pc.cloud.sync();assert.equal(pc.lib.getTracks()[0].title,'New phone recording');
+});

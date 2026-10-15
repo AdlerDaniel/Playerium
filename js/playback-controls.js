@@ -6,6 +6,7 @@ export function contextKey(context) {
 
 export function playRow(ui, track, tracks, context, toggle = false) {
   const player = ui.player;
+  if(ui.connect&&ui.connect.selected!==ui.connect.id&&ui.connect.explicitTarget!==ui.connect.selected)return player.playTrack(track,tracks.indexOf(track),tracks,{...context});
   if (player.currentTrack?.id === track.id) {
     if (toggle && player.isPlaying) player.pause();
     else if (!player.isPlaying) player.play();
@@ -23,7 +24,7 @@ export function bindCollectionPlay(ui, button, tracks, context) {
   button.disabled = !tracks.length;
   button.addEventListener('click', () => {
     if (!tracks.length) return;
-    if (contextKey(ui.player.playbackContext) === contextKey(context) && ui.player.currentTrack) ui.player.togglePlay();
+    if (contextKey(ui.player.playbackContext) === contextKey(context) && ui.player.currentTrack && !(ui.connect&&ui.connect.selected!==ui.connect.id&&ui.connect.explicitTarget!==ui.connect.selected)) ui.player.togglePlay();
     else ui.player.playTrack(tracks[0], 0, tracks, { ...context });
   });
   updateCollectionButton(ui.player, button);
