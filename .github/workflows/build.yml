@@ -44,6 +44,7 @@ jobs:
       - run: python scripts/generate_icons.py
       - run: npm ci
       - run: python scripts/prepare_music_runtime.py --windows
+      - run: node --test tests/prepared-audio.test.cjs
       - run: npm run test:desktop
       - run: node tests/desktop/cloud-runtime.cjs
       - run: node tests/desktop/background.cjs

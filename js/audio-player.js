@@ -185,8 +185,6 @@ export class AudioPlayer {
       }catch(error){if(request===this.playRequest)this.onError?.(error.message);return;}
     }
     if(track.nativeUri && newQueue && window.AndroidBridge?.setPlaybackQueue){newQueue=newQueue.filter(t=>t.nativeUri);queueIndex=newQueue.findIndex(t=>t.id===track.id);}
-    let nativeMeasurement;
-    if(track.nativeUri&&window.AndroidBridge?.setPlaybackQueue){try{nativeMeasurement=await this.measureLoudness(track);}catch{}if(request!==this.playRequest)return;}
     this.audio.pause();
     this.audio.removeAttribute("src");
     this.audio.load();
@@ -227,7 +225,6 @@ export class AudioPlayer {
     if (this.nativePlayback) {
       // The native service applies cached gain and measures in its own background worker.
       // Sending the queue must never wait for a full-file analysis through the bridge.
-      if(nativeMeasurement)this.applyNormalization(nativeMeasurement.gain,false);
       this.syncNativeQueue(true, true);
       this.equalizer?.sync?.();
       this.onTrackChange?.(track);
@@ -248,10 +245,10 @@ export class AudioPlayer {
       if (request !== this.playRequest) { if (url?.startsWith("blob:")) URL.revokeObjectURL(url); return; }
       this.sourceUrl = url;
       this.audio.src = url;
-      let cached=this.browserLoudnessCache.get(this.loudnessKey(track,file));
-      if(!cached&&track.filePath&&window.electronAPI?.getCachedLoudness)cached=await window.electronAPI.getCachedLoudness(track.filePath).catch(()=>null);
-      if(!cached&&track.normalizationKey===this.loudnessKey(track,file))cached={gain:track.normalizationGain};
-      if(!cached){try{cached=await this.measureLoudness(track,file);}catch{}}
+      // Native/desktop sources are normalized on disk by a separate durable queue.
+      // Playback never starts an analysis or applies obsolete -18 LUFS gain again.
+      let cached=!track.filePath?this.browserLoudnessCache.get(this.loudnessKey(track,file)):null;
+      if(!cached&&!track.filePath&&track.normalizationKey===this.loudnessKey(track,file))cached={gain:track.normalizationGain};
       if(request!==this.playRequest)return;
       if(cached)this.applyNormalization(cached.gain,false);
       if(request!==this.playRequest)return;
@@ -261,9 +258,7 @@ export class AudioPlayer {
       this.updateMediaSessionMetadata(track);
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
-      this.normalizationTask=this.normalizeInBackground(track,file,request);
-      const next=this.queue[this.queueIndex+1];
-      if(next?.filePath&&window.electronAPI?.getLoudness)this.measureLoudness(next).catch(()=>{});
+      if(!track.filePath)this.normalizationTask=this.normalizeInBackground(track,file,request);
     } catch (error) {
       if (request !== this.playRequest) return;
       this.audio.pause();
@@ -275,7 +270,7 @@ export class AudioPlayer {
   }
 
   loudnessKey(track,file) {
-    return `${track.filePath||track.nativeUri||track.id}|${file?.size??track.fileSize}|${file?.lastModified??track.lastModified}`;
+    return `lufs14-v2|${track.filePath||track.nativeUri||track.id}|${file?.size??track.fileSize}|${file?.lastModified??track.lastModified}`;
   }
 
   applyNormalization(gain,smooth=true) {
@@ -324,7 +319,7 @@ export class AudioPlayer {
     if (!this.nativePlayback) return;
     this.nativeMediaIds=this.queue.map(t=>t.id);
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks: this.queue.map(t => ({ id: t.id, uri: t.nativeUri,
-      title: t.title, artist: t.artist, cloudKey:t.cloudKey, normalizationGain:t.normalizationGain })), index: this.queueIndex, play, reset,
+      title: t.title, artist: t.artist, cloudKey:t.cloudKey })), index: this.queueIndex, play, reset,
       repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume,
       ...(Number.isFinite(position) ? {position:Math.max(0,Math.round(position * 1000))} : {}) }));
     this.publishNativeArtwork();

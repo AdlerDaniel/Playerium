@@ -39,6 +39,7 @@ final class MusicEngine {
     private JSONObject records;
     private String musicClientVersion;
     private final Map<String,Double> knownLoudness=new ConcurrentHashMap<>();
+    private final Object normalizationLock=new Object();
     JSONObject cachedLoudness(Uri uri) throws Exception {
         if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");
         long size,modified;if("file".equals(uri.getScheme())){File file=new File(uri.getPath());size=file.length();modified=file.lastModified();}
@@ -106,6 +107,7 @@ final class MusicEngine {
             throw new IOException("Недопустимая обложка");
         }
         if(operation.equals("loudness"))return analyzeLoudness(Uri.parse(payload.getString("uri")));
+        if(operation.equals("prepareLibrary")){PreparedAudio.enqueue(context,payload.getJSONArray("uris"));return true;}
         if(operation.equals("waveform"))return analyzeWaveform(Uri.parse(payload.getString("uri")));
         if(operation.equals("restore")){JSONArray files=new JSONArray();JSONObject saved; synchronized(this){saved=new JSONObject(records().toString());}Iterator<String> keys=saved.keys();while(keys.hasNext()) {String key=keys.next();JSONObject record=saved.getJSONObject(key);if(exists(record)){cleanSidecar(record);try{record=protectDownloaded(record,key);}catch(IOException|SecurityException error){android.util.Log.w("Playerium","Could not hide downloaded media yet",error);}files.put(record);}}return files;}
         if(operation.equals("describe")){JSONObject record=records().optJSONObject(payload.getString("downloadId"));if(record==null)throw new IOException("Track unavailable");return withCover(record);}
@@ -193,10 +195,42 @@ final class MusicEngine {
                 if(!match.find())throw new IOException("Missing loudness measurement");
                 JSONObject stats=new JSONObject(match.group());double integrated=measurementNumber(stats.getString("input_i")),peak=measurementNumber(stats.getString("input_tp"));
                 double gain=1;if(!Double.isNaN(integrated)&&!Double.isInfinite(integrated)&&!Double.isNaN(peak)&&!Double.isInfinite(peak)&&integrated>=-60)gain=Math.pow(10,Math.max(-30,Math.min(18,Math.min(-18-integrated,-1-peak)))/20);
-                JSONObject result=new JSONObject().put("gain",gain);cache.edit().putString(key,result.toString()).apply();knownLoudness.put(key,gain);return result;
+                JSONObject result=new JSONObject().put("gain",gain).put("integrated",finite(integrated)?integrated:JSONObject.NULL).put("peak",finite(peak)?peak:JSONObject.NULL);cache.edit().putString(key,result.toString()).apply();knownLoudness.put(key,gain);return result;
             }finally{process.destroy();}
         }finally{input.delete();}
     }
+    Uri prepareAudio(Uri uri)throws Exception{ synchronized(normalizationLock){
+        String key=PreparedAudio.key(context,uri);File target=new File(PreparedAudio.directory(context),key+".m4a");
+        if(target.isFile()&&target.length()>32)return Uri.fromFile(target);
+        initialize();File input=File.createTempFile("normalize-",".audio",context.getCacheDir());
+        File temporary=new File(target.getParentFile(),key+".part.m4a");
+        try{
+            try(InputStream in=context.getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(input)){if(in==null)throw new IOException("Audio unavailable");copy(in,out);}
+            if(target.getParentFile().getUsableSpace()<input.length()+32L*1024*1024)throw new IOException("Недостаточно места для подготовки музыки");
+            String filter="loudnorm=I=-14:TP=-1:LRA=11";
+            String log=normalizationProcess(Arrays.asList("-i",input.getAbsolutePath(),"-map","0:a:0","-vn","-af",filter+":print_format=json","-f","null","-"));
+            java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\{\\s*\"input_i\"[\\s\\S]*?\\}").matcher(log);
+            if(!match.find())throw new IOException("Missing loudness measurement");JSONObject stats=new JSONObject(match.group());
+            if(finite(measurementNumber(stats.getString("input_i")))){
+                for(String field:Arrays.asList("input_i","input_tp","input_lra","input_thresh","target_offset"))if(!finite(measurementNumber(stats.getString(field))))throw new IOException("Invalid loudness measurement");
+                filter+=":measured_I="+stats.getString("input_i")+":measured_TP="+stats.getString("input_tp")+":measured_LRA="+stats.getString("input_lra")+":measured_thresh="+stats.getString("input_thresh")+":offset="+stats.getString("target_offset")+":linear=true";
+            }else filter="anull";
+            normalizationProcess(Arrays.asList("-i",input.getAbsolutePath(),"-map","0:a:0","-vn","-map_metadata","0","-af",filter,"-ar","48000","-c:a","aac","-b:a","256k","-movflags","+faststart",temporary.getAbsolutePath()));
+            if(!key.equals(PreparedAudio.key(context,uri)))throw new IOException("Recording changed during preparation");
+            if(temporary.length()<=32||!temporary.renameTo(target))throw new IOException("Unable to save prepared audio");
+            return Uri.fromFile(target);
+        }finally{input.delete();temporary.delete();}
+    }}
+    private String normalizationProcess(List<String> arguments)throws Exception{
+        List<String> command=new ArrayList<>();command.add(new File(context.getApplicationInfo().nativeLibraryDir,"libffmpeg.so").getAbsolutePath());command.addAll(Arrays.asList("-hide_banner","-nostdin","-y","-threads","1","-filter_threads","1"));command.addAll(arguments);
+        ProcessBuilder builder=new ProcessBuilder(command);builder.environment().put("LD_LIBRARY_PATH",new File(runtime,"python/usr/lib")+":"+new File(runtime,"ffmpeg/usr/lib"));builder.redirectErrorStream(true);Process process=builder.start();
+        FutureTask<byte[]> output=new FutureTask<>(()->read(process.getInputStream(),1024*1024));new Thread(output,"Playerium normalization output").start();
+        try{long deadline=System.currentTimeMillis()+240000;
+            while(true){try{process.exitValue();break;}catch(IllegalThreadStateException running){if(System.currentTimeMillis()>deadline||Thread.currentThread().isInterrupted())throw new IOException("Audio preparation interrupted");Thread.sleep(50);}}
+            String log=new String(output.get(5,TimeUnit.SECONDS),StandardCharsets.UTF_8);if(process.exitValue()!=0)throw new IOException("Audio preparation failed: "+log.substring(Math.max(0,log.length()-500)));return log;
+        }finally{process.destroy();}
+    }
+    private static boolean finite(double value){return !Double.isNaN(value)&&!Double.isInfinite(value);}
     private static double measurementNumber(String value){try{return Double.parseDouble(value);}catch(NumberFormatException ignored){return Double.NaN;}}
     private static void unzip(File zip,File root) throws Exception {
         root.mkdirs();String prefix=root.getCanonicalPath()+File.separator;

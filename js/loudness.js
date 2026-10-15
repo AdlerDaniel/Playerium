@@ -12,7 +12,7 @@ export function integratedLoudness(channels,rate){
  const relative=loud(absolute.reduce((a,b)=>a+b,0)/absolute.length)-10,accepted=absolute.filter(e=>loud(e)>=relative);
  return loud(accepted.reduce((a,b)=>a+b,0)/accepted.length);
 }
-export function normalizationGain(integrated,peak){if(!Number.isFinite(integrated)||!Number.isFinite(peak)||integrated<-60)return 1;return 10**(Math.max(-30,Math.min(18,-18-integrated,-1-peak))/20);}
+export function normalizationGain(integrated,peak){if(!Number.isFinite(integrated)||!Number.isFinite(peak)||integrated<-60)return 1;return 10**(Math.max(-30,Math.min(18,-14-integrated,-1-peak))/20);}
 export function measurePCM(input,weighted,rate){
  let peak=0;
  for(const channel of input)for(let i=0;i<channel.length;i++)peak=Math.max(peak,Math.abs(channel[i]));

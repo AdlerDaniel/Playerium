@@ -166,45 +166,21 @@ test('native playback sends URI queue without reading audio into JavaScript',asy
   p.applyNativeState({id:'native',playing:true,position:2000,duration:42000});assert.equal(p.getDuration(),42);assert.equal(p.isPlaying,true);
 });
 
-test('first desktop playback uses measured gain; stale analysis cannot change a newer selection and cached playback is immediate',async()=>{
-  const pending=new Map(),calls=[];
-  window.electronAPI={getAudioSource:async file=>'music://'+file,getLoudness:file=>{
-    calls.push(file);return new Promise(resolve=>pending.set(file,resolve));
-  }};
-  const p=await player();
-  p.audioCtx={currentTime:10};
-  const gains=[];p.normalizationNode={gain:{cancelScheduledValues:()=>{},setValueAtTime:v=>gains.push(v),setTargetAtTime:v=>gains.push(v)}};
-  const a={id:'a',filePath:'a.mp3'},b={id:'b',filePath:'b.mp3'};
-  const first=p.playTrack(a);while(!pending.has('a.mp3'))await new Promise(r=>setTimeout(r,0));assert.equal(p.isPlaying,false);
-  const second=p.playTrack(b,0,[b]);while(!pending.has('b.mp3'))await new Promise(r=>setTimeout(r,0));pending.get('b.mp3')({gain:.5});await second;
-  assert.equal(p.isPlaying,true);assert.equal(p.normalizationGain,.5);
-  pending.get('a.mp3')({gain:2});await first;assert.equal(p.normalizationGain,.5);assert.equal(p.currentTrack,b);
-  p.pause();p.seekToTime(30);assert.equal(p.getCurrentTime(),30);
-  await Promise.race([p.playTrack(a,0,[a]),new Promise((_,reject)=>setTimeout(()=>reject(Error('Cached playback waited')),200))]);assert.equal(p.normalizationGain,2);
-  assert.deepEqual(calls,['a.mp3','b.mp3']);assert.equal(gains.at(-1),2);
+test('desktop playback never waits for analysis or applies obsolete cached attenuation',async()=>{
+ let calls=0;window.electronAPI={getAudioSource:async file=>'music://'+file,getLoudness:()=>{calls++;return new Promise(()=>{});},getCachedLoudness:()=>{calls++;return new Promise(()=>{});}};
+ const p=await player(),a={id:'a',filePath:'a.mp3',normalizationGain:.05};a.normalizationKey=p.loudnessKey(a);
+ await Promise.race([p.playTrack(a,0,[a]),new Promise((_,reject)=>setTimeout(()=>reject(Error('Playback waited for analysis')),200))]);
+ assert.equal(calls,0);assert.equal(p.isPlaying,true);assert.equal(p.normalizationGain,1);
 });
-
-test('Android selection sends measured gain before the native queue starts',async()=>{
-  const messages=[];window.AndroidBridge={setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{}};
-  const p=await player({getLoudness:async()=>({gain:.5})});
-  const a={id:'a',nativeUri:'content://music/a'},b={id:'b',nativeUri:'content://music/b'};
-  await p.playTrack(a,0,[a,b]);await p.playTrack(b,1);
-  assert.equal(messages.length,2);assert.equal(messages[1].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[1].tracks[1].normalizationGain,.5);
+test('Android playlist playback bypasses even unresolved analysis and old cached gains',async()=>{
+ const messages=[];let calls=0;window.AndroidBridge={setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{},getCachedLoudness:()=>{calls++;return null;}};
+ const p=await player({getLoudness:()=>{calls++;return new Promise(()=>{});}}),a={id:'a',nativeUri:'content://music/a',normalizationGain:.02},b={id:'b',nativeUri:'content://music/b'};
+ await Promise.race([p.playTrack(a,0,[a,b]),new Promise((_,reject)=>setTimeout(()=>reject(Error('Native start waited')),200))]);await p.playTrack(b,1);
+ assert.equal(calls,0);assert.equal(messages.length,2);assert.equal(messages[1].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[0].tracks[0].normalizationGain,undefined);
 });
-test('Android playlist selection reads saved and native cached gain without waiting for a busy analysis bridge',async()=>{
- const messages=[];let analysis=0,cachedReads=0;window.AndroidBridge={getCachedLoudness:()=>{cachedReads++;return '{"gain":0.5}';},setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{}};
- const p=await player({getLoudness:()=>{analysis++;return new Promise(()=>{});}}),a={id:'a',nativeUri:'content://music/a'},b={id:'b',nativeUri:'content://music/b',normalizationGain:.7};b.normalizationKey=p.loudnessKey(b);
- await Promise.race([p.playTrack(a,0,[a,b]),new Promise((_,reject)=>setTimeout(()=>reject(Error('Cached native selection waited')),200))]);await p.playTrack(b,1);
- assert.equal(analysis,0);assert.equal(cachedReads,1);assert.equal(messages[0].tracks[0].normalizationGain,.5);assert.equal(messages[1].tracks[1].normalizationGain,.7);
-});
-
-test('pausing during first loudness preparation cancels the start, while old native updates cannot replace a newly selected song',async()=>{
- let finish;const messages=[];window.AndroidBridge={setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{},playbackCommand:()=>{}};
- const p=await player({getLoudness:()=>new Promise(r=>finish=r)}),a={id:'old',nativeUri:'content://music/old'},b={id:'new',nativeUri:'content://music/new'};
- p.queue=[a];p.currentTrack=a;p.nativePlayback=true;p.queueIndex=0;
- const cancelled=p.playTrack(b,1,[a,b]);while(!finish)await new Promise(r=>setTimeout(r,0));p.pause();finish({gain:2});await cancelled;assert.equal(messages.length,0);
- p.browserLoudnessCache.clear();b.normalizationKey=null;finish=null;const start=p.playTrack(b,1,[a,b]);while(!finish)await new Promise(r=>setTimeout(r,0));p.applyNativeState({id:'old',index:0,playing:true,position:2000,duration:180000});finish({gain:2});await start;
- assert.equal(messages.length,1);assert.equal(messages[0].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[0].tracks[1].normalizationGain,2);
+test('pausing during asynchronous source lookup cancels the pending start',async()=>{
+ let finish;window.electronAPI={getAudioSource:()=>new Promise(r=>finish=r)};
+ const p=await player(),a={id:'a',filePath:'a.mp3'};const task=p.playTrack(a,0,[a]);while(!finish)await new Promise(r=>setTimeout(r,0));p.pause();finish('music://a');await task;assert.equal(p.isPlaying,false);
 });
 
 test('Android notification artwork sends durable image bytes once and follows automatic native transitions',async()=>{

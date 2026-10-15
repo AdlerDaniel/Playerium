@@ -54,8 +54,6 @@ public class MediaNotificationService extends MediaSessionService {
     private ExoPlayer player;
     private MediaSession session;
     private Equalizer equalizer;
-    private final NormalizationProcessor normalization=new NormalizationProcessor();
-    private final java.util.concurrent.ExecutorService loudnessWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private final java.util.concurrent.ExecutorService connectWorker=java.util.concurrent.Executors.newSingleThreadExecutor(),connectCloudWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean connecting;
@@ -63,8 +61,6 @@ public class MediaNotificationService extends MediaSessionService {
         MediaNotificationService service=instance;
         if(service!=null)service.handler.post(()->service.applyArtwork(id));
     }
-    private String normalizingUri="";
-    private long normalizationVersion;
     private String equalizerSettings;
     private String error;
     private SharedPreferences playbackPrefs;
@@ -88,12 +84,16 @@ public class MediaNotificationService extends MediaSessionService {
         instance=this;
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
 
-        DefaultRenderersFactory renderers=new DefaultRenderersFactory(this){
-            @Override protected AudioSink buildAudioSink(Context context,boolean enableFloatOutput,boolean enableAudioTrackPlaybackParams){
-                return new DefaultAudioSink.Builder(context).setAudioProcessors(new AudioProcessor[]{normalization}).build();
+        androidx.media3.datasource.DataSource.Factory source=()->new androidx.media3.datasource.ResolvingDataSource(new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource(),new androidx.media3.datasource.ResolvingDataSource.Resolver(){
+            private Uri original,resolved;
+            @Override public androidx.media3.datasource.DataSpec resolveDataSpec(androidx.media3.datasource.DataSpec spec){
+                // Pin the source for this media period: finishing preparation during
+                // playback must not change byte offsets when seeking the original.
+                if(!spec.uri.equals(original)){original=spec.uri;resolved=PreparedAudio.playable(MediaNotificationService.this,original);}
+                return spec.withUri(resolved);
             }
-        };
-        player = new ExoPlayer.Builder(this,renderers).build();
+        });
+        player = new ExoPlayer.Builder(this).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true);
         player.setHandleAudioBecomingNoisy(true);
         player.setWakeMode(C.WAKE_MODE_LOCAL);
@@ -103,7 +103,7 @@ public class MediaNotificationService extends MediaSessionService {
                 player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
             @Override public void onAudioSessionIdChanged(int id) { configureEqualizer(id); }
-            @Override public void onMediaItemTransition(MediaItem item,int reason){normalizeCurrent();refreshArtwork();}
+            @Override public void onMediaItemTransition(MediaItem item,int reason){refreshArtwork();}
             @Override public void onEvents(Player ignored,Player.Events events) {
                 updateMediaButtons();
                 savePlayback();JSONObject data=state();stateSnapshot=data.toString();
@@ -213,19 +213,6 @@ public class MediaNotificationService extends MediaSessionService {
             if(!saved.isEmpty())setQueue(new JSONObject(saved));
         }catch(Exception ignored){playbackPrefs.edit().remove("queue").apply();}
     }
-    private void normalizeCurrent(){
-        MediaItem item=player.getCurrentMediaItem();if(item==null||item.localConfiguration==null)return;
-        Uri uri=item.localConfiguration.uri;if(uri.toString().equals(normalizingUri))return;
-        normalizingUri=uri.toString();long version=++normalizationVersion;double known=MusicEngine.get(this).knownLoudness(uri);normalization.startTrack(known!=1?known:item.mediaMetadata.extras==null?1:item.mediaMetadata.extras.getDouble("normalizationGain",1));
-        loudnessWorker.submit(()->{
-            // Measurements are cached for the next start, never applied midway through a song.
-            try{MusicEngine.get(this).analyzeLoudness(uri);}catch(Exception ignored){}
-        });
-        int next=player.getCurrentMediaItemIndex()+1;if(next<player.getMediaItemCount()){
-            MediaItem future=player.getMediaItemAt(next);if(future.localConfiguration!=null)loudnessWorker.submit(()->{try{MusicEngine.get(this).analyzeLoudness(future.localConfiguration.uri);}catch(Exception ignored){}});
-        }
-    }
-
     private void refreshArtwork(){
         MediaItem item=player.getCurrentMediaItem();if(item==null||item.localConfiguration==null)return;
         if(PlaybackArtwork.find(this,item.mediaId)!=null){applyArtwork(item.mediaId);return;}
@@ -388,7 +375,6 @@ public class MediaNotificationService extends MediaSessionService {
     @Override public void onDestroy() {
         savePlayback();
         handler.removeCallbacksAndMessages(null);
-        ++normalizationVersion;loudnessWorker.shutdownNow();
         artworkWorker.shutdownNow();connectWorker.shutdownNow();connectCloudWorker.shutdownNow();if(instance==this)instance=null;
         if (equalizer != null) equalizer.release();
         session.release(); player.release(); stateSnapshot = "{}";

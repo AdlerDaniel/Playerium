@@ -51,4 +51,30 @@ public class LoudnessTest {
   ByteBuffer input=ByteBuffer.allocateDirect(8).order(ByteOrder.LITTLE_ENDIAN);input.putShort((short)1000).putShort((short)-1000).putShort((short)30000).putShort((short)-30000).flip();processor.queueInput(input);ByteBuffer out=processor.getOutput().order(ByteOrder.LITTLE_ENDIAN);
   assertEquals(2000,out.getShort());assertEquals(-2000,out.getShort());assertEquals(32767,out.getShort());assertEquals(-32767,out.getShort());
  }
+  @Test public void backgroundLibraryPreparationProcessesEveryQueuedRecording()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();File a=tone(c,"migration-a.wav",1500),b=tone(c,"migration-b.wav",6000);java.util.List<File> outputs=new java.util.ArrayList<>();
+   try{
+    org.json.JSONArray uris=new org.json.JSONArray().put(android.net.Uri.fromFile(a).toString()).put(android.net.Uri.fromFile(b).toString());PreparedAudio.enqueue(c,uris);
+    long deadline=System.currentTimeMillis()+90000;
+    while(System.currentTimeMillis()<deadline&&(!PreparedAudio.pending(c).isEmpty()))Thread.sleep(200);
+    for(File input:new File[]{a,b}){android.net.Uri original=android.net.Uri.fromFile(input),ready=PreparedAudio.playable(c,original);assertFalse("Background migration left a recording unprepared",ready.equals(original));outputs.add(new File(ready.getPath()));}
+   }finally{a.delete();b.delete();for(File output:outputs)output.delete();}
+  }
+  @Test public void preparedFilesHaveEqualFixedLoudnessWithoutRewritingOrAnalyzingOnOpen()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();MusicEngine engine=MusicEngine.get(c);
+   File quiet=tone(c,"prepared-quiet.wav",1000),loud=tone(c,"prepared-loud.wav",12000);java.util.List<File> outputs=new java.util.ArrayList<>();
+   try{
+    double[] levels=new double[2];int i=0;
+    for(File input:new File[]{quiet,loud}){
+     byte[] before=java.nio.file.Files.readAllBytes(input.toPath());android.net.Uri original=android.net.Uri.fromFile(input),ready=engine.prepareAudio(original);File file=new File(ready.getPath());outputs.add(file);
+     assertFalse(original.equals(ready));assertArrayEquals(before,java.nio.file.Files.readAllBytes(input.toPath()));
+     // Inspect the real encoded derivative through an approved fixture copy.
+     File inspection=new File(MusicEngine.managedDirectory(c),"prepared-inspection-"+(i)+".m4a");
+     try{java.nio.file.Files.copy(file.toPath(),inspection.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);org.json.JSONObject measurement=engine.analyzeLoudness(android.net.Uri.fromFile(inspection));levels[i++]=measurement.getDouble("integrated");assertEquals(-14,levels[i-1],1);assertTrue(measurement.getDouble("peak")<=-.5);}finally{inspection.delete();}
+     long start=android.os.SystemClock.elapsedRealtime();assertEquals(ready,PreparedAudio.playable(c,original));assertTrue(android.os.SystemClock.elapsedRealtime()-start<500);
+     try(java.io.RandomAccessFile changed=new java.io.RandomAccessFile(input,"rw")){changed.seek(changed.length());changed.writeByte(0);}assertEquals(original,PreparedAudio.playable(c,original));
+    }
+    assertEquals(levels[0],levels[1],.5);
+   }finally{quiet.delete();loud.delete();for(File f:outputs)f.delete();}
+  }
 }

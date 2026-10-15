@@ -95,7 +95,8 @@ app.whenReady().then(async () => {
     const id = new URL(request.url).hostname;
     if (!sources.has(id)) return new Response('Not found', { status: 404 });
     try {
-      return await audioResponse(await authorize(sources.get(id)),request);
+      const source=sources.get(id);await authorize(source.original);
+      return await audioResponse(source.playable,request);
     }
     catch { return new Response('Unavailable', { status: 403 }); }
   });
@@ -121,7 +122,7 @@ app.whenReady().then(async () => {
     const real = await authorize(file);
     if (!AUDIO_EXTS.has(path.extname(real).toLowerCase())) throw new Error('Not an audio file');
     const id = require('node:crypto').randomUUID();
-    sources.set(id, real);
+    sources.set(id, {original:real,playable:await preparedAudio.cached(real)||real});
     if (sources.size > 64) sources.delete(sources.keys().next().value);
     return `playerium-audio://${id}/track`;
   });
@@ -149,6 +150,8 @@ app.whenReady().then(async () => {
   const loudness=new LoudnessAnalyzer(path.join(app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools'),'ffmpeg.exe'),path.join(app.getPath('userData'),'loudness'));
   handle('file:loudness',async file=>loudness.analyze(await authorize(file)));
   handle('file:loudnessCached',async file=>loudness.cached(await authorize(file)));
+  const preparedAudio=new (require('./desktop-normalization').PreparedAudio)(loudness.executable,path.join(app.getPath('userData'),'normalized-audio'));
+  handle('file:prepareAudio',async file=>{await preparedAudio.prepare(await authorize(file));return true;});
   // Node fetch exposes manual redirects; Electron net.fetch cancels them.
   // The updater must validate each redirect before following it.
   const updater = new DesktopUpdater({ app,
