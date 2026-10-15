@@ -1,9 +1,9 @@
 import {artistResults} from './music-artists.js';
 import {icons} from './design-icons.js';
-import {mountCover} from './artwork.js';
+import {mountCover,retainArtwork} from './artwork.js';
 import {playRow} from './playback-controls.js';
 import {normalize} from './music-match.js';
-import {loadingRows} from './loading.js';
+import {loadingRows,loadingIndicator} from './loading.js';
 import {enabled} from './visual-features.js';
 import {highlightText} from './visual-experience.js';
 import {mountArtistPortrait,mountPlaylistArt,portraitFor} from './visual-art.js';
@@ -43,8 +43,8 @@ export function renderSearchView(container) {
   let tracks=[],artists=[],loading=true,error=null,first=true;
   const render=()=>{
     const focused=document.activeElement,focusedRow=focused?.closest('.track-row'),focusedClass=focused?.className;
-    results.replaceChildren();
-    const status=document.createElement('p');status.className='song-search-status';status.setAttribute('role','status');status.textContent=loading?'Поиск…':error||'';results.append(status);
+    retainArtwork(results);results.replaceChildren();
+    results.setAttribute('aria-busy',String(loading));const status=loading?loadingIndicator('Поиск…'):document.createElement('p');status.classList.add('song-search-status');status.setAttribute('role','status');if(!loading)status.textContent=error||'';results.append(status);
     const table=(list,compact=false)=>{const table=ui.createTrackTable(list,null,!compact);if(compact)table.classList.add('search-compact-table');return table;};
     if(ui.searchFilter==='songs'){
       if(tracks.length){const h=document.createElement('h2');h.textContent='Песни';results.append(h,table(tracks));}

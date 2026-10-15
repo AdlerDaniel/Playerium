@@ -1,6 +1,6 @@
 import {renderLibrary} from './library-view.js';
 import {renderArtistProfile} from './artist-profile.js';
-import {mountCover} from './artwork.js';
+import {mountCover,retainArtwork} from './artwork.js';
 import {collectionMenu,editPlaylist} from './collection-menu.js';
 import {showSurfaceMenu} from './surface-menu.js';
 import { bindCollectionPlay } from './playback-controls.js';
@@ -14,7 +14,7 @@ export function renderSidebar() {
     if(list.children.length&&this.sidebarSignature===signature)return;
     this.sidebarSignature=signature;
     const scroll=list.scrollTop;
-    list.innerHTML = "";
+    retainArtwork(list);list.innerHTML = "";
 
     const likedTracks = this.library.getLikedTracks();
 

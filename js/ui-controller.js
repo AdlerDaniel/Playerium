@@ -1,12 +1,12 @@
 import {viewFingerprint,captureViewState,restoreViewState} from './view-stability.js';
-import {mountCover} from './artwork.js';
+import {mountCover,retainArtwork} from './artwork.js';
 import {collectionMenu,editPlaylist} from './collection-menu.js';
 import {showTrackMenu} from './track-menu.js';
 import {renderSearchView} from './search-view.js';
 import { bindSlider, syncPlaybackControls } from './playback-controls.js';
 import { saveIcon } from "./design-icons.js";
 import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, createActionBar } from "./library-views.js";
-import {loadingRows} from './loading.js';
+import {loadingRows,loadingIndicator} from './loading.js';
 import {initSidebarCollapse} from './sidebar-collapse.js';
 import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
@@ -330,6 +330,7 @@ export class UIController {
       });
     };
 
+    this.player.onLoadingChange=track=>this.setPlaybackLoading(track);
     this.player.onTrackChange = (track) => {
       if (!track) {
         document.getElementById('mobileMiniPlayer').classList.add('hidden');
@@ -470,8 +471,7 @@ export class UIController {
     this.player.onRepeatChange(this.player.repeatMode);
     this.player.onPlayStateChange(this.player.isPlaying);
     this.library.onLibraryChanged = () => {
-      this.renderSidebar();
-      this.refreshCurrentView();
+      this.queueLibraryRefresh({skipSettings:!!this.cloud?.applying});
       clearTimeout(this.coverRepairTimer);
       this.coverRepairTimer=setTimeout(()=>this.music?.repairCovers().catch(console.warn),1500);
     };
@@ -561,7 +561,7 @@ export class UIController {
     const caret = focusedSearch ? document.activeElement.selectionStart : null;
     const container = document.getElementById("mainViewContent");
     const shelfState=preserveScroll?captureViewState(container):[];
-    container.innerHTML = "";
+    retainArtwork(container);container.innerHTML = "";
 
     try{switch (view.type) {
       case "allTracks":
@@ -605,7 +605,8 @@ export class UIController {
     restoreViewState(container,shelfState);
     this.viewSignature=viewFingerprint(this);
     syncPlaybackControls(this.player);
-    container.classList.remove('view-enter');if(!preserveScroll){void container.offsetWidth;container.classList.add('view-enter');}
+    this.updatePendingPlayback();
+    container.classList.remove('view-enter');
     const header=container.querySelector('.view-header');
     if(header){header.classList.add('collection-header',`collection-${view.type}`);const cover=header.querySelector('img');if(cover){const color=()=>{if(!header.isConnected)return;try{const c=document.createElement('canvas');c.width=c.height=1;const ctx=c.getContext('2d');ctx.drawImage(cover,0,0,1,1);const [r,g,b]=ctx.getImageData(0,0,1,1).data;scroll.style.setProperty('--collection-color',`rgb(${r*.55},${g*.55},${b*.55})`);}catch{}};cover.complete?color():cover.addEventListener('load',color,{once:true});}}
   }
@@ -788,6 +789,13 @@ export class UIController {
       } catch {} // Non-readable artwork retains the neutral background.
     };image.src=url;
   }
+
+  queueLibraryRefresh({skipSettings=false}={}){this.libraryRefreshSkipSettings=this.libraryRefreshSkipSettings===undefined?skipSettings:this.libraryRefreshSkipSettings&&skipSettings;if(this.libraryRefreshTimer)return;this.libraryRefreshTimer=setTimeout(()=>requestAnimationFrame(()=>{const skip=this.libraryRefreshSkipSettings;this.libraryRefreshSkipSettings=undefined;this.libraryRefreshTimer=null;this.renderSidebar();if(!(skip&&this.currentView.type==='settings'))this.refreshCurrentView();}),80);}
+  setPlaybackLoading(track){
+    clearTimeout(this.playbackLoadingTimer);this.pendingPlayback=track;this.playbackLoadingVisible=false;document.getElementById('playbackLoadingStatus')?.remove();this.updatePendingPlayback();
+    if(track)this.playbackLoadingTimer=setTimeout(()=>{if(this.pendingPlayback!==track)return;this.playbackLoadingVisible=true;const status=loadingIndicator('Подготовка: '+track.title);status.id='playbackLoadingStatus';document.querySelector('.main-view-container').append(status);this.updatePendingPlayback();},140);
+  }
+  updatePendingPlayback(){for(const row of document.querySelectorAll('.track-row')){const pending=!!this.pendingPlayback&&row.dataset.trackId===this.pendingPlayback.id;row.setAttribute('aria-busy',String(pending));row.classList.toggle('track-pending',pending&&this.playbackLoadingVisible);}}
 
   // --- UI Helpers ---
 

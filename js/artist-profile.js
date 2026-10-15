@@ -1,8 +1,8 @@
-import {mountCover} from './artwork.js';
+import {mountCover,retainArtwork} from './artwork.js';
 import {icons} from './design-icons.js';
 import {artistCredits,belongsToArtist} from './music-artists.js';
 import {artistKey} from './music-match.js';
-import {loadingRows} from './loading.js';
+import {loadingRows,loadingIndicator} from './loading.js';
 import {mountArtistPortrait} from './visual-art.js';
 
 export function renderArtistProfile(container,name) {
@@ -10,13 +10,14 @@ export function renderArtistProfile(container,name) {
   const root=document.createElement('section');root.className='artist-profile';container.append(root);
   let expanded=false,profile={artist:requested,tracks:ui.library.getTracks().filter(t=>belongsToArtist(t,requested))},busy=!!ui.music?.available;
   const render=()=>{
-    root.replaceChildren();const {artist,tracks}=profile;
+    retainArtwork(root);root.replaceChildren();const {artist,tracks}=profile;
     const header=document.createElement('div');header.className='view-header';
     header.innerHTML=`<div class="view-header-cover artist-hero-art">${icons.artist}</div><div class="view-header-details"><span class="view-type-badge">Исполнитель</span><h1 class="view-title">${ui.escapeHTML(artist.name)}</h1><div class="view-metadata">${tracks.length?`${tracks.length} треков`:''}</div></div>`;
     mountArtistPortrait(ui,header.firstElementChild,artist);
     root.append(header);if(tracks.length)root.append(ui.createActionBar(tracks));
     if(busy&&!tracks.length)root.append(loadingRows(6));
-    const status=document.createElement('p');status.className='artist-profile-status';status.setAttribute('role','status');status.textContent=busy?'Загрузка песен…':profile.offline?'Не удалось загрузить каталог. Показаны доступные треки.':'';root.append(status);
+    root.setAttribute('aria-busy',String(busy));
+    const status=busy?loadingIndicator('Загрузка песен…'):document.createElement('p');status.classList.add('artist-profile-status');status.setAttribute('role','status');if(!busy)status.textContent=profile.offline?'Не удалось загрузить каталог. Показаны доступные треки.':'';root.append(status);
     const section=(title,list)=>{if(!list.length)return;const h=document.createElement('h2');h.className='collection-section-heading';h.textContent=title;root.append(h,ui.createTrackTable(list));};
     section('Популярные',expanded?tracks:tracks.slice(0,10));
     if(tracks.length>10){const more=document.createElement('button');more.className='search-show-all';more.textContent=expanded?'Показать меньше':'Показать все песни';more.onclick=()=>{expanded=!expanded;render();};root.append(more);}

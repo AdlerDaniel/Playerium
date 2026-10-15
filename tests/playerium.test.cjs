@@ -191,13 +191,19 @@ test('Android selection sends measured gain before the native queue starts',asyn
   await p.playTrack(a,0,[a,b]);await p.playTrack(b,1);
   assert.equal(messages.length,2);assert.equal(messages[1].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[1].tracks[1].normalizationGain,.5);
 });
+test('Android playlist selection reads saved and native cached gain without waiting for a busy analysis bridge',async()=>{
+ const messages=[];let analysis=0,cachedReads=0;window.AndroidBridge={getCachedLoudness:()=>{cachedReads++;return '{"gain":0.5}';},setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{}};
+ const p=await player({getLoudness:()=>{analysis++;return new Promise(()=>{});}}),a={id:'a',nativeUri:'content://music/a'},b={id:'b',nativeUri:'content://music/b',normalizationGain:.7};b.normalizationKey=p.loudnessKey(b);
+ await Promise.race([p.playTrack(a,0,[a,b]),new Promise((_,reject)=>setTimeout(()=>reject(Error('Cached native selection waited')),200))]);await p.playTrack(b,1);
+ assert.equal(analysis,0);assert.equal(cachedReads,1);assert.equal(messages[0].tracks[0].normalizationGain,.5);assert.equal(messages[1].tracks[1].normalizationGain,.7);
+});
 
 test('pausing during first loudness preparation cancels the start, while old native updates cannot replace a newly selected song',async()=>{
  let finish;const messages=[];window.AndroidBridge={setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{},playbackCommand:()=>{}};
  const p=await player({getLoudness:()=>new Promise(r=>finish=r)}),a={id:'old',nativeUri:'content://music/old'},b={id:'new',nativeUri:'content://music/new'};
  p.queue=[a];p.currentTrack=a;p.nativePlayback=true;p.queueIndex=0;
  const cancelled=p.playTrack(b,1,[a,b]);while(!finish)await new Promise(r=>setTimeout(r,0));p.pause();finish({gain:2});await cancelled;assert.equal(messages.length,0);
- p.browserLoudnessCache.clear();finish=null;const start=p.playTrack(b,1,[a,b]);while(!finish)await new Promise(r=>setTimeout(r,0));p.applyNativeState({id:'old',index:0,playing:true,position:2000,duration:180000});finish({gain:2});await start;
+ p.browserLoudnessCache.clear();b.normalizationKey=null;finish=null;const start=p.playTrack(b,1,[a,b]);while(!finish)await new Promise(r=>setTimeout(r,0));p.applyNativeState({id:'old',index:0,playing:true,position:2000,duration:180000});finish({gain:2});await start;
  assert.equal(messages.length,1);assert.equal(messages[0].index,1);assert.equal(p.currentTrack,b);assert.equal(messages[0].tracks[1].normalizationGain,2);
 });
 

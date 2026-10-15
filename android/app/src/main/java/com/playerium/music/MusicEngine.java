@@ -39,7 +39,16 @@ final class MusicEngine {
     private JSONObject records;
     private String musicClientVersion;
     private final Map<String,Double> knownLoudness=new ConcurrentHashMap<>();
-    double knownLoudness(Uri uri){Double gain=knownLoudness.get(uri.toString());if(gain!=null)return gain;try{DocumentFile document=DocumentFile.fromSingleUri(context,uri);long size=document==null?0:document.length(),modified=document==null?0:document.lastModified();if("file".equals(uri.getScheme())){File f=new File(uri.getPath());size=f.length();modified=f.lastModified();}String saved=context.getSharedPreferences("playerium_loudness",Context.MODE_PRIVATE).getString(uri.toString()+"|"+size+"|"+modified+"|lufs-v1",null);if(saved!=null)return new JSONObject(saved).getDouble("gain");}catch(Exception ignored){}return 1;}
+    JSONObject cachedLoudness(Uri uri) throws Exception {
+        if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");
+        long size,modified;if("file".equals(uri.getScheme())){File file=new File(uri.getPath());size=file.length();modified=file.lastModified();}
+        else{DocumentFile document=DocumentFile.fromSingleUri(context,uri);size=document==null?0:document.length();modified=document==null?0:document.lastModified();}
+        String key=uri+"|"+size+"|"+modified+"|lufs-v1";Double known=knownLoudness.get(key);if(known!=null)return new JSONObject().put("gain",known);
+        String saved=context.getSharedPreferences("playerium_loudness",Context.MODE_PRIVATE).getString(key,null);
+        if(saved==null)return null;JSONObject result=new JSONObject(saved);knownLoudness.put(key,result.getDouble("gain"));return result;
+    }
+    double knownLoudness(Uri uri){try{JSONObject cached=cachedLoudness(uri);return cached==null?1:cached.getDouble("gain");}catch(Exception ignored){return 1;}}
+
     private MusicEngine(Context context){this.context=context;runtime=new File(context.getNoBackupFilesDir(),"music-runtime-0.18.1-2026.08.19");}
     void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();Future<?> task=tasks.remove(id);if(task!=null)task.cancel(true);}
     void request(String id,String operation,String json) {
@@ -158,14 +167,15 @@ final class MusicEngine {
         new File(runtime,"ready").createNewFile();
     }
     JSONObject analyzeWaveform(Uri uri) throws Exception {if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");initialize();return WaveformAnalyzer.analyze(context,uri,runtime);}
-    synchronized JSONObject analyzeLoudness(Uri uri) throws Exception {
+    JSONObject analyzeLoudness(Uri uri) throws Exception {JSONObject cached=cachedLoudness(uri);return cached!=null?cached:analyzeUncachedLoudness(uri);}
+    private synchronized JSONObject analyzeUncachedLoudness(Uri uri) throws Exception {
         if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");
         DocumentFile document=DocumentFile.fromSingleUri(context,uri);
         long size=document==null?0:document.length(),modified=document==null?0:document.lastModified();
         if("file".equals(uri.getScheme())){File file=new File(uri.getPath());size=file.length();modified=file.lastModified();}
         String key=uri.toString()+"|"+size+"|"+modified+"|lufs-v1";
         android.content.SharedPreferences cache=context.getSharedPreferences("playerium_loudness",Context.MODE_PRIVATE);
-        String saved=cache.getString(key,null);if(saved!=null){JSONObject result=new JSONObject(saved);knownLoudness.put(uri.toString(),result.getDouble("gain"));return result;}
+        String saved=cache.getString(key,null);if(saved!=null){JSONObject result=new JSONObject(saved);knownLoudness.put(key,result.getDouble("gain"));return result;}
         initialize();File input=File.createTempFile("loudness-",".audio",context.getCacheDir());
         try {
             try(InputStream in=context.getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(input)){if(in==null)throw new IOException("Audio unavailable");copy(in,out);}
@@ -183,7 +193,7 @@ final class MusicEngine {
                 if(!match.find())throw new IOException("Missing loudness measurement");
                 JSONObject stats=new JSONObject(match.group());double integrated=measurementNumber(stats.getString("input_i")),peak=measurementNumber(stats.getString("input_tp"));
                 double gain=1;if(!Double.isNaN(integrated)&&!Double.isInfinite(integrated)&&!Double.isNaN(peak)&&!Double.isInfinite(peak)&&integrated>=-60)gain=Math.pow(10,Math.max(-30,Math.min(18,Math.min(-18-integrated,-1-peak)))/20);
-                JSONObject result=new JSONObject().put("gain",gain);cache.edit().putString(key,result.toString()).apply();knownLoudness.put(uri.toString(),gain);return result;
+                JSONObject result=new JSONObject().put("gain",gain);cache.edit().putString(key,result.toString()).apply();knownLoudness.put(key,gain);return result;
             }finally{process.destroy();}
         }finally{input.delete();}
     }

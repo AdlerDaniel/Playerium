@@ -12,6 +12,7 @@ import {CloudSync} from './cloud-sync.js';
 import {initWindowFrame} from './window-frame.js';
 import {ConnectController} from './connect-controller.js';
 import {installVisualExperience} from './visual-experience.js';
+import {hydratePortraits} from './visual-art.js';
 
 class App {
   constructor() {
@@ -33,6 +34,7 @@ class App {
       initWindowFrame().catch(console.warn);
 
       await this.library.init();
+      await hydratePortraits(this.library);
       const previousNativeUris = new Map(this.library.getTracks().map(track => [track.id,track.nativeUri]));
       // Android can relocate old downloads before exposing playable library rows.
       const restoreTask=window.AndroidBridge?this.music.restore():null;

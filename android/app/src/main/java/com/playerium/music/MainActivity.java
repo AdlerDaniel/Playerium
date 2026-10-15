@@ -237,6 +237,7 @@ public class MainActivity extends AppCompatActivity {
         }
         @JavascriptInterface public void clearSelectedFiles() { getSharedPreferences("playerium", MODE_PRIVATE).edit().remove("selected_music_files").apply(); }
         @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
+        @JavascriptInterface public String getCachedLoudness(String uri) { try { org.json.JSONObject cached=MusicEngine.get(MainActivity.this).cachedLoudness(Uri.parse(uri));return cached==null?"null":cached.toString(); }catch(Exception ignored){return "null";} }
         @JavascriptInterface public void storePlaybackArtwork(String id,String base64) { PlaybackArtwork.storeAsync(MainActivity.this,id,base64); }
         @JavascriptInterface public void musicRequest(String id,String operation,String payload) { MusicEngine.get(MainActivity.this).request(id,operation,payload); }
         @JavascriptInterface public void cloudRequest(String id,String operation,String payload) { GoogleCloud.get(MainActivity.this).request(id,operation,payload); }

@@ -37,6 +37,7 @@ export function createTrackTable(tracks, playlistContext = null) {
       const isCurrent = this.player.currentTrack && this.player.currentTrack.id === track.id;
       row.className = `track-row compact-columns ${isCurrent ? "playing" : ""} ${isCurrent && this.player.isPlaying ? "is-playing" : ""}`;
       row.dataset.trackId = track.id;
+      const pending=this.pendingPlayback?.id===track.id;row.setAttribute('aria-busy',String(pending));row.classList.toggle('track-pending',pending&&this.playbackLoadingVisible);
 
       row.innerHTML = `
         <div class="track-col-num">

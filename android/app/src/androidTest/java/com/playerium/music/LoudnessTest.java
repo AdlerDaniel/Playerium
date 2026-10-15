@@ -36,6 +36,15 @@ public class LoudnessTest {
    try{MusicEngine.get(context).analyzeWaveform(android.net.Uri.parse("file:///data/local/tmp/private.wav"));fail("Unauthorized audio must be rejected");}catch(SecurityException expected){}
   }finally{file.delete();}
  }
+ @Test public void cachedPlaylistLoudnessDoesNotWaitForTheAnalysisMonitorAndInvalidatesChangedFiles()throws Exception{
+  android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();File file=tone(context,"cached-selection.wav",1200);MusicEngine engine=MusicEngine.get(context);
+  java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(1),release=new java.util.concurrent.CountDownLatch(1);Thread worker=null;
+  try{double gain=engine.analyzeLoudness(android.net.Uri.fromFile(file)).getDouble("gain");worker=new Thread(()->{synchronized(engine){entered.countDown();try{release.await(5,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException ignored){}}});worker.start();assertTrue(entered.await(2,java.util.concurrent.TimeUnit.SECONDS));
+   long started=android.os.SystemClock.elapsedRealtime();assertEquals(gain,engine.cachedLoudness(android.net.Uri.fromFile(file)).getDouble("gain"),.00001);assertEquals(gain,engine.analyzeLoudness(android.net.Uri.fromFile(file)).getDouble("gain"),.00001);assertTrue("Cached selection waited for unrelated analysis",android.os.SystemClock.elapsedRealtime()-started<1000);
+   try(java.io.RandomAccessFile changed=new java.io.RandomAccessFile(file,"rw")){changed.seek(changed.length());changed.writeByte(0);}assertNull(engine.cachedLoudness(android.net.Uri.fromFile(file)));
+   try{engine.cachedLoudness(android.net.Uri.parse("file:///system/build.prop"));fail("Unauthorized cache lookup accepted");}catch(SecurityException expected){}
+  }finally{release.countDown();if(worker!=null)worker.join(2000);file.delete();}
+ }
  @Test public void pcmGainKeepsChannelBalanceAndCannotOverflow()throws Exception{
 
   NormalizationProcessor processor=new NormalizationProcessor();processor.configure(new AudioProcessor.AudioFormat(48000,2,C.ENCODING_PCM_16BIT));processor.flush();processor.startTrack(2);

@@ -57,7 +57,7 @@ export class CloudSync {
     if(this.failures.length)throw Error(`Не завершено операций: ${this.failures.length}. ${this.failures[0]}`);
   }finally{this.busy=false;globalThis.document?.querySelectorAll('.loading-rows[data-cloud-loading]').forEach(node=>node.remove());this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
  }
- captureDeletions(){if(!this.account||!this.links||!this.shadow)return;const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));let changed=false;
+ captureDeletions(){if(!this.account||!this.links||!this.shadow)return;if(!Object.values(this.links).some(link=>link.localId&&!link.removed&&!this.library.getTrackById(link.localId))&&!Object.entries(this.shadow).some(([id,old])=>!old.deleted&&!this.library.getPlaylistById(id)))return;const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));let changed=false;
   for(const [key,link] of Object.entries(this.links))if(link.localId&&!this.library.getTrackById(link.localId)&&!link.removed&&!view.tracks.get(key)?.deleted){this.operation('delete',{key});link.removed=true;changed=true;}
   for(const [id,old] of Object.entries(this.shadow))if(!this.library.getPlaylistById(id)&&!old.deleted&&!view.playlists.get(id)?.deleted){this.operation('playlist-delete',{playlist:id});old.deleted=true;changed=true;}
   if(changed)this.save().catch(error=>{this.error=error.message;});
@@ -130,7 +130,7 @@ export class CloudSync {
     track.cloudKey=key;Object.assign(track,this.metadata(pending?.track||remote.data));track.liked=remote.liked;link.liked=remote.liked;link.removed=false;link.metadata=JSON.stringify(this.metadata(track));await this.library.putInStore('tracks',track);
     link.coverSignature=await this.coverSignature(track);
     await this.save();
-    if(downloads.some(([k])=>k===key)){this.progress.done++;this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();this.changed?.();}
+    if(downloads.some(([k])=>k===key)){this.progress.done++;if(this.ui.queueLibraryRefresh)this.ui.queueLibraryRefresh({skipSettings:true});else{this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();}this.changed?.();}
     }catch(error){this.failures?.push(`${remote.data?.title||key}: ${error.message}`);await this.save();}
    }
    for(const remote of view.playlists.values()){

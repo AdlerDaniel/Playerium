@@ -17,6 +17,7 @@ export class AudioPlayer {
     this.sourceUrl = null;
     this.nativePlayback = false;
     this.onError = null;
+    this.onLoadingChange = null;
     this.failedTracks = new Set();
     window.onNativePlayerState = state => this.applyNativeState(state);
 
@@ -172,6 +173,8 @@ export class AudioPlayer {
   async playTrack(track, queueIndex = 0, newQueue = null, context = null) {
     if (!track) return;
     const request = ++this.playRequest;
+    this.pendingTrack=track;this.onLoadingChange?.(track);
+    try {
     if(track.catalog) {
       try {
         const pendingId=track.id;track=await this.library.ensureTrack(track);
@@ -268,6 +271,7 @@ export class AudioPlayer {
       this.onPlayStateChange?.(false);
       this.onError?.(error.message || "Не удалось воспроизвести трек");
     }
+    }finally{if(request===this.playRequest){this.pendingTrack=null;this.onLoadingChange?.(null);}}
   }
 
   loudnessKey(track,file) {
@@ -287,6 +291,9 @@ export class AudioPlayer {
   async measureLoudness(track,file) {
     const key=this.loudnessKey(track,file);
     if(this.browserLoudnessCache.has(key))return this.browserLoudnessCache.get(key);
+    let cached=track.normalizationKey===key?{gain:track.normalizationGain}:null;
+    if(!Number.isFinite(cached?.gain)&&track.nativeUri&&window.AndroidBridge?.getCachedLoudness){try{cached=JSON.parse(window.AndroidBridge.getCachedLoudness(track.nativeUri)||'null');}catch{}}
+    if(Number.isFinite(cached?.gain)&&cached.gain>0&&cached.gain<=8){this.browserLoudnessCache.set(key,cached);track.normalizationGain=cached.gain;track.normalizationKey=key;return cached;}
     if(this.loudnessPending.has(key))return this.loudnessPending.get(key);
     let task;
     if(track.nativeUri&&this.library.getLoudness)task=this.library.getLoudness(track);
@@ -436,6 +443,7 @@ export class AudioPlayer {
 
   pause() {
     ++this.playRequest;
+    this.pendingTrack=null;this.onLoadingChange?.(null);
     if (this.nativePlayback) window.AndroidBridge.playbackCommand("pause", 0);
     this.audio.pause();
   }

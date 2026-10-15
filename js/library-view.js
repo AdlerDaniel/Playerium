@@ -1,5 +1,5 @@
 import {icons} from './design-icons.js';
-import {mountCover} from './artwork.js';
+import {mountCover,retainArtwork} from './artwork.js';
 import {mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 import {showSurfaceMenu} from './surface-menu.js';
 import {collectionMenu} from './collection-menu.js';
@@ -19,7 +19,7 @@ export function renderLibrary(ui,container) {
     return items;
   };
   const render=()=>{
-    list.replaceChildren();list.classList.toggle('library-grid',layout==='grid');
+    retainArtwork(list);list.replaceChildren();list.classList.toggle('library-grid',layout==='grid');
     root.querySelector('.library-sort span').textContent=labels[sort];
     const layoutButton=root.querySelector('.library-layout');layoutButton.innerHTML=layout==='grid'?icons.list:icons.grid;layoutButton.setAttribute('aria-label',layout==='grid'?'Показать списком':'Показать сеткой');
     pills.querySelectorAll('button').forEach(p=>{p.classList.toggle('active',p.dataset.filter===filter);p.setAttribute('aria-pressed',String(p.dataset.filter===filter));});
