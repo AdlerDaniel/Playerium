@@ -44,8 +44,11 @@ public class PlaylistStartTest {
             js(instrumentation,web,"document.querySelector('[data-track-id=\"latency-3\"] .track-name').click()");
             JSONObject second=waitForAudio("latency-3");assertTrue("Row selection exceeded 1 second: "+second.getLong("startLatencyMs"),second.getLong("startLatencyMs")<1000);
             assertEquals(300,second.getJSONArray("queue").length());
-            File report=new File(c.getFilesDir(),"playlist-start.json");
-            try(FileOutputStream output=new FileOutputStream(report)){output.write(new JSONObject().put("initialMs",first.getLong("startLatencyMs")).put("selectionMs",second.getLong("startLatencyMs")).put("queueSize",300).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            String report=new JSONObject().put("initialMs",first.getLong("startLatencyMs")).put("selectionMs",second.getLong("startLatencyMs")).put("queueSize",300).toString();
+            android.util.Log.i("PlayeriumStartReport",report);
+            // Gradle uninstalls the debug package after instrumentation. Preserve
+            // the numeric report as shell-owned log output alongside the media card.
+            try(InputStream input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.getUiAutomation().executeShellCommand("logcat -d -v raw -f /data/local/tmp/playerium-playlist-start.log -s PlayeriumStartReport:I"))){byte[] buffer=new byte[128];while(input.read(buffer)!=-1){}}
         }finally{instrumentation.runOnMainSync(activity::finish);c.stopService(new Intent(c,MediaNotificationService.class));file.delete();}
     }
 }
