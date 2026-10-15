@@ -44,7 +44,12 @@ public class PlaylistStartTest {
             js(instrumentation,web,"document.querySelector('[data-track-id=\"latency-3\"] .track-name').click()");
             JSONObject second=waitForAudio("latency-3");assertTrue("Row selection exceeded 1 second: "+second.getLong("startLatencyMs"),second.getLong("startLatencyMs")<1000);
             assertEquals(300,second.getJSONArray("queue").length());
-            String report=new JSONObject().put("initialMs",first.getLong("startLatencyMs")).put("selectionMs",second.getLong("startLatencyMs")).put("queueSize",300).toString();
+            // Opening settings after playback must exercise the real NativeEqualizer,
+            // not the web equalizer or the uninitialized (null) startup state.
+            String settingsCheck="(()=>{const a=window.playerApp;a.ui.navigateTo({type:'settings'});const preset=document.querySelector('#settingsEqPreset');if(!preset||document.querySelectorAll('.eq-slider-vertical').length!==10||!document.querySelector('[data-normalization-check]'))return false;preset.value='rock';preset.dispatchEvent(new Event('change',{bubbles:true}));const toggle=document.querySelector('#settingsEqToggle');toggle.checked=false;toggle.dispatchEvent(new Event('change',{bubbles:true}));a.ui.navigateTo({type:'home'});a.ui.navigateTo({type:'settings'});return document.querySelectorAll('.eq-slider-vertical').length===10&&document.querySelector('#settingsEqPreset').value==='rock'&&!document.querySelector('#settingsEqToggle').checked&&!!document.querySelector('[data-normalization-run]');})()";
+            assertEquals("Settings must open after native playback and on reentry", "true",js(instrumentation,web,settingsCheck));
+            assertEquals("Native settings remain usable", "true",js(instrumentation,web,"(()=>{const eq=window.playerApp.player.equalizer;eq.applyPreset('flat');eq.setEnabled(true);return eq.isEnabled&&eq.gains.every(v=>v===0);})()"));
+            String report=new JSONObject().put("initialMs",first.getLong("startLatencyMs")).put("selectionMs",second.getLong("startLatencyMs")).put("queueSize",300).put("settingsAfterPlayback",true).toString();
             android.util.Log.i("PlayeriumStartReport",report);
             // Gradle uninstalls the debug package after instrumentation. Preserve
             // the numeric report as shell-owned log output alongside the media card.

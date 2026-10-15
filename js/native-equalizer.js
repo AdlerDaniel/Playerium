@@ -1,6 +1,8 @@
 import { Equalizer } from './equalizer.js';
 // Android's hardware bands are mapped to the same saved ten-band interface.
 export class NativeEqualizer {
+  static FREQUENCIES = Equalizer.FREQUENCIES;
+  static PRESETS = Equalizer.PRESETS;
   constructor() {
     this.isEnabled = true; this.currentPreset = 'flat'; this.gains = Array(10).fill(0);
     try {
