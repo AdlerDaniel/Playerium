@@ -33,10 +33,11 @@ final class GoogleCloud {
     private long tokenUntil;
     private final Map<String,JSONObject> stages=new HashMap<>();
     final GoogleConnect connect;
+    final RealtimeSync realtime;
     interface Connections {HttpURLConnection open(String url)throws Exception;}
     Connections connections=url->(HttpURLConnection)new URL(url).openConnection();
     private final ThreadLocal<String> expectedAccount=new ThreadLocal<>();
-    private GoogleCloud(Context ctx){context=ctx.getApplicationContext();prefs=context.getSharedPreferences("playerium_cloud",Context.MODE_PRIVATE);jobs=new File(context.getNoBackupFilesDir(),"cloud-jobs");cache=new File(MusicEngine.managedDirectory(context),"Cloud");connect=new GoogleConnect(this,context);}
+    private GoogleCloud(Context ctx){context=ctx.getApplicationContext();prefs=context.getSharedPreferences("playerium_cloud",Context.MODE_PRIVATE);jobs=new File(context.getNoBackupFilesDir(),"cloud-jobs");cache=new File(MusicEngine.managedDirectory(context),"Cloud");connect=new GoogleConnect(this,context);realtime=new RealtimeSync(this,context);}
     static GoogleCloud get(Context ctx){if(singleton==null)synchronized(GoogleCloud.class){if(singleton==null)singleton=new GoogleCloud(ctx);}return singleton;}
     private AuthorizationRequest authorization(){AuthorizationRequest.Builder builder=AuthorizationRequest.builder().setRequestedScopes(Collections.singletonList(new Scope(SCOPE)));String email=prefs.getString("email","");if(!email.isEmpty())builder.setAccount(new Account(email,"com.google"));return builder.build();}
     synchronized String token() throws Exception {
@@ -61,11 +62,12 @@ final class GoogleCloud {
     private static void reply(String id,Object data,String error){try{JSONObject response=new JSONObject().put("id",id);if(error!=null)response.put("error",error);else response.put("data",data==null?JSONObject.NULL:data);MainActivity activity=MainActivity.getInstance();if(activity!=null)activity.sendCloudResponse(response);}catch(Exception ignored){}}
     void request(String id,String operation,String payload){if("connect".equals(operation)){connect(id);return;}((operation.equals("connectLive")||operation.equals("connectSend")||operation.equals("connectAck")||operation.equals("connectInfo"))?liveExecutor:operation.startsWith("connect")?connectExecutor:executor).execute(()->{try{reply(id,request(operation,new JSONObject(payload)),null);}catch(Exception e){reply(id,null,message(e));}});}
     private Object request(String operation,JSONObject payload) throws Exception {if(operation.startsWith("connect"))return connect.request(operation,payload);switch(operation){
+        case "realtimeSession":return realtime.session();
         case "stage":return stage(payload);
         case "stageChunk":return stageChunk(payload);
         case "stageComplete":JSONObject staged=stages.get(payload.getString("id"));if(staged==null||staged.getLong("offset")!=staged.getLong("size"))throw new IOException("Импорт песни ещё не завершён.");stages.remove(payload.getString("id"));return new JSONObject().put("source",Uri.fromFile(new File(staged.getString("path"))).toString());
-        case "status":return new JSONObject().put("connected",prefs.getBoolean("enabled",false)).put("configured",true).put("canFlush",true).put("account",prefs.getString("account","")).put("email",prefs.getString("email","")).put("error",prefs.getString("error","")).put("pending",pendingCount());
-        case "disconnect":prefs.edit().putBoolean("enabled",false).remove("email").remove("account").remove("error").apply();synchronized(this){token=null;}WorkManager.getInstance(context).cancelUniqueWork("playerium-drive");WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-retry");return true;
+        case "status":return new JSONObject().put("realtimeAvailable",true).put("connected",prefs.getBoolean("enabled",false)).put("configured",true).put("canFlush",true).put("account",prefs.getString("account","")).put("email",prefs.getString("email","")).put("error",prefs.getString("error","")).put("pending",pendingCount());
+        case "disconnect":realtime.reset();prefs.edit().putBoolean("enabled",false).remove("email").remove("account").remove("error").apply();synchronized(this){token=null;}WorkManager.getInstance(context).cancelUniqueWork("playerium-drive");WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-retry");return true;
         case "fingerprint":return fingerprint(payload.getString("source"));
         case "pull":return pull(payload.optString("cursor",""));
         case "publish":publish(payload);return new JSONObject().put("queued",true);
@@ -118,7 +120,7 @@ final class GoogleCloud {
     }
     private synchronized void publish(JSONObject payload)throws Exception{if(!prefs.getBoolean("enabled",false))throw new IOException("Подключите Google Диск.");JSONObject op=payload.getJSONObject("operation");requireId(op.getString("id"));if(op.getInt("version")!=1)throw new IOException("Некорректное изменение.");File file=new File(jobs,op.getString("id")+".json");if(file.exists()){enqueue();return;}if("track".equals(op.getString("kind"))){JSONObject info=fingerprint(payload.getString("source"));if(!info.getString("key").equals(op.getString("key")))throw new IOException("Песня изменилась. Повторите синхронизацию.");}payload.put("account",prefs.getString("account",""));atomic(file,payload);enqueue();}
     private void enqueue(){Constraints constraints=new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();OneTimeWorkRequest work=new OneTimeWorkRequest.Builder(CloudWorker.class).setConstraints(constraints).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,TimeUnit.SECONDS).build();WorkManager manager=WorkManager.getInstance(context);manager.enqueueUniqueWork("playerium-drive",ExistingWorkPolicy.APPEND_OR_REPLACE,work);manager.enqueueUniquePeriodicWork("playerium-drive-retry",ExistingPeriodicWorkPolicy.KEEP,new PeriodicWorkRequest.Builder(CloudWorker.class,15,TimeUnit.MINUTES).setConstraints(constraints).build());}
-    boolean hasPendingJobs(){if(!prefs.getBoolean("enabled",false))return false;return pendingCount()>0;}
+    boolean hasPendingJobs(){if(!prefs.getBoolean("enabled",false))return false;return pendingCount()>0||realtime.pending()>0;}
     private JSONObject stage(JSONObject data)throws Exception{String extension=data.getString("ext");long size=data.getLong("size");if(!extension.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)")||size<1||size>1073741824L||stages.size()>=4)throw new IOException("Некорректный размер песни.");if(!cache.isDirectory()&&!cache.mkdirs())throw new IOException("Не удалось сохранить песню.");new File(cache,".nomedia").createNewFile();String id=UUID.randomUUID().toString();File file=new File(cache,"staged-"+id+extension);if(!file.createNewFile())throw new IOException("Не удалось сохранить песню.");stages.put(id,new JSONObject().put("path",file.getPath()).put("size",size).put("offset",0));return new JSONObject().put("id",id);}
     private boolean stageChunk(JSONObject data)throws Exception{JSONObject staged=stages.get(data.getString("id"));String value=data.getString("base64");if(staged==null||data.getLong("offset")!=staged.getLong("offset")||value.length()>720000)throw new IOException("Некорректная передача песни.");byte[] bytes=Base64.decode(value,Base64.DEFAULT);if(bytes.length>524288||staged.getLong("offset")+bytes.length>staged.getLong("size"))throw new IOException("Некорректный размер песни.");try(FileOutputStream out=new FileOutputStream(staged.getString("path"),true)){out.write(bytes);}staged.put("offset",staged.getLong("offset")+bytes.length);return true;}
     private String upload(String key,String kind,byte[] bytes,String source,String mime,JSONObject job,File jobFile)throws Exception{
@@ -131,14 +133,15 @@ final class GoogleCloud {
     int pendingCount(){int count=0;File[] files=jobs.listFiles();if(files!=null)for(File file:files)if(file.getName().matches("[A-Za-z0-9_-]+\\.json"))try{if(prefs.getString("account","").equals(readJob(file).optString("account")))count++;}catch(Exception ignored){}return count;}
     boolean runJobs()throws Exception{synchronized(jobLock){return runJobsLocked();}}
     private boolean runJobsLocked()throws Exception{
-        if(!prefs.getBoolean("enabled",false))return true;File[] files=jobs.listFiles();if(files==null)return true;Exception failure=null;
+        if(!prefs.getBoolean("enabled",false))return true;File[] files=jobs.listFiles();if(files==null)files=new File[0];Exception failure=null;
         for(File file:files){
             if(!prefs.getBoolean("enabled",false))return true;if(!file.getName().matches("[A-Za-z0-9_-]+\\.json"))continue;
             try{JSONObject job=readJob(file);if(!prefs.getString("account","").equals(job.optString("account")))continue;
                 expectedAccount.set(job.getString("account"));
                 if(job.has("download")){JSONObject entry=job.getJSONObject("download");download(entry.getString("key"),entry.getJSONObject("track"));if(!file.delete())throw new IOException("Не удалось завершить очередь.");continue;}
                 JSONObject op=job.getJSONObject("operation");
-                if(find(op.getString("id"))==null){
+                JSONObject existing=find(op.getString("id"));
+                if(existing==null){
                     if("track".equals(op.getString("kind"))){
                         JSONObject info=fingerprint(job.getString("source"));if(!info.getString("key").equals(op.getString("key")))throw new IOException("Песня изменилась до завершения загрузки.");
                         JSONObject track=op.getJSONObject("track");track.put("audioId",upload("audio:"+op.getString("key"),"audio",null,job.getString("source"),"application/octet-stream",job,file));
@@ -146,10 +149,12 @@ final class GoogleCloud {
                     }
                     upload(op.getString("id"),"event",op.toString().getBytes("UTF-8"),null,"application/json",job,file);
                 }
+                if(existing!=null)op=new JSONObject(new String(media(existing.getString("id"),262144),"UTF-8"));
+                realtime.enqueue(op);
                 if(!file.delete())throw new IOException("Не удалось завершить очередь.");
             }catch(Exception e){if(failure==null)failure=e;}finally{expectedAccount.remove();}
         }
-        if(failure!=null)throw failure;prefs.edit().remove("error").apply();return true;
+        if(failure!=null)throw failure;try{realtime.drain();}catch(Exception ignored){/* Drive is complete; the realtime outbox is retried by the next worker/sync. */}prefs.edit().remove("error").apply();return true;
     }
     void recordFailure(Exception e){prefs.edit().putString("error",message(e)).apply();}
     JSONObject localCopy(String key,JSONObject track)throws Exception{

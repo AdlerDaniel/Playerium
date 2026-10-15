@@ -4,7 +4,7 @@
  */
 
 export class AutoUpdater {
-  static CURRENT_VERSION = "1.7.29";
+  static CURRENT_VERSION = "1.7.30";
   static DEFAULT_REPO = "AdlerDaniel/Playerium"; // User can configure in Settings
 
   constructor() {

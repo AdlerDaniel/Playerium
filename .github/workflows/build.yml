@@ -20,6 +20,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run realtime:build
+      - run: git diff --exit-code -- js/vendor/realtime.js
       - run: npm run android:assets
       - run: npm run check
       - run: npm test

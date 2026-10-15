@@ -1,11 +1,13 @@
+import {RealtimeSync} from './realtime-sync.js';
 import {cloudView,mergeOperations} from './cloud-model.js';
 export class CloudSync {
  constructor(library,ui,transport=null){
-  this.library=library;this.ui=ui;this.transport=transport;this.pending=new Map();this.count=0;this.busy=false;this.status={connected:false};this.events=[];this.outbox=[];this.device=localStorage.getItem('playerium_cloud_device')||crypto.randomUUID();localStorage.setItem('playerium_cloud_device',this.device);
+  this.library=library;this.ui=ui;this.transport=transport;this.realtime=new RealtimeSync(this);this.pending=new Map();this.count=0;this.busy=false;this.status={connected:false};this.events=[];this.outbox=[];this.device=localStorage.getItem('playerium_cloud_device')||crypto.randomUUID();localStorage.setItem('playerium_cloud_device',this.device);
   window.onCloudResponse=message=>{const task=this.pending.get(message.id);if(!task)return;clearTimeout(task.timer);this.pending.delete(message.id);message.error?task.reject(Error(message.error)):task.resolve(message.data);};
  }
  get available(){return !!(this.transport||window.electronAPI?.cloudRequest||window.AndroidBridge?.cloudRequest);}
- request(operation,payload={}) {
+ request(operation,payload={}) {return operation==='pull'?this.realtime.pullLibrary(payload):this.nativeRequest(operation,payload);}
+ nativeRequest(operation,payload={}) {
   if(this.transport)return this.transport(operation,payload);
   if(window.electronAPI?.cloudRequest)return window.electronAPI.cloudRequest(operation,payload);
   if(!window.AndroidBridge?.cloudRequest)return Promise.reject(Error('Синхронизация доступна в приложении для ПК и Android.'));
@@ -18,12 +20,12 @@ export class CloudSync {
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)this.schedule(0);});window.addEventListener('online',()=>this.schedule(0));
   if(this.available){this.refreshStatus().catch(error=>{this.error=error.message;this.changed?.();});this.schedule(1000);this.interval=setInterval(()=>this.schedule(0),30000);}
  }
- async refreshStatus(){this.status=await this.request('status');this.changed?.();return this.status;}
+ async refreshStatus(){this.status=await this.request('status');if(this.status.connected&&this.status.realtimeAvailable)this.realtime.start(this.status.account).catch(()=>{});else this.realtime.reset();this.changed?.();return this.status;}
  schedule(delay=800){clearTimeout(this.timer);this.timer=setTimeout(()=>this.sync().catch(error=>{this.error=error.message;this.changed?.();}),delay);}
  async save(){this.states[this.account]={events:this.events,outbox:this.outbox,links:this.links,cursor:this.cursor,shadow:this.shadow};await this.library.putInStore('settings',{key:'cloudSync',value:this.states});}
  operation(kind,fields){const clock=[...this.events,...this.outbox].reduce((n,o)=>Math.max(n,o.clock),0)+1;const op={version:1,id:crypto.randomUUID(),device:this.device,clock,kind,...fields};this.outbox.push(op);return op;}
  async connect(){await this.request('connect');await this.refreshStatus();await this.sync();}
- async disconnect(){await this.request('disconnect');this.status={connected:false};this.changed?.();}
+ async disconnect(){this.realtime.reset();await this.request('disconnect');this.status={connected:false};this.changed?.();}
  async sync(){
   if(this.busy||!this.available)return;this.busy=true;this.error=null;this.failures=[];this.changed?.();
   try{
@@ -44,6 +46,7 @@ export class CloudSync {
      const track=link&&this.library.getTrackById(link.localId);if(!track){this.outbox=this.outbox.filter(p=>p.id!==op.id);continue;}
      await this.request('publish',{operation:op,source:await this.source(track),cover:await this.cover(track)});
      }else await this.request('publish',{operation:op});
+     if(op.kind!=='track')try{await this.realtime.publish([op]);}catch{}
      published=true;
      }catch(error){this.failures.push(error.message);}
    }
