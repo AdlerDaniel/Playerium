@@ -50,7 +50,7 @@ export class CloudSync {
      published=true;
      }catch(error){this.failures.push(error.message);}
    }
-    if(this.status.canFlush&&(published||this.status.pending))await this.request('flush');
+    if(this.status.canFlush&&(published||this.status.pending))try{await this.request('flush');}catch(error){this.failures.push(error.message);}
     const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
    // Preserve edits made while native transfers were running.

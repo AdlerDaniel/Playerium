@@ -16,6 +16,19 @@ test('realtime login verifies Google before provisioning and never returns provi
  }});
  const result=await handler(new Request('https://endpoint',{method:'POST',headers:{Authorization:'Bearer google-credential-that-is-valid'}}));assert.equal(result.status,200);const data=await result.json();assert.equal(data.account,'1234567890');assert.equal(data.accessToken,'user-session');assert.equal(data.userId,userId);assert.ok(!JSON.stringify(data).includes('server-only-key'));assert.ok(!JSON.stringify(data).includes('google-credential'));assert.ok(calls[0].url.startsWith('https://www.googleapis.com/'));
 });
+test('saved-history migration retries an interrupted batch before declaring the journal seeded',async()=>{
+ const {RealtimeSync}=await import('../js/realtime-sync.js');const rows=new Map();let fail=true;
+ const cloud={device:'self',account:'a',status:{account:'a',realtimeAvailable:true},events:Array.from({length:145},(_,i)=>({id:'legacy-'+i,device:'self',version:1,clock:i+1,kind:'playlist',playlist:'p'+i,name:'Legacy'})),schedule(){},nativeRequest:async op=>{if(op==='realtimeSession')return session();throw Error('Drive offline');}};
+ const sync=new RealtimeSync(cloud,{Client:FakeClient,fetcher:async(_url,options)=>{
+  if(options.method==='POST'){const batch=JSON.parse(options.body);if(fail&&batch[0].op_id==='legacy-100')throw Error('Interrupted');for(const row of batch)if(!rows.has(row.op_id))rows.set(row.op_id,{seq:rows.size+1,operation:row.operation});return response(null,201);}
+  return response([...rows.values()]);
+ }});
+ const partial=await sync.pullLibrary({cursor:'saved-cursor'});assert.equal(partial.events.length,100);assert.equal(!!sync.seeded,false);
+ fail=false;const recovered=await sync.pullLibrary({cursor:'saved-cursor'});assert.equal(recovered.events.length,145);assert.equal(sync.seeded,true);assert.equal(rows.size,145);assert.equal(recovered.cursor,'saved-cursor');
+ sync.lastDrive=Date.now()-300001;cloud.nativeRequest=async op=>{assert.equal(op,'pull');return {cursor:'backup-cursor',events:[]};};
+ assert.equal((await sync.pullLibrary({cursor:'saved-cursor'})).cursor,'backup-cursor');sync.reset();
+});
+
 test('invalid Google credentials cannot provision or access a realtime identity',async()=>{
  const {sessionHandler}=await import('../supabase/functions/playerium-session/handler.js');let calls=0;const handler=sessionHandler({env:()=>{throw Error('Should not read service configuration');},fetcher:async()=>{calls++;return response({},401);}});
  assert.equal((await handler(new Request('https://endpoint',{method:'POST'}))).status,401);assert.equal(calls,0);

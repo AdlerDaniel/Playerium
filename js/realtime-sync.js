@@ -30,10 +30,18 @@ export class RealtimeSync {
  async publish(events){if(!this.session)return;const ready=events.filter(op=>validOperation(op)&&(op.kind!=='track'||op.track.audioId!=='pending'));for(let i=0;i<ready.length;i+=100){const batch=ready.slice(i,i+100);await this.api('playerium_events?on_conflict=user_id,op_id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(batch.map(operation=>({user_id:this.session.userId,op_id:operation.id,operation})))});}}
  async pull(){let seq=0;const events=[];for(;;){const response=await this.api('playerium_events?select=seq,operation&user_id=eq.'+this.session.userId+'&seq=gt.'+seq+'&order=seq.asc&limit=1000'),rows=await response.json();for(const row of rows)if(validOperation(row.operation))events.push(row.operation);if(rows.length<1000)return events;seq=rows[rows.length-1].seq;}}
  async pullLibrary(payload){
-  if(this.session&&(payload.cursor||this.seeded)&&this.lastDrive&&Date.now()-this.lastDrive<300000){try{return {cursor:payload.cursor,events:await this.pull()};}catch{}}
-  let result;try{result=await this.cloud.nativeRequest('pull',payload);}catch(error){if(!this.session)throw error;const events=await this.pull();this.lastDrive=Date.now();this.seeded=true;return {cursor:payload.cursor,events};}this.lastDrive=Date.now();
+   // A Drive cursor only tracks future changes. Existing installations must also
+   // publish their saved journal, including deletions, before using realtime.
+   if(this.cloud.status?.realtimeAvailable&&this.cloud.account===this.cloud.status.account){try{await this.start(this.cloud.account);}catch{}}
+   if(this.session){try{
+    if(!this.seeded){await this.publish(this.cloud.events||[]);const events=await this.pull();this.seeded=true;
+     if(events.length){this.lastDrive=Date.now();return {cursor:payload.cursor,events};}
+    }
+    if(this.lastDrive&&Date.now()-this.lastDrive<300000)return {cursor:payload.cursor,events:await this.pull()};
+   }catch(error){this.error=error.message;}}
+   let result;try{result=await this.cloud.nativeRequest('pull',payload);}catch(error){if(!this.session)throw error;const events=await this.pull();this.lastDrive=Date.now();return {cursor:payload.cursor,events};}this.lastDrive=Date.now();
   // Drive remains a backup and migrates existing installations into the journal.
-  if(this.session){try{await this.publish(result.events||[]);result.events=[...(result.events||[]),...await this.pull()];}catch{this.lastDrive=0;}}
+   if(this.session){try{await this.publish(result.events||[]);result.events=[...(result.events||[]),...await this.pull()];this.seeded=true;}catch{this.lastDrive=0;}}
   return result;
  }
  devices(){const now=Date.now();return [...this.peers.values()].filter(peer=>peer.id!==this.cloud.device&&now-peer.receivedAt<15000);}

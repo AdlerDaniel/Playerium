@@ -12,6 +12,40 @@ test('deletion converges under reordering; restore cannot acknowledge an unknown
  assert.equal(model.cloudView([restore,add,del,concurrent]).tracks.get(key).deleted,true);
  assert.equal(model.mergeOperations([add],[add,del,del]).length,2);
 });
+for(const first of ['pc','phone'])test('legacy journals converge from 48 PC / 145 phone through an empty realtime journal, '+first+' first',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net);
+ for(let i=0;i<145;i++)add(pc,net,'Song '+i,'song-'+i);
+ await pc.cloud.sync();await phone.cloud.sync();
+ for(const track of pc.lib.getTracks().slice(0,97))await pc.lib.removeTrack(track.id);
+ await pc.cloud.sync();assert.equal(pc.lib.getTracks().length,48);assert.equal(phone.lib.getTracks().length,145);
+ const rows=new Map();let posts=0;
+ for(const p of [pc,phone]){
+  const sync=p.cloud.realtime;sync.account='account';sync.session={account:'account',userId:'test-user',accessToken:'test-token'};sync.start=async()=>{};
+  sync.fetcher=async(_url,options)=>{
+   if(options.method==='POST'){posts++;for(const row of JSON.parse(options.body))if(!rows.has(row.op_id))rows.set(row.op_id,{seq:rows.size+1,operation:row.operation});return new Response(null,{status:201});}
+   return new Response(JSON.stringify([...rows.values()]));
+  };
+  const native=p.cloud.transport;p.cloud.transport=async(name,payload)=>{if(name==='status')return {...await native(name,payload),realtimeAvailable:true};if(name==='pull')throw Error('Drive unavailable');return native(name,payload);};
+ }
+ const order=first==='pc'?[pc,phone]:[phone,pc];
+ await order[0].cloud.sync();await order[1].cloud.sync();await phone.cloud.sync();await pc.cloud.sync();
+ assert.equal(pc.lib.getTracks().length,48);assert.equal(phone.lib.getTracks().length,48);
+ assert.equal([...rows.values()].filter(r=>r.operation.kind==='delete').length,97);
+ assert.ok(posts>=4);const saved=rows.size;
+ await pc.cloud.sync();await phone.cloud.sync();assert.equal(rows.size,saved);
+});
+test('an outgoing transfer failure does not block incoming deletions or independent downloads',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net);const track=add(pc,net,'Song','song');await pc.cloud.sync();await phone.cloud.sync();
+ await pc.lib.removeTrack(track.id);add(pc,net,'Other','other');await pc.cloud.sync();
+ const native=phone.cloud.transport;phone.cloud.transport=async(name,payload)=>{
+  if(name==='status')return {...await native(name,payload),canFlush:true,pending:1};
+  if(name==='flush')throw Error('Outgoing file temporarily unavailable');
+  return native(name,payload);
+ };
+ await assert.rejects(phone.cloud.sync(),/Outgoing file temporarily unavailable/);
+ assert.equal(phone.lib.getTracks().length,1);assert.equal(phone.lib.getTracks()[0].title,'Other');
+});
+
 test('likes and membership converge using logical clocks, independent of device wall clocks',()=>{
  const a=operation('like',{liked:true},5,'a'),b=operation('like',{liked:false},5,'b'),p=operation('playlist',{playlist:'pl',name:'Mix'},1),m=operation('member',{playlist:'pl',present:true},4),r=operation('member',{playlist:'pl',present:false},6);
  for(const events of [[a,b,p,m,r],[r,m,p,b,a]]){const view=model.cloudView(events);assert.equal(view.tracks.get(key).liked,false);assert.equal(view.playlists.get('pl').members.get(key).present,false);}
