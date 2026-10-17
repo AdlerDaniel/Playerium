@@ -41,7 +41,7 @@ export class RealtimeSync {
    }catch(error){this.error=error.message;}}
    let result;try{result=await this.cloud.nativeRequest('pull',payload);}catch(error){if(!this.session)throw error;const events=await this.pull();this.lastDrive=Date.now();return {cursor:payload.cursor,events};}this.lastDrive=Date.now();
   // Drive remains a backup and migrates existing installations into the journal.
-   if(this.session){try{await this.publish(result.events||[]);result.events=[...(result.events||[]),...await this.pull()];this.seeded=true;}catch{this.lastDrive=0;}}
+   if(this.session){try{await this.publish(this.seeded?(result.events||[]):[...(this.cloud.events||[]),...(result.events||[])]);result.events=[...(result.events||[]),...await this.pull()];this.seeded=true;}catch{this.lastDrive=0;}}
   return result;
  }
  devices(){const now=Date.now();return [...this.peers.values()].filter(peer=>peer.id!==this.cloud.device&&now-peer.receivedAt<15000);}
