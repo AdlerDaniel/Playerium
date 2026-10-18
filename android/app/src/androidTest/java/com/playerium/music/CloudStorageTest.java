@@ -14,6 +14,18 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class CloudStorageTest {
+    @Test public void queuedAudioRevisionIsPrivateImmutableAndUsesTheContentHash()throws Exception{
+        Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);File original=new File(MusicEngine.managedDirectory(context),"snapshot-source.mp3");original.getParentFile().mkdirs();File snapshot=null;
+        String logical=String.format(java.util.Locale.ROOT,"%064x",1),content=OriginalNormalization.hash(new java.io.ByteArrayInputStream("song".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        try{
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(original)){out.write("song".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            JSONObject operation=new JSONObject().put("id",java.util.UUID.randomUUID().toString()).put("key",logical).put("track",new JSONObject().put("ext",".mp3").put("audioKey",content));
+            Method method=GoogleCloud.class.getDeclaredMethod("snapshot",JSONObject.class,java.io.InputStream.class);method.setAccessible(true);String uri=(String)method.invoke(cloud,operation,new java.io.FileInputStream(original));snapshot=new File(Uri.parse(uri).getPath());
+            assertTrue(snapshot.getCanonicalPath().startsWith(context.getNoBackupFilesDir().getCanonicalPath()+File.separator));assertFalse(MainActivity.hasMusicPermission(context,Uri.parse(uri)));
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(original)){out.write("changed".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            JSONObject info=(JSONObject)request("fingerprint",new JSONObject().put("source",uri));assertEquals(content,info.getString("key"));assertEquals(4,info.getInt("size"));assertFalse(logical.equals(info.getString("key")));
+        }finally{original.delete();if(snapshot!=null)snapshot.delete();}
+    }
     private Object request(String operation,JSONObject payload)throws Exception{Method method=GoogleCloud.class.getDeclaredMethod("request",String.class,JSONObject.class);method.setAccessible(true);try{return method.invoke(GoogleCloud.get(ApplicationProvider.getApplicationContext()),operation,payload);}catch(InvocationTargetException e){throw (Exception)e.getCause();}}
     @Test public void stagedMusicIsPrivateBoundedAndFingerprintMatchesAcrossPlatforms()throws Exception{
         Context context=ApplicationProvider.getApplicationContext();JSONObject session=(JSONObject)request("stage",new JSONObject().put("ext",".mp3").put("size",4));
