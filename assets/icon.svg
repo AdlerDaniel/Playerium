@@ -1,25 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <defs>
-    <clipPath id="squircle">
-      <rect width="1024" height="1024" rx="225" ry="225" />
-    </clipPath>
-  </defs>
-  <!-- White Squircle Background -->
-  <rect width="1024" height="1024" rx="225" ry="225" fill="#FFFFFF" />
-  
-  <!-- Black Musical Note -->
-  <g fill="#000000">
-    <!-- Notehead -->
-    <circle cx="388" cy="710" r="132" />
-    <!-- Stem -->
-    <rect x="494" y="175" width="52" height="535" />
-    <!-- Flag / Beam with rounded tip -->
-    <path d="M 494,175 
-             L 802,305 
-             C 830,317 835,355 810,380 
-             C 800,390 785,398 768,393 
-             L 546,335 
-             L 546,175 
-             Z" />
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <title>Playerium — П / headphones</title>
+  <rect id="icon-background" width="108" height="108" fill="#181516" />
+  <!-- Vector tracing of the approved headphones mark. Android uses this same
+       silhouette for its foreground and the system-tinted monochrome layer.
+       Keep the entire mark inside the central 66 dp adaptive-icon safe zone. -->
+  <path id="icon-mark" fill="#F5EBDA" d="M 35.1,23.6 H 72.9 C 78.3,23.6 82.6,27.9 82.6,33.2 V 74.7 C 82.6,80 78.3,84.3 72.9,84.3 H 70.4 C 66,84.3 62.6,80.8 62.6,76.4 V 70.5 C 62.6,66.5 65.1,63.2 68.5,62.4 V 36.1 C 68.5,35.4 68,34.8 67.3,34.8 H 40.7 C 40,34.8 39.5,35.4 39.5,36.1 V 62.4 C 42.9,63.2 45.4,66.5 45.4,70.5 V 76.4 C 45.4,80.8 42,84.3 37.6,84.3 H 35.1 C 29.7,84.3 25.4,80 25.4,74.7 V 33.2 C 25.4,27.9 29.7,23.6 35.1,23.6 Z" />
 </svg>

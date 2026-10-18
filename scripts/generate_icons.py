@@ -1,7 +1,8 @@
 import os
 import sys
 import subprocess
-import math
+from pathlib import Path
+import xml.etree.ElementTree as ET
 
 try:
     from PIL import Image, ImageDraw
@@ -24,6 +25,50 @@ def create_round_icon(master_img, size):
     output = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     output.paste(img_resized, (0, 0), mask=mask)
     return output
+
+def create_adaptive_icons(root_dir):
+    """Android / One UI owns the final tint and launcher mask, not our artwork."""
+    root = Path(root_dir)
+    source = ET.parse(root / "assets" / "icon.svg").getroot()
+    mark = source.find(".//*[@id='icon-mark']")
+    background = source.find(".//*[@id='icon-background']")
+    if source.get("viewBox") != "0 0 108 108" or mark is None or background is None:
+        raise ValueError("icon.svg must define icon-mark and icon-background in a 108 dp viewport")
+    res = root / "android" / "app" / "src" / "main" / "res"
+    drawable = res / "drawable"
+    drawable.mkdir(parents=True, exist_ok=True)
+
+    # Both layers have identical geometry. Monochrome must be an alpha mask:
+    # a white mark on transparency, without a baked-in colored background.
+    for name, color in [("ic_launcher_foreground", mark.get("fill")),
+                        ("ic_launcher_monochrome", "#FFFFFFFF")]:
+        vector = ('<?xml version="1.0" encoding="utf-8"?>\n'
+                  '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+                  '    android:width="108dp" android:height="108dp"\n'
+                  '    android:viewportWidth="108" android:viewportHeight="108">\n'
+                  '    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.9" android:scaleY="0.9">\n'
+                  f'        <path android:fillColor="{color}" android:pathData="{mark.get("d")}" />\n'
+                  '    </group>\n'
+                  '</vector>\n')
+        (drawable / f"{name}.xml").write_text(vector, encoding="utf-8")
+
+    for qualifier, extra in [("v26", ""),
+                             ("v33", '    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />\n')]:
+        directory = res / f"mipmap-anydpi-{qualifier}"
+        directory.mkdir(parents=True, exist_ok=True)
+        xml = ('<?xml version="1.0" encoding="utf-8"?>\n'
+               '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+               '    <background android:drawable="@color/icon_background" />\n'
+               '    <foreground android:drawable="@drawable/ic_launcher_foreground" />\n'
+               + extra + '</adaptive-icon>\n')
+        for name in ["ic_launcher.xml", "ic_launcher_round.xml"]:
+            (directory / name).write_text(xml, encoding="utf-8")
+
+    colors = ('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+              f'    <color name="icon_background">{background.get("fill")}</color>\n'
+              '</resources>\n')
+    (res / "values" / "icon_colors.xml").write_text(colors, encoding="utf-8")
+
 
 def main():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -71,27 +116,7 @@ def main():
         round_img.save(os.path.join(folder_path, "ic_launcher_round.png"), "PNG")
         print(f"Saved {folder}/ic_launcher.png and ic_launcher_round.png ({dim}x{dim})")
 
-    adaptive_dir = os.path.join(res_dir, "mipmap-anydpi-v26")
-    adaptive33_dir = os.path.join(res_dir, "mipmap-anydpi-v33")
-    drawable_dir = os.path.join(res_dir, "drawable")
-    os.makedirs(drawable_dir, exist_ok=True)
-    # Android applies the launcher mask; keep the complete vinyl inside its safe zone.
-    master.resize((432, 432), Image.Resampling.LANCZOS).save(os.path.join(drawable_dir, "ic_launcher_vinyl.png"))
-    foreground = '<inset xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/ic_launcher_vinyl" android:inset="18%" />'
-    with open(os.path.join(drawable_dir, "ic_launcher_foreground.xml"), "w", encoding="utf-8") as file:
-        file.write(foreground)
-    monochrome = '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M54,22 A32,32 0,1 1,54 86 A32,32 0,1 1,54 22 M47,40 L69,54 L47,68 Z" /></vector>'
-    with open(os.path.join(drawable_dir, "ic_launcher_monochrome.xml"), "w", encoding="utf-8") as file:
-        file.write(monochrome)
-    for directory, extra in [(adaptive_dir, ""), (adaptive33_dir, '<monochrome android:drawable="@drawable/ic_launcher_monochrome" />')]:
-        os.makedirs(directory, exist_ok=True)
-        xml = '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/icon_background" /><foreground android:drawable="@drawable/ic_launcher_foreground" />'+extra+'</adaptive-icon>'
-        for name in ["ic_launcher.xml", "ic_launcher_round.xml"]:
-            with open(os.path.join(directory, name), "w", encoding="utf-8") as file:
-                file.write(xml)
-    values_dir = os.path.join(res_dir, "values")
-    with open(os.path.join(values_dir, "icon_colors.xml"), "w", encoding="utf-8") as file:
-        file.write('<resources><color name="icon_background">#42210F</color></resources>')
+    create_adaptive_icons(root_dir)
     print("\nAll application icons generated successfully!")
 
 if __name__ == "__main__":

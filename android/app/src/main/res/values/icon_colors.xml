@@ -1,1 +1,4 @@
-<resources><color name="icon_background">#42210F</color></resources>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="icon_background">#181516</color>
+</resources>
