@@ -151,6 +151,7 @@ export class UIController {
 
     bindSlider(progressContainer, {
       label: 'Позиция воспроизведения',
+      fine:true,formatValue:percent=>this.formatTime(percent/100*this.player.getDuration()),
       getValue: () => this.player.getDuration() > 0 ? this.player.getCurrentTime() / this.player.getDuration() * 100 : 0,
       enabled: () => Number.isFinite(this.player.getDuration()) && this.player.getDuration() > 0,
       preview: percent => {
@@ -162,7 +163,7 @@ export class UIController {
     });
     progressContainer.addEventListener('pointermove', e => {
       const rect = progressContainer.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const ratio = progressContainer.dataset.fineSeek==='true'?Number(progressContainer.dataset.previewValue)/100:Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       progressTooltip.textContent = this.formatTime(ratio * this.player.getDuration());
       positionFloating(progressTooltip,{anchor:{getBoundingClientRect:()=>({left:e.clientX-progressTooltip.offsetWidth/2,top:rect.top,bottom:rect.bottom})},prefer:'above'});
     });
@@ -855,7 +856,7 @@ export class UIController {
     setTimeout(() => {
       toast.style.opacity = "0";
       toast.style.transform = "translateY(10px)";
-      toast.style.transition = "all 0.3s ease";
+      toast.style.transition = "opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out)";
       setTimeout(() => toast.remove(), 300);
     }, type === "error" ? 8000 : 2800);
   }

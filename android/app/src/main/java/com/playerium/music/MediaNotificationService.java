@@ -183,7 +183,7 @@ public class MediaNotificationService extends MediaSessionService {
         for (int i = 0; i < tracks.length(); i++) {
             JSONObject t = tracks.getJSONObject(i);
             Uri uri = Uri.parse(t.getString("uri"));
-            android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));extras.putString("cloudKey",t.optString("cloudKey"));
+            android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));extras.putString("cloudKey",t.optString("cloudKey"));extras.putString("queueOrigin","manual".equals(t.optString("queueOrigin"))?"manual":"collection");extras.putString("queueEntry",t.optString("queueEntry").substring(0,Math.min(160,t.optString("queueEntry").length())));
             MediaMetadata metadata = new MediaMetadata.Builder().setTitle(t.optString("title"))
                 .setArtist(t.optString("artist")).setExtras(extras).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
@@ -200,7 +200,7 @@ public class MediaNotificationService extends MediaSessionService {
             && items.get(index).mediaId.equals(currentId)
             && java.util.Objects.equals(items.get(index).localConfiguration, current.localConfiguration);
         boolean sameQueue=items.size()==player.getMediaItemCount();
-        for(int i=0;sameQueue&&i<items.size();i++){MediaItem before=player.getMediaItemAt(i),after=items.get(i);sameQueue=before.mediaId.equals(after.mediaId)&&java.util.Objects.equals(before.localConfiguration,after.localConfiguration)&&java.util.Objects.equals(before.mediaMetadata.title,after.mediaMetadata.title)&&java.util.Objects.equals(before.mediaMetadata.artist,after.mediaMetadata.artist)&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("cloudKey",""),after.mediaMetadata.extras.getString("cloudKey",""));}
+        for(int i=0;sameQueue&&i<items.size();i++){MediaItem before=player.getMediaItemAt(i),after=items.get(i);sameQueue=before.mediaId.equals(after.mediaId)&&java.util.Objects.equals(before.localConfiguration,after.localConfiguration)&&java.util.Objects.equals(before.mediaMetadata.title,after.mediaMetadata.title)&&java.util.Objects.equals(before.mediaMetadata.artist,after.mediaMetadata.artist)&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("cloudKey",""),after.mediaMetadata.extras.getString("cloudKey",""))&&java.util.Objects.equals(before.mediaMetadata.extras==null?"collection":before.mediaMetadata.extras.getString("queueOrigin","collection"),after.mediaMetadata.extras.getString("queueOrigin","collection"))&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("queueEntry",""),after.mediaMetadata.extras.getString("queueEntry",""));}
         if(sameQueue){
             // A song selection in the existing queue reuses prepared media sources.
             if(data.optBoolean("reset")||index!=player.getCurrentMediaItemIndex()||data.has("position"))
@@ -269,7 +269,7 @@ public class MediaNotificationService extends MediaSessionService {
                 MediaItem item=player.getMediaItemAt(i);if(item.localConfiguration==null)continue;
                 tracks.put(new JSONObject().put("id",item.mediaId).put("uri",item.localConfiguration.uri.toString())
                     .put("title",String.valueOf(item.mediaMetadata.title==null?"":item.mediaMetadata.title))
-                    .put("artist",String.valueOf(item.mediaMetadata.artist==null?"":item.mediaMetadata.artist)).put("cloudKey",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("cloudKey",""))
+                    .put("artist",String.valueOf(item.mediaMetadata.artist==null?"":item.mediaMetadata.artist)).put("cloudKey",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("cloudKey","")).put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection")).put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""))
                     );
             }
             JSONObject data=new JSONObject().put("tracks",tracks).put("index",player.getCurrentMediaItemIndex())
@@ -370,7 +370,7 @@ public class MediaNotificationService extends MediaSessionService {
                 track.put("uri", item.localConfiguration == null ? "" : item.localConfiguration.uri.toString());
                 track.put("title", item.mediaMetadata.title == null ? "" : item.mediaMetadata.title.toString());
                 track.put("artist", item.mediaMetadata.artist == null ? "" : item.mediaMetadata.artist.toString());
-                String cloudKey=item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("cloudKey","");if(cloudKey.isEmpty()&&item.localConfiguration!=null){String name=item.localConfiguration.uri.getLastPathSegment();if(name!=null&&name.matches("[a-f0-9]{64}\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)"))cloudKey=name.substring(0,64);}track.put("cloudKey",cloudKey);
+                String cloudKey=item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("cloudKey","");if(cloudKey.isEmpty()&&item.localConfiguration!=null){String name=item.localConfiguration.uri.getLastPathSegment();if(name!=null&&name.matches("[a-f0-9]{64}\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)"))cloudKey=name.substring(0,64);}track.put("cloudKey",cloudKey);track.put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection"));track.put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""));
                 tracks.put(track);
             }
             data.put("queue", queue);

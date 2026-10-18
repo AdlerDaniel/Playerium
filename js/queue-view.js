@@ -3,7 +3,7 @@ import {mountCover} from './artwork.js';
 export function renderRightQueue() {
   const ui=this,container=document.getElementById('rightPanelContent');
   delete container.dataset.nowPlayingSignature;
-  const signature=JSON.stringify([this.player.queueIndex,this.player.currentTrack?.id,this.player.queue.map(t=>[t.id,t.title,t.artist,t.pictureUrl])]);
+  const signature=JSON.stringify([this.player.queueIndex,this.player.currentTrack?.id,this.player.playbackContext?.title,this.player.queue.map(t=>[t.id,t.title,t.artist,t.pictureUrl,t.queueOrigin,t.queueEntry])]);
   if(container.dataset.queueSignature===signature&&container.querySelector('.queue-list')){
     const toggle=container.querySelector('.queue-current-toggle');
     if(toggle){const playing=String(this.player.isPlaying);if(toggle.dataset.playing!==playing)toggle.innerHTML=this.player.isPlaying?icons.pause:icons.play;toggle.dataset.playing=playing;toggle.setAttribute('aria-label',this.player.isPlaying?'Пауза':'Воспроизвести');}
@@ -42,10 +42,17 @@ export function renderRightQueue() {
   if(this.player.currentTrack)container.append(row(this.player.currentTrack,this.player.queueIndex,true));
   const heading=document.createElement('div');heading.className='queue-heading';heading.innerHTML=`<h3 class="queue-section-title">Следующие в очереди (${upcoming.length})</h3>${upcoming.length?'<button id="btnClearQueueBtn">Очистить</button>':''}`;container.append(heading);
   heading.querySelector('button')?.addEventListener('click',()=>this.player.clearUpcomingQueue());
-  const list=document.createElement('div');list.className='queue-list';upcoming.forEach((t,i)=>list.append(row(t,first+i)));container.append(list);
+  const list=document.createElement('div');list.className='queue-list';
+  let origin=null;
+  upcoming.forEach((track,i)=>{
+    const kind=track.queueOrigin==='manual'?'manual':'collection';
+    if(kind!==origin){origin=kind;const group=document.createElement('div');group.className='queue-origin-heading';group.dataset.queueOrigin=kind;const title=document.createElement('h3');title.textContent=kind==='manual'?'Добавлено вами':this.player.playbackContext?.title?`Из «${this.player.playbackContext.title}»`:'Из текущей подборки';const clear=document.createElement('button');clear.textContent='Очистить';clear.setAttribute('aria-label',kind==='manual'?'Очистить добавленные вручную':'Очистить треки из подборки');clear.onclick=()=>{ui.player.removeUpcomingTracks(ui.player.queue.map((track,index)=>(track.queueOrigin==='manual'?'manual':'collection')===kind?index:-1));};group.append(title,clear);list.append(group);}
+    list.append(row(track,first+i));
+  });container.append(list);
   if(!upcoming.length){const empty=document.createElement('p');empty.className='queue-empty';empty.textContent='Очередь пуста. Добавьте треки через меню ⋯.';list.append(empty);}
   controls=document.createElement('div');controls.className='queue-controls';controls.innerHTML=`<button class="queue-shuffle" aria-pressed="${this.player.isShuffle}">${icons.shuffle}<span>Перемешать</span></button><button class="queue-repeat" aria-label="Повтор" data-repeat="${this.player.repeatMode}" aria-pressed="${this.player.repeatMode!=='off'}">${icons.repeat}<span>Повтор</span></button><button class="queue-remove-selected" hidden>Удалить выбранные</button>`;
   controls.querySelector('.queue-shuffle').onclick=()=>{this.player.toggleShuffle();this.renderRightQueue();};controls.querySelector('.queue-repeat').onclick=()=>{this.player.toggleRepeat();this.renderRightQueue();};
-  controls.querySelector('.queue-remove-selected').onclick=()=>{for(const i of [...selected].sort((a,b)=>b-a))this.player.removeFromQueue(i);};container.append(controls);
+  controls.querySelector('.queue-remove-selected').onclick=()=>{this.player.removeUpcomingTracks([...selected]);};container.append(controls);
+  if(this.connect&&this.connect.selected!==this.connect.id){for(const control of container.querySelectorAll('.queue-select,.queue-item-remove,.queue-drag,.queue-origin-heading button,#btnClearQueueBtn'))control.disabled=true;const note=document.createElement('p');note.className='queue-remote-note';note.textContent='Для изменения состава очереди откройте её на устройстве воспроизведения.';container.append(note);}
   container.scrollTop=scrollTop;
 }

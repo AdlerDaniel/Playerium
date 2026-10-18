@@ -286,3 +286,20 @@ test('restoring unchanged downloaded files keeps artwork URL and does not flash 
  for(let i=0;i<20;i++)assert.equal(await lib.addDownloaded(file,null),song);
  assert.equal(updates,0);assert.equal(song.pictureUrl,'blob:stable');assert.equal(song.normalizationGain,.7);assert.equal(lib.importing,false);
 });
+
+
+test('native manual queue entries retain their identity during repeated background snapshots',async()=>{
+ const {AudioPlayer}=await modules(),base={id:'saved',nativeUri:'content://saved',title:'Saved'};
+ const p=new AudioPlayer({getTrackById:id=>id===base.id?base:null,tracks:new Map([[base.id,base]])});
+ const state={queue:['saved','saved'],tracks:[{uri:base.nativeUri,queueOrigin:'collection',queueEntry:''},{uri:base.nativeUri,queueOrigin:'manual',queueEntry:'unique-manual'}],index:1,id:'saved',playing:true,position:21000,duration:180000};
+ p.applyNativeState(state);const active=p.currentTrack;let changes=0;p.onTrackChange=()=>changes++;
+ for(let n=0;n<8;n++)p.applyNativeState({...state,position:21000+n*100});
+ assert.equal(p.currentTrack,active);assert.equal(changes,0);assert.equal(active.queueEntry,'unique-manual');assert.equal(base.queueOrigin,undefined);
+ assert.equal(p.queue[0],base);
+});
+
+test('batch queue removal sends one native update and preserves a playing duplicate',async()=>{
+ const {AudioPlayer}=await modules(),writes=[];window.AndroidBridge={setPlaybackQueue:value=>writes.push(JSON.parse(value))};
+ const p=new AudioPlayer({}),a={id:'a',nativeUri:'content://a'},b={id:'b',nativeUri:'content://b'};p.queue=[a,b,a,b];p.originalQueue=[...p.queue];p.queueIndex=0;p.currentTrack=a;p.nativePlayback=true;p.isPlaying=true;
+ p.removeUpcomingTracks([1,2,3]);assert.equal(writes.length,1);assert.deepEqual(p.queue,[a]);assert.deepEqual(p.originalQueue,[a]);assert.equal(p.currentTrack,a);assert.equal(p.isPlaying,true);
+});

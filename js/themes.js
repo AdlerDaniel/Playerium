@@ -18,6 +18,10 @@ export function applyTheme(id,persist=true){
  root.style.setProperty('--sp-text-subdued',c[8]);root.style.setProperty('--sp-green-active',c[9]);root.style.setProperty('--sp-theme-color',c[9]);
   root.style.setProperty('--theme-border',theme.scheme==='light'?'#392b2038':'#ffffff30');root.style.setProperty('--theme-accent-soft',c[9]+(theme.scheme==='light'?'24':'26'));
   root.style.setProperty('--theme-hover',theme.scheme==='light'?'#392b201a':'#ffffff18');root.style.setProperty('--theme-selection',theme.scheme==='light'?'#79533330':c[9]+'38');
+ root.style.setProperty('--surface-control',mix(c[3],'#ffffff',theme.scheme==='light'?.5:.88));
+ root.style.setProperty('--surface-overlay',mix(c[2],'#ffffff',theme.scheme==='light'?.35:.92));
+ root.style.setProperty('--surface-selected',mix(c[9],c[1],theme.scheme==='light'?.16:.25));
+ root.style.setProperty('--surface-control-hover',mix(c[4],'#ffffff',theme.scheme==='light'?.45:.82));
  root.dataset.theme=theme.id;root.style.colorScheme=theme.scheme;
  document.querySelectorAll('meta[name="theme-color"]').forEach(meta=>meta.content=c[0]);document.querySelector('meta[name="color-scheme"]')?.setAttribute('content',theme.scheme);
  if(persist)try{localStorage.setItem('playerium_theme',theme.id);}catch{}

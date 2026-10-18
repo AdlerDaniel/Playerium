@@ -32,15 +32,15 @@ for(const mobile of [false,true])test(`search covers before audio, filters and f
   const menu=page.locator(mobile?'.track-options-sheet':'#appContextMenu');await expect(menu).toBeVisible();
   await page.locator(mobile?'#sheetOptCredits':'#ctxCredits').click();await expect(menu).toContainText('2019');await expect(menu).toContainText('747');
   await page.locator('#trackMenuBack').click();
-  await page.locator(mobile?'#sheetOptAddToPlaylist':'#ctxAddToPlaylist').click();await expect(menu).toContainText('Новый плейлист');
-  await page.locator('#trackMenuBack').click();
+  await page.locator(mobile?'#sheetOptAddToPlaylist':'#ctxAddToPlaylist').click();await expect(page.locator('.playlist-picker')).toBeVisible();
+  await expect(page.getByLabel('Название нового плейлиста')).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('search-menu.png')});
-  await page.keyboard.press('Escape');await expect(menu).toBeHidden();
+  await page.keyboard.press('Escape');await expect(page.locator('.playlist-picker')).toHaveCount(0);
   // Simulate a blocked primary cover and exercise the merged HTTPS fallback.
   await page.evaluate(async()=>{const {mountCover}=await import('/js/artwork.js');mountCover(document.querySelector('.track-mini-thumb'),{pictureUrl:'https://covers.example.test/missing.jpg',pictureUrls:['https://covers.example.test/fallback.jpg']},true);});
   await expect(page.locator('.track-mini-thumb img').first()).toHaveAttribute('src','https://covers.example.test/fallback.jpg');await expect.poll(()=>page.locator('.track-mini-thumb img').first().evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);
   await page.evaluate(async()=>{const p=await window.playerApp.library.createPlaylist('Test playlist');window.testPlaylist=p.id;});
-  await page.locator('.track-row .track-menu-btn').first().click();await page.locator(mobile?'#sheetOptAddToPlaylist':'#ctxAddToPlaylist').click();await menu.getByRole(mobile?'button':'menuitem',{name:'Test playlist',exact:true}).click();
+  await page.locator('.track-row .track-menu-btn').first().click();await page.locator(mobile?'#sheetOptAddToPlaylist':'#ctxAddToPlaylist').click();await page.locator('.playlist-picker').getByRole('checkbox',{name:'Test playlist',exact:true}).check();await page.locator('.picker-save').click();
   await expect.poll(()=>page.evaluate(()=>window.playerApp.library.getPlaylistTracks(window.testPlaylist).length)).toBe(1);
   expect(await page.evaluate(()=>window.musicCalls.filter(c=>c.op==='download').length)).toBe(1);
   expect(errors).toEqual([]);
@@ -48,7 +48,7 @@ for(const mobile of [false,true])test(`search covers before audio, filters and f
 test('mobile raw query preserves spaces, focus and readable text during partial results; swipe closes sheet',async({page},testInfo)=>{
   const errors=await setup(page,true);
   const input=page.locator('.mobile-search-input');
-  const emptyColors=await input.evaluate(el=>({text:getComputedStyle(el).color,background:getComputedStyle(el.parentElement).backgroundColor}));expect(emptyColors.text).toBe('rgb(234, 248, 238)');expect(emptyColors.background).toBe(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--sp-dark-700').trim()).then(hex=>{const c=hex.slice(1);return 'rgb('+[0,2,4].map(i=>parseInt(c.slice(i,i+2),16)).join(', ')+')';}));
+  const emptyColors=await input.evaluate(el=>({text:getComputedStyle(el).color,background:getComputedStyle(el.parentElement).backgroundColor}));expect(emptyColors.text).toBe('rgb(234, 248, 238)');expect(emptyColors.background).toBe(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--surface-control').trim()).then(hex=>{const c=hex.slice(1);return 'rgb('+[0,2,4].map(i=>parseInt(c.slice(i,i+2),16)).join(', ')+')';}));
   await input.pressSequentially('747 Tenke',{delay:50});await expect(input).toHaveValue('747 Tenke');await expect(input).toBeFocused();
   await expect(page.locator('.song-search-results .track-row')).toHaveCount(1);
   await page.waitForTimeout(1700);await expect(input).toBeFocused();

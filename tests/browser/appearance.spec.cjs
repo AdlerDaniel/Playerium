@@ -58,10 +58,10 @@ test('desktop tooltips flip at top, clamp at sides, show on keyboard focus and d
 test('desktop long context menus, nested credits and forms stay inside a short resized window',async({page})=>{
  await page.setViewportSize({width:1000,height:360});await boot(page);
  await page.evaluate(async()=>{const a=window.playerApp;for(let i=0;i<25;i++)await a.library.createPlaylist('ОченьДлинноеНазваниеБезПробелов'.repeat(8)+i);a.ui.showTrackContextMenu(995,355,{id:'fixture',title:'Название'.repeat(100),artist:'Исполнитель'.repeat(100),album:'Альбом'.repeat(100),sources:[]});});
- await within(page,'#appContextMenu');await page.locator('#ctxAddToPlaylist').click();await within(page,'#appContextMenu');
- expect(await page.locator('#appContextMenu').evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
- await page.setViewportSize({width:800,height:320});await within(page,'#appContextMenu');
- await page.locator('#trackMenuBack').click();await page.locator('#ctxCredits').click();await within(page,'#appContextMenu');
+ await within(page,'#appContextMenu');await page.locator('#ctxAddToPlaylist').click();await within(page,'.playlist-picker');
+ expect(await page.locator('.playlist-picker-list').evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
+ await page.setViewportSize({width:800,height:320});await within(page,'.playlist-picker');
+ await page.keyboard.press('Escape');await page.evaluate(()=>window.playerApp.ui.showTrackContextMenu(795,315,{id:'fixture',title:'Название'.repeat(100),artist:'Исполнитель'.repeat(100),sources:[]}));await page.locator('#ctxCredits').click();await within(page,'#appContextMenu');
  expect(await page.locator('#appContextMenu').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);await page.keyboard.press('Escape');await page.keyboard.press('Escape');await expect(page.locator('#appContextMenu')).toBeHidden();
   await page.evaluate(()=>{window.playerApp.ui.showCreatePlaylistModal();});await expect(page.locator('.form-dialog')).toBeVisible();await within(page,'.form-dialog .modal-card');await page.getByLabel('Название',{exact:true}).fill('Текст'.repeat(100));await expect(page.getByRole('button',{name:'Сохранить',exact:true})).toBeInViewport();await page.keyboard.press('Escape');
 });

@@ -202,7 +202,7 @@ export function renderPlaylistView(container, playlistId) {
         (t.artist || "").toLowerCase().includes(this.searchQuery.toLowerCase())
       );
     }
-    tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
+    if(!pl.manualOrder||this.tableSortExplicit)tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
 
     const totalDur = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
     const playlistCover = tracks.find(t => t.pictureUrl)?.pictureUrl;

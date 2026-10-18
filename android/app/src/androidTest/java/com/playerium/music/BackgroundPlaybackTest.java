@@ -63,7 +63,7 @@ public class BackgroundPlaybackTest {
         MediaController controller=null;
         try {
             JSONObject track=new JSONObject().put("id","background-fixture").put("uri",android.net.Uri.fromFile(file).toString()).put("title","Background test").put("artist","Playerium");
-            JSONObject second=new JSONObject(track.toString()).put("id","background-second");
+            JSONObject second=new JSONObject(track.toString()).put("id","background-second").put("queueOrigin","manual").put("queueEntry","manual-fixture");
             JSONArray tracks=new JSONArray().put(track).put(second);
             String queue=new JSONObject().put("tracks",tracks).put("play",true).put("reset",true).toString();
             instrumentation.runOnMainSync(()->MediaNotificationService.submitQueue(context,queue));
@@ -83,7 +83,9 @@ public class BackgroundPlaybackTest {
             instrumentation.runOnMainSync(()->controls.addListener(listener));
             String selected=new JSONObject().put("tracks",tracks).put("index",1).put("play",true).put("reset",true).toString();
             instrumentation.runOnMainSync(()->MediaNotificationService.submitQueue(context,selected));
-            waitFor("background-second",true);
+            JSONObject selectedState=waitFor("background-second",true);
+            assertEquals("manual",selectedState.getJSONArray("tracks").getJSONObject(1).getString("queueOrigin"));
+            assertEquals("manual-fixture",selectedState.getJSONArray("tracks").getJSONObject(1).getString("queueEntry"));
             assertEquals("Selecting an existing song must keep prepared queue sources",0,timelineChanges.get());
             instrumentation.runOnMainSync(()->controls.removeListener(listener));
         }finally{

@@ -17,6 +17,9 @@ export function validOperation(op) {
   if(op.kind==='restore'&&(!Array.isArray(op.deletes)||op.deletes.some(value=>!id.test(value))))return false;
   if(op.kind==='like'&&typeof op.liked!=='boolean')return false;
   if(op.kind==='member'&&typeof op.present!=='boolean')return false;
+  if(op.kind==='member'&&op.position!==undefined&&(!Number.isSafeInteger(op.position)||op.position<0||op.position>10000000))return false;
+  if(op.kind==='member'&&op.orderOnly!==undefined&&(typeof op.orderOnly!=='boolean'||op.orderOnly&&(op.present!==true||op.position===undefined)))return false;
+  if(op.kind==='playlist'&&op.manualOrder!==undefined&&typeof op.manualOrder!=='boolean')return false;
   return true;
 }
 const newer=(a,b)=>!b||a.clock>b.clock||(a.clock===b.clock&&a.id>b.id);
@@ -30,11 +33,12 @@ export function cloudView(events) {
   for(const op of events) {
     if(!validOperation(op))continue;clock=Math.max(clock,op.clock);
     if(op.playlist){
-      if(!playlists.has(op.playlist))playlists.set(op.playlist,{id:op.playlist,members:new Map(),deleted:false});
+      if(!playlists.has(op.playlist))playlists.set(op.playlist,{id:op.playlist,members:new Map(),positions:new Map(),deleted:false});
       const pl=playlists.get(op.playlist);
-      if(op.kind==='playlist'&&newer(op,pl.meta)){pl.meta=op;pl.name=op.name;pl.description=String(op.description||'').slice(0,3000);pl.coverType=['custom','text','mosaic'].includes(op.coverType)?op.coverType:'mosaic';pl.coverUrl=typeof op.coverUrl==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(op.coverUrl)&&op.coverUrl.length<=200000?op.coverUrl:null;}
+      if(op.kind==='playlist'&&newer(op,pl.meta)){pl.meta=op;pl.name=op.name;pl.manualOrder=op.manualOrder===true;pl.description=String(op.description||'').slice(0,3000);pl.coverType=['custom','text','mosaic'].includes(op.coverType)?op.coverType:'mosaic';pl.coverUrl=typeof op.coverUrl==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(op.coverUrl)&&op.coverUrl.length<=200000?op.coverUrl:null;}
       if(op.kind==='playlist-delete')pl.deleted=true;
-      if(op.kind==='member'&&newer(op,pl.members.get(op.key)))pl.members.set(op.key,op);
+      if(op.kind==='member'&&!op.orderOnly&&newer(op,pl.members.get(op.key)))pl.members.set(op.key,op);
+      if(op.kind==='member'&&op.position!==undefined&&newer(op,pl.positions.get(op.key)))pl.positions.set(op.key,op);
     }
     if(!op.key||op.kind==='member')continue;
     if(!tracks.has(op.key))tracks.set(op.key,{key:op.key,deletes:new Set(),restored:new Set(),liked:false});

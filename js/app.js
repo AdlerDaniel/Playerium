@@ -14,6 +14,7 @@ import {ConnectController} from './connect-controller.js';
 import {installVisualExperience} from './visual-experience.js';
 import {hydratePortraits} from './visual-art.js';
 import {installAudioPreparation} from './audio-preparation.js';
+import {installInterfaceV2} from './interface-v2.js';
 
 class App {
   constructor() {
@@ -45,6 +46,7 @@ class App {
       this.ui.audioPreparation=this.audioPreparation;
       this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);
       installVisualExperience(this.ui);
+      installInterfaceV2(this.ui);
       // A slow cloud connection must never delay restoring local playback.
       this.cloud.init().catch(error=>{this.cloud.error=error.message;this.cloud.changed?.();});
       if(!window.AndroidBridge)this.music.restore();

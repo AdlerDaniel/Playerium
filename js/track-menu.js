@@ -2,6 +2,7 @@ import {icons,saveIcon} from './design-icons.js';
 import {mountCover} from './artwork.js';
 import {showFormDialog} from './surface-menu.js';
 import {positionFloating,watchFloating} from './floating-surfaces.js';
+import {openPlaylistPicker} from './playlist-actions.js';
 const glyph=path=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const moreIcons={queue:glyph('M3 5h14v2H3zm0 4h14v2H3zm0 4h8v2H3zm15-1h2v4h4v2h-4v4h-2v-4h-4v-2h4z'),download:glyph('M11 3h2v10l3-3 1.4 1.4L12 17l-5.4-5.6L8 10l3 3V3zM5 19h14v2H5z'),credits:glyph('M11 10h2v8h-2zm0-4h2v2h-2zM12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22zm0 2a9 9 0 1 1 0 18 9 9 0 0 1 0-18z'),share:glyph('M18 2a4 4 0 1 1-3.6 5.7L8 11a4 4 0 0 1 0 2l6.4 3.3a4 4 0 1 1-1 2L7 15a4 4 0 1 1 0-6l6.4-3.3A4 4 0 0 1 18 2z')};
 export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=null}={}) {
@@ -17,15 +18,6 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
   const position=()=>{if(!mobile){root.scrollTop=0;positionFloating(root,{x,y});}};
   const header=()=>{if(!mobile)return;const h=document.createElement('div');h.className='sheet-track-header';h.innerHTML=`<div class="mobile-sheet-handle"></div><div class="sheet-track-info"><div class="sheet-track-cover"></div><div><strong>${ui.escapeHTML(track.title)}</strong><span>${ui.escapeHTML(track.artist)}</span></div></div>`;panel.append(h);mountCover(h.querySelector('.sheet-track-cover'),track,true);panel.setAttribute('aria-label','Действия: '+track.title);};
   const focusFirst=()=>panel.querySelector('button')?.focus({preventScroll:true});
-  const playlists=()=>{
-    pane='playlists';panel.replaceChildren();header();
-    button('trackMenuBack','Назад',icons.music,main,true);
-    const title=document.createElement('h3');title.className='menu-pane-title';title.textContent='Добавить в плейлист';panel.append(title);
-    const available=ui.library.getPlaylists();
-    for(const p of available)button('trackPlaylist-'+p.id,p.name,icons.music,async()=>{const saved=await ui.music.ensureTrack(track);await ui.library.addTrackToPlaylist(p.id,saved.id);ui.showToast(`Добавлено в «${p.name}»`);ui.renderSidebar();});
-    button('trackNewPlaylist','Новый плейлист',saveIcon,async()=>{const values=await showFormDialog(ui,{title:'Новый плейлист',fields:[{name:'name',label:'Название',required:true}]});if(!values)return;const name=values.name;const saved=await ui.music.ensureTrack(track);const p=await ui.library.createPlaylist(name.trim());await ui.library.addTrackToPlaylist(p.id,saved.id);ui.renderSidebar();ui.showToast(`Добавлено в «${p.name}»`);});
-    position();focusFirst();
-  };
   const credits=()=>{
     pane='credits';panel.replaceChildren();header();button('trackMenuBack','Назад',icons.music,main,true);
     const heading=document.createElement('h3');heading.className='menu-pane-title';heading.textContent='Сведения о треке';panel.append(heading);
@@ -36,7 +28,7 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
   const main=()=>{
     pane='main';panel.replaceChildren();header();
     const prefix=mobile?'sheetOpt':'ctx';
-    button(mobile?'sheetOptAddToPlaylist':'ctxAddToPlaylist','Добавить в плейлист',icons.music,playlists,true);
+    button(mobile?'sheetOptAddToPlaylist':'ctxAddToPlaylist','Добавить в плейлист',icons.music,()=>{close();openPlaylistPicker(ui,[track],mobile?null:opener);},true);
     const liked=button(mobile?'sheetOptLike':'ctxToggleLike',track.liked?'Удалить из любимых треков':'Сохранить в любимые треки',saveIcon,async()=>{const saved=await ui.music.ensureTrack(track);const liked=await ui.library.toggleLike(saved.id);ui.updateLikeButtons(saved.id,liked);ui.showToast(liked?'Добавлено в «Любимые треки»':'Удалено из «Любимых треков»');});liked.classList.toggle('liked',!!track.liked);
     button(mobile?'sheetOptQueue':'ctxAddToQueue','Добавить в очередь',moreIcons.queue,async()=>{ui.player.addToQueue(await ui.music.ensureTrack(track));ui.showToast('Добавлено в очередь');});
     button(prefix+'PlayNext','Включить следующим',icons.play,async()=>{ui.player.playNext(await ui.music.ensureTrack(track));ui.showToast('Будет воспроизведено следующим');});
@@ -54,7 +46,7 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
     if(e.key==='Escape'){e.preventDefault();e.stopPropagation();pane==='main'?close():main();}
     else if(e.key==='ArrowLeft'&&pane!=='main'){e.preventDefault();main();}
     else if(['ArrowDown','ArrowUp','Tab','Home','End'].includes(e.key)){e.preventDefault();let next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowUp'||e.shiftKey?-1:1)+buttons.length)%buttons.length;buttons[next]?.focus();}
-    else if(e.key==='ArrowRight'&&document.activeElement?.id.endsWith('AddToPlaylist')){e.preventDefault();playlists();}
+    else if(e.key==='ArrowRight'&&document.activeElement?.id.endsWith('AddToPlaylist')){e.preventDefault();document.activeElement.click();}
   };
   if(mobile){root.firstElementChild.onclick=close;let start=null,delta=0;panel.addEventListener('pointerdown',e=>{if(e.target.closest('.mobile-sheet-handle')){start=e.clientY;delta=0;panel.setPointerCapture(e.pointerId);}});panel.addEventListener('pointermove',e=>{if(start===null)return;delta=Math.max(0,e.clientY-start);panel.style.transform=`translateY(${delta}px)`;});const release=()=>{if(start===null)return;start=null;panel.style.transform='';if(delta>72)close();};panel.addEventListener('pointerup',release);panel.addEventListener('pointercancel',release);}
   main();

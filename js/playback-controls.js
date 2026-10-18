@@ -63,7 +63,7 @@ export function syncPlaybackControls(player) {
 }
 
 // Pointer capture keeps mouse, pen and touch drags attached to their slider.
-export function bindSlider(element, { label, getValue, preview, commit, step = 1, enabled = () => true }) {
+export function bindSlider(element, { label, getValue, preview, commit, step = 1, enabled = () => true, fine = false, formatValue }) {
   element.tabIndex = 0;
   element.setAttribute('role', 'slider');
   element.setAttribute('aria-label', label);
@@ -72,34 +72,45 @@ export function bindSlider(element, { label, getValue, preview, commit, step = 1
   element.setAttribute('aria-valuenow', String(getValue()));
   let pointer = null;
   let value = getValue();
+  let lastX=0,startY=0,hold;
+  const hint=fine?document.createElement('span'):null;if(hint){hint.className='seek-precision-indicator';hint.hidden=true;element.parentElement?.append(hint);}
   const update = e => {
     const rect = element.getBoundingClientRect();
-    value = Math.max(0, Math.min(100, (e.clientX - rect.left) / rect.width * 100));
+    const distance=Math.abs(e.clientY-startY),precise=fine&&(element.dataset.fineSeek==='true'||distance>40),factor=precise?(distance>120?.1:.25):1;
+    value = Math.max(0, Math.min(100, precise?value+(e.clientX-lastX)/rect.width*100*factor:(e.clientX - rect.left) / rect.width * 100));lastX=e.clientX;
+    element.dataset.previewValue=String(value);if(precise)element.dataset.fineSeek='true';
+    if(hint){hint.hidden=!precise;hint.textContent=(formatValue?formatValue(value):Math.round(value)+'%')+' · Точно';}
     preview(value);
     element.setAttribute('aria-valuenow', String(Math.round(value)));
+    if(formatValue)element.setAttribute('aria-valuetext',formatValue(value));
   };
   element.addEventListener('pointerdown', e => {
     if (pointer !== null || e.button !== 0 || !enabled()) return;
     e.preventDefault();
     element.focus();
     pointer = e.pointerId;
+    lastX=e.clientX;startY=e.clientY;value=getValue();
     element.dataset.dragging = 'true';
     element.setPointerCapture(pointer);
     update(e);
+    if(fine)hold=setTimeout(()=>{if(pointer!==null)element.dataset.fineSeek='true';},350);
   });
   element.addEventListener('pointermove', e => { if (e.pointerId === pointer) update(e); });
   element.addEventListener('pointerup', e => {
     if (e.pointerId !== pointer) return;
     update(e);
     pointer = null;
+    clearTimeout(hold);delete element.dataset.fineSeek;delete element.dataset.previewValue;
+    if(hint)hint.hidden=true;
     delete element.dataset.dragging;
     commit(value);
     element.releasePointerCapture(e.pointerId);
   });
-  const cancel = () => { pointer = null; delete element.dataset.dragging; preview(getValue()); };
+  const cancel = () => { pointer = null;clearTimeout(hold);delete element.dataset.fineSeek;delete element.dataset.previewValue; delete element.dataset.dragging;if(hint)hint.hidden=true; preview(getValue()); };
   element.addEventListener('pointercancel', cancel);
   element.addEventListener('lostpointercapture', () => { if (pointer !== null) cancel(); });
   element.addEventListener('keydown', e => {
+    if(e.key==='Escape'&&pointer!==null){e.preventDefault();cancel();return;}
     if (!enabled()) return;
     const increment = typeof step === 'function' ? step() : step;
     const keys = { ArrowRight: increment, ArrowUp: increment, ArrowLeft: -increment, ArrowDown: -increment, PageUp: increment * 10, PageDown: -increment * 10 };
@@ -109,4 +120,10 @@ export function bindSlider(element, { label, getValue, preview, commit, step = 1
     preview(value); commit(value);
     element.setAttribute('aria-valuenow', String(Math.round(value)));
   });
+}
+
+export function bindSeekRange(ui,range,onPreview=()=>{}){
+  if(!range||range.dataset.precisionBound)return;range.dataset.precisionBound='true';
+  bindSlider(range,{label:range.getAttribute('aria-label')||'Позиция песни',fine:true,enabled:()=>!range.disabled&&ui.player.getDuration()>0,getValue:()=>ui.player.getDuration()>0?ui.player.getCurrentTime()/ui.player.getDuration()*100:0,
+    formatValue:value=>ui.formatTime(value/100*ui.player.getDuration()),preview:value=>{range.value=value;onPreview(value);},commit:value=>ui.player.seek(value),step:()=>500/ui.player.getDuration()});
 }

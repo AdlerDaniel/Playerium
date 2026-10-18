@@ -21,6 +21,7 @@ let roots = new Set();
 let rootsFile;
 const sources = new Map();
 let mainWindow;
+let miniPlayer;
 let tray,quitting=false;
 const userDataArgument=process.argv.find(arg=>arg.startsWith('--user-data-dir='));
 if(userDataArgument){const directory=path.resolve(userDataArgument.slice('--user-data-dir='.length));fs.mkdirSync(directory,{recursive:true});app.setPath('userData',directory);}
@@ -102,6 +103,9 @@ function createWindow() {
 }
 app.whenReady().then(async () => {
   updateBranding();
+  miniPlayer=new (require('./desktop-mini').MiniPlayer)({BrowserWindow,ipcMain,mainWindow:()=>mainWindow,displayName:()=>displayName});
+  handle('mini:open',()=>miniPlayer.open());
+  handle('mini:update',state=>miniPlayer.update(state));
   handle('window:state',()=>({appName:displayName,custom:process.platform==='win32',maximized:mainWindow.isMaximized(),fullscreen:mainWindow.isFullScreen()}));
   handle('window:control',action=>{if(action==='minimize')mainWindow.minimize();else if(action==='maximize')mainWindow.isMaximized()?mainWindow.unmaximize():mainWindow.maximize();else if(action==='close')mainWindow.close();else throw Error('Unsupported window action');});
   rootsFile = path.join(app.getPath('userData'), 'music-roots.json');

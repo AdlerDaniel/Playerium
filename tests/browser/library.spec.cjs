@@ -119,7 +119,7 @@ test('home shelves, library filters and navigation expose the imported collectio
   await expect(page.locator('.shelf-title').first()).toHaveText('Song');
   await page.locator('.home-quick-card').filter({hasText:'Добавленные'}).click();
   await expect(page.locator('.track-name')).toHaveText('Song');
-  await page.locator('#btnNavBack').click();
+  await page.keyboard.press('Escape');await page.locator('#btnNavBack').click();
   await expect(page.locator('.home-dashboard')).toBeVisible();
   await page.locator('#librarySearchInput').fill('not present');
   await expect(page.locator('.sidebar-item:visible')).toHaveCount(0);
@@ -132,7 +132,7 @@ test('home shelves, library filters and navigation expose the imported collectio
   await expect(page.locator('.shelf-heading h2')).toHaveText('Ваши исполнители');
   await page.locator('#mainSearchInput').fill('Song');
   await expect(page.locator('.track-name')).toHaveText('Song');
-  await page.locator('#btnNavBack').click();
+  await page.keyboard.press('Escape');await page.locator('#btnNavBack').click();
   await expect(page.locator('.home-dashboard')).toBeVisible();
   await page.locator('#btnGlobalHome').click();
   await expect(page.locator('#mainSearchInput')).toHaveValue('');

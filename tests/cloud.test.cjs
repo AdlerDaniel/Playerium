@@ -123,6 +123,18 @@ test('foreground sync waits for durable native uploads before its final pull so 
 });
 
 const normalization=()=>({profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:6,integrated:-7,truePeak:-2,peakLimited:false});
+
+test('manual playlist order converges from PC to phone and back without losing membership or likes',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net),songs=['One','Two','Three'].map(name=>add(pc,net,name,name));songs[1].liked=true;
+ pc.lib.playlists.set('ordered',{id:'ordered',name:'Ordered',trackIds:songs.map(t=>t.id)});await pc.cloud.sync();await phone.cloud.sync();
+ const pl=pc.lib.getPlaylistById('ordered');pl.manualOrder=true;pl.trackIds=[songs[2].id,songs[0].id,songs[1].id];await pc.cloud.sync();await phone.cloud.sync();
+ const names=p=>p.lib.getPlaylistById('ordered').trackIds.map(id=>p.lib.getTrackById(id).title);
+ assert.deepEqual(names(phone),['Three','One','Two']);assert.equal(phone.lib.getPlaylistById('ordered').manualOrder,true);
+ const remote=phone.lib.getPlaylistById('ordered');remote.trackIds=[remote.trackIds[2],remote.trackIds[0],remote.trackIds[1]];await phone.cloud.sync();await pc.cloud.sync();
+ assert.deepEqual(names(pc),['Two','Three','One']);assert.equal(pc.lib.getTrackById(songs[1].id).liked,true);
+ assert.equal(model.validOperation(operation('member',{playlist:'ordered',present:true,position:-1})),false);
+ assert.equal(model.validOperation(operation('playlist',{playlist:'ordered',name:'Ordered',manualOrder:'yes'})),false);
+});
 test('normalizing an original synchronizes its audio revision without duplicates or losing likes and playlist identity',async()=>{
  const net=network(),phone=peer(net),pc=peer(net),original=add(phone,net,'Song','original song');original.liked=true;
  phone.lib.playlists.set('mix',{id:'mix',name:'Mix',trackIds:[original.id]});await phone.cloud.sync();await pc.cloud.sync();
@@ -156,4 +168,16 @@ test('a verified unchanged original disables legacy attenuation on the receiving
  assert.ok(net.requests.includes('acceptAudioRevision'));assert.equal(net.requests.includes('download'),false);
  assert.equal(pc.lib.getTracks().length,1);assert.equal(local.id,id);assert.equal(local.filePath,source);assert.equal(local.normalization.profile,track.normalization.profile);
  net.requests.length=0;await pc.cloud.sync();assert.equal(net.requests.includes('acceptAudioRevision'),false);
+});
+
+
+test('an offline playlist reorder cannot resurrect a concurrently removed member',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net),songs=['One','Two','Three'].map(name=>add(pc,net,name,name));
+ pc.lib.playlists.set('ordered',{id:'ordered',name:'Ordered',manualOrder:true,trackIds:songs.map(t=>t.id)});await pc.cloud.sync();await phone.cloud.sync();
+ phone.lib.getPlaylistById('ordered').trackIds=phone.lib.getPlaylistById('ordered').trackIds.filter(id=>phone.lib.getTrackById(id).title!=='Two');
+ await phone.cloud.capture();
+ const pl=pc.lib.getPlaylistById('ordered');pl.trackIds=[songs[2].id,songs[1].id,songs[0].id];await pc.cloud.sync();await phone.cloud.sync();await pc.cloud.sync();
+ for(const peer of [pc,phone])assert.deepEqual(peer.lib.getPlaylistById('ordered').trackIds.map(id=>peer.lib.getTrackById(id).title),['Three','One']);
+ const remove=operation('member',{playlist:'mix',present:false},5),move=operation('member',{playlist:'mix',present:true,position:0,orderOnly:true},99);
+ assert.equal(model.cloudView([remove,move]).playlists.get('mix').members.get(key).present,false);
 });

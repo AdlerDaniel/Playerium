@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
+  openMiniPlayer:()=>ipcRenderer.invoke('mini:open'),
+  publishMiniState:state=>ipcRenderer.invoke('mini:update',state),
+  onMiniCommand:callback=>{const listener=(_event,command)=>callback(command);ipcRenderer.on('mini:command',listener);return()=>ipcRenderer.removeListener('mini:command',listener);},
+  onMiniClosed:callback=>{const listener=()=>callback();ipcRenderer.on('mini:closed',listener);return()=>ipcRenderer.removeListener('mini:closed',listener);},
   getWindowState:()=>ipcRenderer.invoke('window:state'),
   windowControl:action=>ipcRenderer.invoke('window:control',action),
   onWindowState:callback=>{const listener=(_event,state)=>callback(state);ipcRenderer.on('window:state',listener);return()=>ipcRenderer.removeListener('window:state',listener);},

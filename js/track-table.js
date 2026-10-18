@@ -3,7 +3,13 @@ import { saveIcon, icons } from "./design-icons.js";
 import { mountTrackRows } from "./virtual-list.js";
 import { playRow } from './playback-controls.js';
 import {changeTrackSort} from './track-sort.js';
+import {attachTrackSelection} from './track-selection.js';
+import {decorateTrackState} from './track-state.js';
+import {installPlaylistDrop} from './playlist-composer.js';
 export function createTrackTable(tracks, playlistContext = null) {
+    tracks=tracks.filter(track=>!this.pendingTrackRemoval?.has(track.id));
+    this.interfaceTracks||=new Map();for(const track of tracks)if(track.catalog)this.interfaceTracks.set(track.id,track);
+    while(this.interfaceTracks.size>2000)this.interfaceTracks.delete(this.interfaceTracks.keys().next().value);
     if(this.tableSortExplicit)tracks=this.library.sortTracks(tracks,this.sortBy,this.sortAsc);
     const playbackContext = { ...this.currentView };
     const table = document.createElement("div");
@@ -37,12 +43,14 @@ export function createTrackTable(tracks, playlistContext = null) {
     `;
     table.appendChild(header);
     for(const button of header.querySelectorAll('[data-track-sort]')){
-      const field=button.dataset.trackSort,active=this.sortBy===field&&(this.tableSortExplicit||['allTracks','liked','playlist'].includes(this.currentView.type));
+      const field=button.dataset.trackSort,active=this.sortBy===field&&(this.tableSortExplicit||(['allTracks','liked'].includes(this.currentView.type)||this.currentView.type==='playlist'&&!playlistContext?.manualOrder));
       button.parentElement.setAttribute('aria-sort',active?(this.sortAsc?'ascending':'descending'):'none');
       if(active){const arrow=document.createElement('span');arrow.className='track-sort-direction';arrow.setAttribute('aria-hidden','true');arrow.textContent=this.sortAsc?'▴':'▾';button.append(arrow);}
       button.onclick=()=>changeTrackSort(this,field);
     }
 
+    installPlaylistDrop(this,table,playlistContext);
+    const selection=attachTrackSelection(this,table,tracks,playlistContext);
     const createRow = (track, index, virtual = false) => {
       const row = document.createElement("div");
       const isCurrent = this.player.currentTrack && this.player.currentTrack.id === track.id;
@@ -53,6 +61,7 @@ export function createTrackTable(tracks, playlistContext = null) {
 
       row.innerHTML = `
         <div class="track-col-num">
+          <label class="track-select-wrap"><input type="checkbox" class="track-select" aria-label="Выбрать ${this.escapeHTML(track.title)}"></label>
           <span class="track-number">${index + 1}</span>
           <button class="track-row-play" title="Воспроизвести" aria-label="Воспроизвести">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -85,6 +94,9 @@ ${saveIcon}
       `;
 
       mountCover(row.querySelector('.track-mini-thumb'),track,virtual || index < 12);
+      row.classList.toggle('track-selected',selection.state.ids.has(track.id));row.setAttribute('aria-selected',String(selection.state.ids.has(track.id)));row.querySelector('.track-select').checked=selection.state.ids.has(track.id);
+      decorateTrackState(this,row,track);
+      if(!this.isMobile){row.draggable=true;row.addEventListener('dragstart',event=>{const ids=selection.state.ids.has(track.id)?tracks.filter(t=>selection.state.ids.has(t.id)).map(t=>t.id):[track.id];event.dataTransfer.setData('application/x-playerium-tracks',JSON.stringify(ids));if(playlistContext)event.dataTransfer.setData('application/x-playerium-playlist',playlistContext.id);event.dataTransfer.effectAllowed='copyMove';});}
       for(const cell of row.children)cell.setAttribute('role','cell');
       // The entire row plays; only explicit action buttons intercept the click.
       row.addEventListener("click", (e) => {
@@ -115,8 +127,8 @@ ${saveIcon}
       });
 
       row.querySelector('.track-download-btn')?.addEventListener('click',async e=>{
-        e.stopPropagation();try{await this.music.ensureTrack(track);this.showToast('Трек сохранён','success');this.refreshCurrentView();}
-        catch(error){this.showToast(error.message,'error');}
+        e.stopPropagation();const task=this.music.ensureTrack(track);decorateTrackState(this,row,track,true);try{await task;this.showToast('Трек сохранён','success');this.refreshCurrentView();}
+        catch(error){this.showToast(error.message,'error');}finally{if(row.isConnected)decorateTrackState(this,row,track);}
       });
       if(this.music?.downloads.has(track.id)){row.dataset.downloading='true';const download=row.querySelector('.track-download-btn');if(download)download.disabled=true;}
 
@@ -133,6 +145,7 @@ ${saveIcon}
       });
       row.addEventListener("contextmenu", (e) => {
         e.preventDefault();
+        if(this.isMobile&&selection.state.ids.size)return;
         if (this.isMobile) {
           this.showMobileTrackOptionsSheet(track, index, tracks, playlistContext);
         } else {
