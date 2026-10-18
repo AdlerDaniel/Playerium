@@ -8,12 +8,12 @@ export function attachTrackSelection(ui,table,tracks,playlist){
   const state=ui.trackSelection,all=new Set(tracks.map(t=>t.id));for(const id of state.ids)if(!all.has(id))state.ids.delete(id);
   const chosen=()=>tracks.filter(t=>state.ids.has(t.id));
   const bar=document.createElement('div');bar.className='track-selection-bar';bar.hidden=true;bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','Действия с выбранными треками');
-  bar.innerHTML=`<strong class="selection-count"></strong><button class="selection-all">Все</button><button class="selection-save">${icons.plus}<span>В плейлисты</span></button><button class="selection-queue">${icons.list}<span>В очередь</span></button><button class="selection-remove">${icons.close}<span>Удалить</span></button><button class="selection-cancel" aria-label="Снять выделение">×</button>`;
+  bar.innerHTML=`<strong class="selection-count"></strong><button class="selection-all">Все</button><button class="selection-save" aria-label="Добавить выбранные треки в плейлисты">${icons.plus}<span>В плейлисты</span></button><button class="selection-queue" aria-label="Добавить выбранные треки в очередь">${icons.list}<span>В очередь</span></button><button class="selection-remove" aria-label="Удалить выбранные треки">${icons.close}<span>Удалить</span></button><button class="selection-cancel" aria-label="Снять выделение">×</button>`;
   table.prepend(bar);
   const entry=document.createElement('button');entry.type='button';entry.className='selection-entry';entry.textContent='#';entry.title='Выделить все треки';entry.setAttribute('aria-label','Выделить все треки');table.querySelector('.th-num')?.replaceChildren(entry);
   const sync=()=>{const list=chosen();bar.hidden=!list.length;table.classList.toggle('selecting',!!list.length);bar.querySelector('.selection-count').textContent=`Выбрано: ${list.length}`;
     for(const row of table.querySelectorAll('.track-row')){const selected=state.ids.has(row.dataset.trackId);row.classList.toggle('track-selected',selected);row.setAttribute('aria-selected',String(selected));const box=row.querySelector('.track-select');if(box)box.checked=selected;}
-    const remote=ui.connect&&ui.connect.selected!==ui.connect.id;bar.querySelector('.selection-queue').disabled=!!remote;
+    const remote=ui.connect&&ui.connect.selected!==ui.connect.id;bar.querySelector('.selection-queue').disabled=!!remote;bar.querySelector('.selection-remove').disabled=!playlist&&!list.some(track=>!track.catalog);
   };
   const select=(track,{range=false,toggle=false}={})=>{
     if(range&&state.anchor){const a=tracks.findIndex(t=>t.id===state.anchor),b=tracks.indexOf(track);if(a>=0&&b>=0)for(const t of tracks.slice(Math.min(a,b),Math.max(a,b)+1))state.ids.add(t.id);}
@@ -23,9 +23,9 @@ export function attachTrackSelection(ui,table,tracks,playlist){
   entry.onclick=()=>bar.querySelector('.selection-all').click();
   bar.querySelector('.selection-all').onclick=()=>{for(const track of tracks)state.ids.add(track.id);sync();};bar.querySelector('.selection-cancel').onclick=clear;
   bar.querySelector('.selection-save').onclick=e=>openPlaylistPicker(ui,chosen(),e.currentTarget);
-  bar.querySelector('.selection-queue').onclick=async()=>{try{for(const t of chosen())ui.player.addToQueue(t.catalog?await ui.music.ensureTrack(t):t);ui.showToast(`Добавлено в очередь: ${chosen().length}`);clear();}catch(error){ui.showToast(error.message,'error');}};
+  bar.querySelector('.selection-queue').onclick=async()=>{try{const saved=[];for(const t of chosen())saved.push(t.catalog?await ui.music.ensureTrack(t):t);ui.player.addTracksToQueue(saved);ui.showToast(`Добавлено в очередь: ${chosen().length}`);clear();}catch(error){ui.showToast(error.message,'error');}};
   bar.querySelector('.selection-remove').onclick=async()=>{
-    const list=chosen(),ids=new Set(list.map(t=>t.id));if(!list.length)return;
+    const list=chosen().filter(track=>playlist||!track.catalog),ids=new Set(list.map(t=>t.id));if(!list.length)return;
     if(playlist){
       const live=ui.library.getPlaylistById(playlist.id);if(!live)return;const previous=[...live.trackIds];live.trackIds=live.trackIds.filter(id=>!ids.has(id));await persistPlaylist(ui,live);clear();ui.refreshCurrentView();
       actionToast(ui,{message:`Удалено из плейлиста: ${list.length}`,onAction:async()=>{
@@ -44,7 +44,7 @@ export function attachTrackSelection(ui,table,tracks,playlist){
   };
   table.addEventListener('click',e=>{const row=e.target.closest('.track-row');if(!row||e.target.closest('button')&&!e.target.closest('.track-select-wrap'))return;const track=tracks.find(t=>t.id===row.dataset.trackId);if(!track)return;
     if(row.dataset.longSelected==='true'){delete row.dataset.longSelected;e.preventDefault();e.stopImmediatePropagation();return;}
-    if(e.target.closest('.track-select-wrap')||e.ctrlKey||e.metaKey||e.shiftKey||state.ids.size){e.preventDefault();e.stopImmediatePropagation();select(track,{range:e.shiftKey,toggle:!e.shiftKey});}
+    if(e.target.closest('.track-select-wrap')||e.ctrlKey||e.metaKey||e.shiftKey||state.ids.size){if(!e.target.matches('.track-select'))e.preventDefault();e.stopImmediatePropagation();select(track,{range:e.shiftKey,toggle:!e.shiftKey});}
   },true);
   table.addEventListener('keydown',e=>{if(e.target.matches('input,textarea')&&!e.target.classList.contains('track-select'))return;const row=e.target.closest('.track-row');if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){e.preventDefault();bar.querySelector('.selection-all').click();}else if(e.key==='Escape'&&state.ids.size){e.preventDefault();e.stopPropagation();clear();}else if(row&&(e.key===' '&&(state.ids.size||e.ctrlKey||e.metaKey)||e.shiftKey&&['ArrowUp','ArrowDown'].includes(e.key))){e.preventDefault();e.stopImmediatePropagation();const i=tracks.findIndex(t=>t.id===row.dataset.trackId),to=Math.max(0,Math.min(tracks.length-1,i+(e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0)));state.anchor||=row.dataset.trackId;select(tracks[to],{range:e.shiftKey,toggle:!e.shiftKey});table.querySelector(`[data-track-id="${CSS.escape(tracks[to].id)}"]`)?.focus({preventScroll:true});}},true);
   let hold=null,start;

@@ -599,11 +599,16 @@ export class AudioPlayer {
   // --- Queue Actions ---
 
   addToQueue(track) {
-    track={...track,queueOrigin:'manual',queueEntry:globalThis.crypto?.randomUUID?.()||'queue-'+Date.now()+'-'+Math.random()};
+    this.addTracksToQueue([track]);
+  }
+
+  addTracksToQueue(tracks) {
+    const entries=tracks.map(track=>({...track,queueOrigin:'manual',queueEntry:globalThis.crypto?.randomUUID?.()||'queue-'+Date.now()+'-'+Math.random()}));
+    if(!entries.length)return;
     let index=this.queueIndex+1;while(this.queue[index]?.queueOrigin==='manual')index++;
-    this.queue.splice(index,0,track);
+    this.queue.splice(index,0,...entries);
     const current=this.originalQueue.indexOf(this.currentTrack),next=this.originalQueue.findIndex((t,i)=>i>current&&t.queueOrigin!=='manual');
-    this.originalQueue.splice(next<0?this.originalQueue.length:next,0,track);
+    this.originalQueue.splice(next<0?this.originalQueue.length:next,0,...entries);
     this.syncNativeQueue();
     if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
   }

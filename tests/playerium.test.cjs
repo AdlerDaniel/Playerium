@@ -303,3 +303,10 @@ test('batch queue removal sends one native update and preserves a playing duplic
  const p=new AudioPlayer({}),a={id:'a',nativeUri:'content://a'},b={id:'b',nativeUri:'content://b'};p.queue=[a,b,a,b];p.originalQueue=[...p.queue];p.queueIndex=0;p.currentTrack=a;p.nativePlayback=true;p.isPlaying=true;
  p.removeUpcomingTracks([1,2,3]);assert.equal(writes.length,1);assert.deepEqual(p.queue,[a]);assert.deepEqual(p.originalQueue,[a]);assert.equal(p.currentTrack,a);assert.equal(p.isPlaying,true);
 });
+
+test('adding a large batch to the native queue publishes once and preserves manual order',async()=>{
+ const {AudioPlayer}=await modules(),writes=[];window.AndroidBridge={setPlaybackQueue:value=>writes.push(JSON.parse(value))};
+ const p=new AudioPlayer({}),current={id:'current',nativeUri:'content://current'},future={id:'future',nativeUri:'content://future'};p.queue=[current,future];p.originalQueue=[...p.queue];p.currentTrack=current;p.queueIndex=0;p.nativePlayback=true;p.isPlaying=true;
+ p.addTracksToQueue(Array.from({length:183},(_,i)=>({id:'batch-'+i,nativeUri:'content://batch/'+i})));
+ assert.equal(writes.length,1);assert.equal(p.queue.length,185);assert.equal(p.queue[1].id,'batch-0');assert.equal(p.queue[183].id,'batch-182');assert.equal(p.queue[184],future);assert.equal(p.currentTrack,current);assert.equal(new Set(p.queue.slice(1,184).map(t=>t.queueEntry)).size,183);
+});

@@ -119,6 +119,7 @@ export function bindSlider(element, { label, getValue, preview, commit, step = 1
     value = e.key === 'Home' ? 0 : e.key === 'End' ? 100 : Math.max(0, Math.min(100, getValue() + keys[e.key]));
     preview(value); commit(value);
     element.setAttribute('aria-valuenow', String(Math.round(value)));
+    if(formatValue)element.setAttribute('aria-valuetext',formatValue(value));
   });
 }
 

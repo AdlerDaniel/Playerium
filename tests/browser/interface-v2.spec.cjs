@@ -68,3 +68,8 @@ test('inline download feedback follows pending work and offers retry after failu
  const status=page.locator('.track-row[data-track-id="v2-0"] .track-inline-state');await expect(status).toHaveAttribute('aria-busy','true');await expect(status).toHaveAttribute('aria-label','Сохранение: 50%');await expect(status.locator('.inline-spinner')).toHaveCount(1);
  await page.evaluate(()=>{const a=window.playerApp,track=a.library.getTrackById('v2-0');a.music.downloads.delete(track.id);a.ui.trackDownloadErrors.set(track.id,'Retry');window.feedback(a.ui,document.querySelector('.track-row[data-track-id="v2-0"]'),track);});await expect(status).toHaveAttribute('data-state','error');await expect(status).toBeEnabled();await expect(status).toHaveAttribute('aria-label','Не удалось сохранить. Повторить');
 });
+
+test('direct checkboxes and labels stay in sync with selected rows without starting playback',async({page})=>{
+ await setup(page);await page.locator('.selection-entry').click();const row=page.locator('.track-row[data-track-id="v2-0"]'),box=row.locator('.track-select');await expect(box).toBeChecked();await box.uncheck();await expect(row).not.toHaveClass(/track-selected/);await expect(box).not.toBeChecked();await box.check();await expect(row).toHaveClass(/track-selected/);await expect(box).toBeChecked();expect(await page.evaluate(()=>window.playerApp.player.currentTrack)).toBeNull();
+ await page.setViewportSize({width:390,height:844});await expect(page.getByRole('button',{name:'Добавить выбранные треки в плейлисты',exact:true})).toBeVisible();
+});
