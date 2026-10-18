@@ -34,7 +34,7 @@ public class LauncherIconTest {
             for(int y=0;y<108;y++)for(int x=0;x<108;x++)if(Color.alpha(mark.getPixel(x,y))>8){
                 visible++;
                 double dx=x+0.5-54,dy=y+0.5-54;
-                assertTrue("The launcher mask must not clip the headphones",dx*dx+dy*dy<=33*33);
+                assertTrue("The launcher mask must not clip the headphones at "+x+","+y,dx*dx+dy*dy<=33*33);
             }
             assertTrue("Foreground must contain the mark, not an opaque square",visible>700&&visible<2500);
             assertEquals("Clear space inside the headphones",0,Color.alpha(mark.getPixel(54,60)));

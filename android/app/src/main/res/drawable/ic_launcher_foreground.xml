@@ -2,7 +2,7 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.9" android:scaleY="0.9">
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.84" android:scaleY="0.84">
         <path android:fillColor="#F5EBDA" android:pathData="M 35.1,23.6 H 72.9 C 78.3,23.6 82.6,27.9 82.6,33.2 V 74.7 C 82.6,80 78.3,84.3 72.9,84.3 H 70.4 C 66,84.3 62.6,80.8 62.6,76.4 V 70.5 C 62.6,66.5 65.1,63.2 68.5,62.4 V 36.1 C 68.5,35.4 68,34.8 67.3,34.8 H 40.7 C 40,34.8 39.5,35.4 39.5,36.1 V 62.4 C 42.9,63.2 45.4,66.5 45.4,70.5 V 76.4 C 45.4,80.8 42,84.3 37.6,84.3 H 35.1 C 29.7,84.3 25.4,80 25.4,74.7 V 33.2 C 25.4,27.9 29.7,23.6 35.1,23.6 Z" />
     </group>
 </vector>

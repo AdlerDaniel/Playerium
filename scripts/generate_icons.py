@@ -46,7 +46,7 @@ def create_adaptive_icons(root_dir):
                   '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
                   '    android:width="108dp" android:height="108dp"\n'
                   '    android:viewportWidth="108" android:viewportHeight="108">\n'
-                  '    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.9" android:scaleY="0.9">\n'
+                  '    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.84" android:scaleY="0.84">\n'
                   f'        <path android:fillColor="{color}" android:pathData="{mark.get("d")}" />\n'
                   '    </group>\n'
                   '</vector>\n')
