@@ -4,7 +4,7 @@
  */
 
 export class AutoUpdater {
-  static CURRENT_VERSION = "1.7.31";
+  static CURRENT_VERSION = "1.7.32";
   static DEFAULT_REPO = "AdlerDaniel/Playerium"; // User can configure in Settings
 
   constructor() {
@@ -104,7 +104,7 @@ export class AutoUpdater {
         currentVersion: this.currentVersion,
         latestVersion: latestVer,
         releaseTitle: release.name || latestTag,
-        releaseNotes: release.body || "Новая версия Playerium доступна для загрузки.",
+        releaseNotes: release.body || `Новая версия ${globalThis.PlayeriumBranding?.getName()||"Playerium"} доступна для загрузки.`,
         releaseDate: release.published_at,
         downloadUrl,
         assetName,

@@ -9,7 +9,8 @@
   <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Playerium - Музыкальный плеер</title>
+  <title>Playerium</title>
+  <script src="app-branding.js" defer></script>
   
   <!-- App Icon -->
   <link rel="icon" type="image/png" href="assets/icon.png">
@@ -39,7 +40,7 @@
   <div id="app">
         <header class="topbar" id="mainTopbar">
           <div class="topbar-left">
-<button class="app-brand" id="btnBrandHome" aria-label="Playerium — главная"><img src="assets/icon.png" alt=""></button>
+<button class="app-brand" id="btnBrandHome" data-app-home aria-label="Playerium — главная"><img src="assets/icon.png" alt=""></button>
 <button class="global-home-btn" id="btnGlobalHome" aria-label="Главная"><svg viewBox="0 0 24 24"><path d="m12 2-10 8v12h7v-8h6v8h7V10z"/></svg></button>
 
 
@@ -212,7 +213,7 @@
       </div>
       <div class="mobile-mini-info">
         <div class="mobile-mini-title" id="mobileMiniTitle">Выберите трек</div>
-        <div class="mobile-mini-artist" id="mobileMiniArtist">Playerium</div>
+        <div class="mobile-mini-artist" id="mobileMiniArtist" data-app-name>Playerium</div>
       </div>
       <div class="mobile-mini-actions">
         <button class="mobile-mini-btn like-btn" id="mobileMiniLike" title="Мне нравится">
@@ -271,7 +272,7 @@
       <div class="mobile-fs-info-row">
         <div class="mobile-fs-title-col">
           <div class="mobile-fs-track-title" id="mobileFsTitle">Выберите трек</div>
-          <div class="mobile-fs-track-artist" id="mobileFsArtist">Playerium</div>
+          <div class="mobile-fs-track-artist" id="mobileFsArtist" data-app-name>Playerium</div>
         </div>
         <button class="mobile-fs-like-btn" id="btnMobileFsLike" title="Мне нравится">
           <svg viewBox="0 0 16 16"><path d="M8 1.314C12.438-3.248 23.534 4.735 8 15-7.534 4.736 3.562-3.248 8 1.314z"/></svg>

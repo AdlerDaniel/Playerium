@@ -80,7 +80,7 @@ class DesktopUpdater {
       this.publish({state:'verifying',message:'Подготовка установки'});
       const helper=await this.prepare(folder,this.app.getPath('exe'),this.app.getAppPath());
       const config=path.join(folder,'update.json');
-      await fs.writeFile(config,JSON.stringify({parentId:process.pid,source,target,portable,result,digest}));
+      await fs.writeFile(config,JSON.stringify({parentId:process.pid,source,target,portable,result,digest,appName:this.app.getName?.()||'Playerium'}));
       const child=this.launcher(helper,
         ['--playerium-update-helper',config],
         {detached:true,stdio:'ignore',windowsHide:true});

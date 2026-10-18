@@ -1,6 +1,6 @@
 {
   "name": "playerium",
-  "version": "1.7.31",
+  "version": "1.7.32",
   "description": "Playerium - Modern Spotify-style local music player for PC and Android",
   "main": "main.js",
   "scripts": {
@@ -45,7 +45,9 @@
       "desktop-connect.js",
       "desktop-live.js",
       "MUSIC-NOTICES.md",
-      "desktop-realtime.js"
+      "desktop-realtime.js",
+      "app-branding.js",
+      "desktop-branding.js"
     ],
     "extraResources": [
       {
@@ -75,7 +77,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Playerium"
+      "shortcutName": "Playerium",
+      "include": "scripts/installer-branding.nsh"
     }
   },
   "keywords": [

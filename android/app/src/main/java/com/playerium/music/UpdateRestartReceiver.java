@@ -23,7 +23,7 @@ public class UpdateRestartReceiver extends BroadcastReceiver {
         if(Build.VERSION.SDK_INT>=26)manager.createNotificationChannel(new NotificationChannel("updates","Обновления",NotificationManager.IMPORTANCE_DEFAULT));
         PendingIntent action=PendingIntent.getActivity(context,4,launch,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         try{manager.notify(4,new NotificationCompat.Builder(context,"updates").setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("Playerium обновлён").setContentText("Открыть приложение").setContentIntent(action).setAutoCancel(true).build());}catch(SecurityException ignored){}
+            .setContentTitle(context.getString(R.string.app_name) + " обновлён").setContentText("Открыть приложение").setContentIntent(action).setAutoCancel(true).build());}catch(SecurityException ignored){}
         try{context.startActivity(launch);}catch(Exception ignored){}
     }
 }

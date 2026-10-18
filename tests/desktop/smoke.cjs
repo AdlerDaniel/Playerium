@@ -22,6 +22,12 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     const win=await app.firstWindow();
     const errors=[];win.on('pageerror',e=>errors.push(e.message));
     await win.waitForFunction(()=>window.playerApp?.library.db);
+    const identity=await app.evaluate(({app})=>({name:app.getName(),profile:app.getPath('userData'),session:app.getPath('sessionData')}));
+    assert.equal(identity.profile,path.join(folder,'profile'));
+    assert.equal(identity.session,identity.profile);
+    assert.ok(['Playerium','Проигрыватель'].includes(identity.name));
+    await win.waitForFunction(name=>document.title===name,identity.name);
+    if(process.platform==='win32')assert.equal(await win.locator('.window-brand span').textContent(),identity.name);
     if(process.platform==='win32'){await win.locator('.window-frame').waitFor();await win.locator('[data-action="maximize"]').click();await win.waitForFunction(()=>document.querySelector('[data-action="maximize"]').getAttribute('aria-label')==='Восстановить окно');await win.locator('[data-action="maximize"]').click();assert.equal(await win.locator('[data-action="close"]').getAttribute('aria-label'),'Закрыть в трей');}
     await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},folder);
     await win.evaluate(()=>window.playerApp.selectMusicFolder());

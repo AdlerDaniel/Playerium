@@ -29,11 +29,12 @@ async function prepareHelper(folder,exe,appPath) {
 }
 async function runUpdate(config,{report=async()=>{},launchProcess=launch,parentAlive=id=>{try{process.kill(id,0);return true;}catch{return false;}}}={}) {
   const {source,target,portable,parentId,result}=config;
+  const name=config.appName==='Проигрыватель'?'Проигрыватель':'Playerium';
   const write=async(state,message='')=>{await fs.writeFile(result,JSON.stringify({state,message,cacheFolder:path.dirname(source)}));await report(state,message);};
   let backup;
   try {
-    await report('installing','Завершение работы Playerium');
-    for(let n=0;parentAlive(parentId);n++){if(n>=240)throw Error('Не удалось закрыть Playerium');await delay(500);}
+    await report('installing','Завершение работы '+name);
+    for(let n=0;parentAlive(parentId);n++){if(n>=240)throw Error('Не удалось закрыть '+name);await delay(500);}
     if(await digest(source)!==config.digest)throw Error('Файл обновления повреждён');
     await report('installing','Установка обновления');
     if(portable){
@@ -42,7 +43,7 @@ async function runUpdate(config,{report=async()=>{},launchProcess=launch,parentA
       try{await fs.rename(target,backup);await fs.rename(next,target);}catch(e){await fs.rm(next,{force:true});if(await fs.stat(backup).catch(()=>null))await fs.rename(backup,target).catch(()=>{});throw e;}
     }else await launchProcess(source,['/S','--updated','/D='+path.dirname(target)],true);
     if(!(await fs.stat(target).catch(()=>null)))throw Error('Установленное приложение не найдено');
-    await report('installing','Запуск Playerium');
+    await report('installing','Запуск '+name);
     await launchProcess(target,[],false);
     await write('complete');
     if(backup)await fs.rm(backup,{force:true});
@@ -60,13 +61,15 @@ async function startHelper(configPath) {
   const {app,BrowserWindow,dialog}=require('electron');
   await app.whenReady();
   const config=JSON.parse(await fs.readFile(configPath,'utf8'));
+  const name=['Playerium','Проигрыватель'].includes(config.appName)?config.appName:require('./desktop-branding').systemName(app);
+  config.appName=name;
   if(!Number.isInteger(config.parentId)||config.parentId<=0||!/^[a-f0-9]{64}$/.test(config.digest)||!path.isAbsolute(config.target))throw Error('Некорректное обновление');
-  const window=new BrowserWindow({width:450,height:220,resizable:false,minimizable:false,maximizable:false,autoHideMenuBar:true,backgroundColor:'#121212',title:'Обновление Playerium',webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true}});
+  const window=new BrowserWindow({width:450,height:220,resizable:false,minimizable:false,maximizable:false,autoHideMenuBar:true,backgroundColor:'#121212',title:'Обновление '+name,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true}});
   let finished=false;window.on('close',event=>{if(!finished)event.preventDefault();});
-  await window.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(`<!doctype html><html lang="ru"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><style>body{background:#121212;color:#fff;font:16px system-ui;margin:32px}h1{font-size:22px}.bar{height:5px;background:#333;border-radius:4px;overflow:hidden}.bar:after{content:'';display:block;width:40%;height:100%;background:#1ed760;animation:move 1.5s ease-in-out infinite}@keyframes move{to{transform:translateX(250%)}}@media(prefers-reduced-motion:reduce){.bar:after{animation:none;width:100%}}</style><h1>Обновление Playerium</h1><p id="state" role="status" aria-live="polite">Подготовка установки</p><div class="bar" role="progressbar" aria-label="Установка обновления"></div></html>`));
+  await window.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Обновление ${name}</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><style>body{background:#121212;color:#fff;font:16px system-ui;margin:32px}h1{font-size:22px}.bar{height:5px;background:#333;border-radius:4px;overflow:hidden}.bar:after{content:'';display:block;width:40%;height:100%;background:#1ed760;animation:move 1.5s ease-in-out infinite}@keyframes move{to{transform:translateX(250%)}}@media(prefers-reduced-motion:reduce){.bar:after{animation:none;width:100%}}</style><h1>Обновление ${name}</h1><p id="state" role="status" aria-live="polite">Подготовка установки</p><div class="bar" role="progressbar" aria-label="Установка обновления"></div></html>`));
   await fs.writeFile(configPath+'.ready','ready');
   try{await runUpdate(config,{report:async(state,message)=>window.webContents.executeJavaScript(`document.getElementById('state').textContent=${JSON.stringify(message||'Обновление установлено')}`)});await delay(1200);}
-  catch(error){await dialog.showMessageBox(window,{type:'error',title:'Обновление Playerium',message:'Не удалось завершить обновление',detail:error.message,buttons:['Закрыть']});}
+  catch(error){await dialog.showMessageBox(window,{type:'error',title:'Обновление '+name,message:'Не удалось завершить обновление',detail:error.message,buttons:['Закрыть']});}
   finally{finished=true;app.quit();}
 }
 module.exports={prepareHelper,runUpdate,startHelper,digest};

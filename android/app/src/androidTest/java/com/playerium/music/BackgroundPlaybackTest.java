@@ -22,6 +22,19 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class BackgroundPlaybackTest {
+    @Test public void applicationNameUsesPrimaryLanguageOrRussianRegionWithoutChangingPackage() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        assertEquals("com.playerium.music",context.getPackageName());
+        assertEquals(R.string.app_name,context.getApplicationInfo().labelRes);
+        String[][] cases={{"ru-US","Проигрыватель"},{"ru-KZ","Проигрыватель"},{"en-RU","Проигрыватель"},{"de-RU","Проигрыватель"},{"he-RU","Проигрыватель"},{"id-RU","Проигрыватель"},{"en-US","Playerium"},{"uk-UA","Playerium"},{"de-DE","Playerium"}};
+        for(String[] item:cases){
+            android.content.res.Configuration config=new android.content.res.Configuration(context.getResources().getConfiguration());
+            config.setLocales(new android.os.LocaleList(java.util.Locale.forLanguageTag(item[0]),java.util.Locale.forLanguageTag("ru-RU")));
+            Context localized=context.createConfigurationContext(config);
+            assertEquals(item[0],item[1],localized.getString(R.string.app_name));
+            assertEquals(item[1],localized.getString(R.string.title_activity_main));
+        }
+    }
     private JSONObject waitFor(boolean playing) throws Exception {
         return waitFor("background-fixture",playing);
     }

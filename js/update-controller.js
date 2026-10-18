@@ -51,7 +51,7 @@ export function bindUpdateController() {
       const request={latestVersion:info.latestVersion,repo:info.repo||this.ui.updater.repo};
       if(window.electronAPI?.installUpdate)await window.electronAPI.installUpdate(request);
       else if(window.AndroidBridge?.installUpdate)window.AndroidBridge.installUpdate(JSON.stringify(request));
-      else throw Error('Обновление доступно в приложении Playerium для Windows и Android.');
+      else throw Error('Обновление доступно в приложении '+(window.PlayeriumBranding?.getName()||'Playerium')+' для Windows и Android.');
     }catch(error){this.onUpdateDownloadFailed(error.message||'Не удалось обновить приложение. Попробуйте снова.');}
   };
   button.onclick=()=>this.ui.handleDownloadUpdate();

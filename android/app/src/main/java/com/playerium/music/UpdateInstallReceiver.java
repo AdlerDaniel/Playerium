@@ -31,7 +31,7 @@ public class UpdateInstallReceiver extends BroadcastReceiver {
                     if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(new NotificationChannel("updates", "Обновления", NotificationManager.IMPORTANCE_DEFAULT));
                     PendingIntent action = PendingIntent.getActivity(context, 3, confirmation, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                     try { manager.notify(3,new NotificationCompat.Builder(context,"updates").setSmallIcon(android.R.drawable.stat_sys_download_done)
-                        .setContentTitle("Обновление Playerium").setContentText(message).setContentIntent(action).setAutoCancel(true).build()); }
+                        .setContentTitle("Обновление " + context.getString(R.string.app_name)).setContentText(message).setContentIntent(action).setAutoCancel(true).build()); }
                     catch (SecurityException ignored) {}
                 }
             }

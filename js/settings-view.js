@@ -129,7 +129,7 @@ export function renderSettingsView(container) {
       <div class="settings-section">
         <h2 class="settings-section-title">
           <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
-          Обновления Playerium
+          Обновления ${this.escapeHTML(window.PlayeriumBranding?.getName()||"Playerium")}
         </h2>
         <div class="settings-card">
           <div class="settings-row">
@@ -200,7 +200,7 @@ export function renderSettingsView(container) {
         }
       } else {
         if (statusWrap) {
-          statusWrap.innerHTML = `<span style="color: var(--sp-green);">У вас установлена последняя версия Playerium (v${this.updater.currentVersion}).</span>`;
+          statusWrap.innerHTML = `<span style="color: var(--sp-green);">У вас установлена последняя версия ${this.escapeHTML(window.PlayeriumBranding?.getName()||"Playerium")} (v${this.updater.currentVersion}).</span>`;
         }
         this.showToast("Обновлений не найдено. Вы используете последнюю версию!");
       }

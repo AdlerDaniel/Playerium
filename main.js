@@ -12,6 +12,8 @@ const { DesktopUpdater } = require('./desktop-updater');
 const { DesktopMusic, downloadError, createAudioFetcher, createPageFetcher } = require('./desktop-music');
 const {audioResponse}=require('./desktop-audio');
 const {LoudnessAnalyzer}=require('./desktop-loudness');
+const branding=require('./desktop-branding');
+let displayName='Playerium';
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'playerium-audio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 const watchers = new Map();
@@ -22,6 +24,9 @@ let mainWindow;
 let tray,quitting=false;
 const userDataArgument=process.argv.find(arg=>arg.startsWith('--user-data-dir='));
 if(userDataArgument){const directory=path.resolve(userDataArgument.slice('--user-data-dir='.length));fs.mkdirSync(directory,{recursive:true});app.setPath('userData',directory);}
+// Pin the existing/explicit profile before changing the display name.
+app.setPath('userData',app.getPath('userData'));
+app.setPath('sessionData',app.getPath('userData'));
 app.on('before-quit',()=>{quitting=true;});
 if(!app.requestSingleInstanceLock()){app.quit();}
 else{
@@ -30,9 +35,16 @@ function showWindow(){mainWindow?.show();if(mainWindow?.isMinimized())mainWindow
 function createTray(){
   const iconFile=path.join(__dirname,'build/icon.ico');
   const icon=fs.existsSync(iconFile)?nativeImage.createFromPath(iconFile):nativeImage.createFromPath(path.join(__dirname,'assets/icon.png'));
-  tray=new Tray(icon.resize({width:16,height:16}));tray.setToolTip('Playerium');
-  tray.setContextMenu(Menu.buildFromTemplate([{label:'Открыть Playerium',click:showWindow},{type:'separator'},{label:'Выйти',click:()=>app.quit()}]));
+  tray=new Tray(icon.resize({width:16,height:16}));updateBranding();
   tray.on('double-click',showWindow);tray.on('click',showWindow);
+}
+function updateBranding(){
+  displayName=branding.systemName(app);app.setName(displayName);
+  mainWindow?.setTitle(displayName);
+  tray?.setToolTip(displayName);
+  tray?.setContextMenu(Menu.buildFromTemplate([{label:'Открыть '+displayName,click:showWindow},{type:'separator'},{label:'Выйти',click:()=>app.quit()}]));
+  branding.localizeShortcuts({app,shell,name:displayName}).catch(()=>{});
+  return displayName;
 }
 
 async function authorize(filePath) {
@@ -75,10 +87,12 @@ function startWatchingFolder(root) {
   watchers.set(root, { close() { active = false; clearTimeout(timer); watcher.close(); } });
 }
 function createWindow() {
-  mainWindow = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, frame:process.platform!=='win32', title: 'Playerium', backgroundColor: '#121212', autoHideMenuBar: true,
+  mainWindow = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, frame:process.platform!=='win32', title: displayName, backgroundColor: '#121212', autoHideMenuBar: true,
     icon: fs.existsSync(path.join(__dirname, 'build/icon.ico')) ? path.join(__dirname, 'build/icon.ico') : undefined,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling:false } });
   mainWindow.loadFile('index.html');
+  mainWindow.on('page-title-updated',event=>event.preventDefault());
+  mainWindow.on('focus',updateBranding);
   const sendWindowState=()=>mainWindow.webContents.send('window:state',{maximized:mainWindow.isMaximized(),fullscreen:mainWindow.isFullScreen()});
   for(const event of ['maximize','unmaximize','enter-full-screen','leave-full-screen'])mainWindow.on(event,sendWindowState);
   mainWindow.on('close',event=>{if(!quitting&&tray){event.preventDefault();mainWindow.hide();}});
@@ -87,7 +101,8 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { openExternal(url).catch(() => {}); return { action: 'deny' }; });
 }
 app.whenReady().then(async () => {
-  handle('window:state',()=>({custom:process.platform==='win32',maximized:mainWindow.isMaximized(),fullscreen:mainWindow.isFullScreen()}));
+  updateBranding();
+  handle('window:state',()=>({appName:displayName,custom:process.platform==='win32',maximized:mainWindow.isMaximized(),fullscreen:mainWindow.isFullScreen()}));
   handle('window:control',action=>{if(action==='minimize')mainWindow.minimize();else if(action==='maximize')mainWindow.isMaximized()?mainWindow.unmaximize():mainWindow.maximize();else if(action==='close')mainWindow.close();else throw Error('Unsupported window action');});
   rootsFile = path.join(app.getPath('userData'), 'music-roots.json');
   try { roots = new Set(JSON.parse(await fsp.readFile(rootsFile, 'utf8'))); } catch {}

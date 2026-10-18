@@ -76,7 +76,7 @@ final class AppUpdater {
             if (Build.VERSION.SDK_INT < 26 || activity.getPackageManager().canRequestPackageInstalls()) {
                 prefs.edit().remove("permission_pending").remove("permission_opened").apply();
                 if (busy.compareAndSet(false, true)) new Thread(() -> commitInstall()).start();
-            } else if (prefs.getBoolean("permission_opened", false)) fail("Разрешите установку обновлений для Playerium и попробуйте снова.");
+            } else if (prefs.getBoolean("permission_opened", false)) fail("Разрешите установку обновлений для " + activity.getString(R.string.app_name) + " и попробуйте снова.");
             else requestPermission();
         } else if (prefs.getLong("download", -1) > 0 && !busy.get()) {
             handler.removeCallbacks(monitor); handler.post(monitor);
@@ -110,7 +110,7 @@ final class AppUpdater {
                 DownloadManager dm = (DownloadManager)activity.getSystemService(Context.DOWNLOAD_SERVICE);
                 String name = "Playerium-" + version + "-" + System.currentTimeMillis() + ".apk";
                 DownloadManager.Request download = new DownloadManager.Request(Uri.parse(url))
-                    .setTitle("Обновление Playerium").setMimeType("application/vnd.android.package-archive")
+                    .setTitle("Обновление " + activity.getString(R.string.app_name)).setMimeType("application/vnd.android.package-archive")
                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                     .setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, name);
                 long id = dm.enqueue(download);
@@ -142,7 +142,7 @@ final class AppUpdater {
             prefs.edit().remove("download").apply(); dm.remove(id);
             if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {
                 prefs.edit().putBoolean("permission_pending", true).apply(); busy.set(false);
-                state("permission", 100, "Разрешите установку обновлений для Playerium");
+                state("permission", 100, "Разрешите установку обновлений для " + activity.getString(R.string.app_name));
                 MainActivity current = MainActivity.getInstance();
                 if (current != null) current.resumeUpdateMonitor();
             } else commitInstall();

@@ -208,6 +208,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public class AndroidBridge {
+        @JavascriptInterface
+        public String getAppName() { return getString(R.string.app_name); }
         @JavascriptInterface public void saveLegacyLibrary(final String data) {
             runOnUiThread(() -> {
                 if (webView == null || !"file:///android_asset/migration.html".equals(webView.getUrl())) return;

@@ -8,8 +8,8 @@ android {
         applicationId "com.playerium.music"
         minSdk 22
         targetSdk 34
-        versionCode 45
-        versionName "1.7.31"
+        versionCode 46
+        versionName "1.7.32"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -55,6 +55,28 @@ repositories {
     google()
     mavenCentral()
 }
+
+// Android resource qualifiers require a language before a region. Generate the
+// small name-only overrides so RU also works with English, German, etc.
+def regionalNameResources = layout.buildDirectory.dir("generated/res/regionalAppName")
+android.sourceSets.main.res.srcDir(regionalNameResources)
+tasks.register("generateRegionalAppNames") {
+    outputs.dir(regionalNameResources)
+    doLast {
+        def root = regionalNameResources.get().asFile
+        def languages = (Locale.getISOLanguages().toList() + ["fil"]).unique().findAll { !["in", "iw", "ji"].contains(it) }
+        languages.findAll { it != "ru" }.each { language ->
+            def base = new File(root, language.length() == 2 ? "values-${language}" : "values-b+${language}")
+            base.mkdirs()
+            new File(base, "strings.xml").setText('<resources><string name="app_name">Playerium</string><string name="title_activity_main">Playerium</string></resources>', "UTF-8")
+            def qualifier = language.length() == 2 ? "values-${language}-rRU" : "values-b+${language}+RU"
+            def folder = new File(root, qualifier)
+            folder.mkdirs()
+            new File(folder, "strings.xml").setText('<resources><string name="app_name">Проигрыватель</string><string name="title_activity_main">Проигрыватель</string></resources>', "UTF-8")
+        }
+    }
+}
+tasks.named("preBuild").configure { dependsOn("generateRegionalAppNames") }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
