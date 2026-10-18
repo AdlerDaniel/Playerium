@@ -224,8 +224,8 @@ export class AudioPlayer {
 
     this.nativePlayback = !!(track.nativeUri && window.AndroidBridge?.setPlaybackQueue && this.queue.every(t => t.nativeUri));
     if (this.nativePlayback) {
-      // The native service applies cached gain and measures in its own background worker.
-      // Sending the queue must never wait for a full-file analysis through the bridge.
+      // Android opens the original URI. Constant-gain file processing is a
+      // separate background task and never changes playback gain on selection.
       this.syncNativeQueue(true, true);
       this.equalizer?.sync?.();
       this.onTrackChange?.(track);
@@ -248,8 +248,8 @@ export class AudioPlayer {
       this.audio.src = url;
       // Native/desktop sources are normalized on disk by a separate durable queue.
       // Playback never starts an analysis or applies obsolete -18 LUFS gain again.
-      let cached=!track.filePath?this.browserLoudnessCache.get(this.loudnessKey(track,file)):null;
-      if(!cached&&!track.filePath&&track.normalizationKey===this.loudnessKey(track,file))cached={gain:track.normalizationGain};
+      let cached=!window.AndroidBridge&&!track.filePath?this.browserLoudnessCache.get(this.loudnessKey(track,file)):null;
+      if(!window.AndroidBridge&&!cached&&!track.filePath&&track.normalizationKey===this.loudnessKey(track,file))cached={gain:track.normalizationGain};
       if(request!==this.playRequest)return;
       if(cached)this.applyNormalization(cached.gain,false);
       if(request!==this.playRequest)return;
@@ -259,7 +259,7 @@ export class AudioPlayer {
       this.updateMediaSessionMetadata(track);
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
-      if(!track.filePath)this.normalizationTask=this.normalizeInBackground(track,file,request);
+      if(!window.AndroidBridge&&!track.filePath)this.normalizationTask=this.normalizeInBackground(track,file,request);
     } catch (error) {
       if (request !== this.playRequest) return;
       this.audio.pause();

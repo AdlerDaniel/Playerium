@@ -57,25 +57,77 @@ public class LoudnessTest {
     org.json.JSONArray uris=new org.json.JSONArray().put(android.net.Uri.fromFile(a).toString()).put(android.net.Uri.fromFile(b).toString());PreparedAudio.enqueue(c,uris);
     long deadline=System.currentTimeMillis()+90000;
     while(System.currentTimeMillis()<deadline&&(!PreparedAudio.pending(c).isEmpty()))Thread.sleep(200);
-    for(File input:new File[]{a,b}){android.net.Uri original=android.net.Uri.fromFile(input),ready=PreparedAudio.playable(c,original);assertFalse("Background migration left a recording unprepared",ready.equals(original));outputs.add(new File(ready.getPath()));}
+    for(File input:new File[]{a,b}){android.net.Uri original=android.net.Uri.fromFile(input);assertEquals(original,PreparedAudio.playable(c,original));assertNotNull("Background migration left a recording unprepared",PreparedAudio.ready(c,original));}
     org.json.JSONObject status=PreparedAudio.status(c,uris);assertEquals(2,status.getInt("total"));assertEquals(2,status.getInt("ready"));assertEquals(0,status.getInt("pending"));assertEquals(0,status.getInt("failed"));
    }finally{a.delete();b.delete();for(File output:outputs)output.delete();}
   }
-  @Test public void preparedFilesHaveEqualFixedLoudnessWithoutRewritingOrAnalyzingOnOpen()throws Exception{
+  @Test public void originalFilesUseVerifiedConstantGainAndKeepTheirUriWithoutPlaybackAnalysis()throws Exception{
    android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();MusicEngine engine=MusicEngine.get(c);
    File quiet=tone(c,"prepared-quiet.wav",1000),loud=tone(c,"prepared-loud.wav",12000);java.util.List<File> outputs=new java.util.ArrayList<>();
    try{
     double[] levels=new double[2];int i=0;
     for(File input:new File[]{quiet,loud}){
      byte[] before=java.nio.file.Files.readAllBytes(input.toPath());android.net.Uri original=android.net.Uri.fromFile(input),ready=engine.prepareAudio(original);File file=new File(ready.getPath());outputs.add(file);
-     assertFalse(original.equals(ready));assertArrayEquals(before,java.nio.file.Files.readAllBytes(input.toPath()));
-     // Inspect the real encoded derivative through an approved fixture copy.
-     File inspection=new File(MusicEngine.managedDirectory(c),"prepared-inspection-"+(i)+".m4a");
-     try{java.nio.file.Files.copy(file.toPath(),inspection.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);org.json.JSONObject measurement=engine.analyzeLoudness(android.net.Uri.fromFile(inspection));levels[i++]=measurement.getDouble("integrated");assertEquals(-14,levels[i-1],1);assertTrue(measurement.getDouble("peak")<=-.5);}finally{inspection.delete();}
-     long start=android.os.SystemClock.elapsedRealtime();assertEquals(ready,PreparedAudio.playable(c,original));assertTrue(android.os.SystemClock.elapsedRealtime()-start<500);
-     try(java.io.RandomAccessFile changed=new java.io.RandomAccessFile(input,"rw")){changed.seek(changed.length());changed.writeByte(0);}assertEquals(original,PreparedAudio.playable(c,original));
+     assertEquals(original,ready);assertFalse(java.util.Arrays.equals(before,java.nio.file.Files.readAllBytes(input.toPath())));
+     org.json.JSONObject measurement=engine.analyzeLoudness(original);levels[i++]=measurement.getDouble("integrated");assertEquals(-7,levels[i-1],.5);assertTrue(measurement.getDouble("peak")<=-.5);
+     assertNotNull(PreparedAudio.ready(c,original));byte[] normalized=java.nio.file.Files.readAllBytes(input.toPath());long modified=input.lastModified();
+     long start=android.os.SystemClock.elapsedRealtime();assertEquals(ready,engine.prepareAudio(original));assertEquals(ready,PreparedAudio.playable(c,original));assertTrue(android.os.SystemClock.elapsedRealtime()-start<500);
+     assertEquals(modified,input.lastModified());assertArrayEquals(normalized,java.nio.file.Files.readAllBytes(input.toPath()));
+     try(java.io.RandomAccessFile changed=new java.io.RandomAccessFile(input,"rw")){changed.seek(changed.length());changed.writeByte(0);}assertNull(PreparedAudio.ready(c,original));
     }
     assertEquals(levels[0],levels[1],.5);
    }finally{quiet.delete();loud.delete();for(File f:outputs)f.delete();}
+  }
+  @Test public void constantGainPreservesQuietAndLoudSectionsAndNeverUsesDynamicCompression()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();MusicEngine engine=MusicEngine.get(c);File file=tone(c,"constant-sections.wav",500);
+   try{
+    try(java.io.RandomAccessFile out=new java.io.RandomAccessFile(file,"rw")){out.seek(40044);for(int i=20000;i<40000;i++){short value=(short)(Math.sin(i*2*Math.PI*440/8000)*4000);out.write(value&255);out.write((value>>8)&255);}}
+    android.net.Uri uri=android.net.Uri.fromFile(file);org.json.JSONArray before=engine.analyzeWaveform(uri).getJSONArray("peaks");double ratio=before.getDouble(30)/before.getDouble(150);
+    engine.prepareAudio(uri);org.json.JSONArray after=engine.analyzeWaveform(uri).getJSONArray("peaks");assertEquals(ratio,after.getDouble(30)/after.getDouble(150),.004);
+    assertEquals(8,after.getDouble(150)/after.getDouble(30),.2);
+    assertEquals(-7,engine.analyzeLoudness(uri).getDouble("integrated"),.5);
+    assertEquals(9,OriginalNormalization.gain(-20,-10),.0001);assertEquals(0,OriginalNormalization.gain(-20,-.2),.0001);assertEquals(-2,OriginalNormalization.gain(-5,-2),.0001);
+   }finally{file.delete();}
+  }
+  @Test public void mp3ReplacementPreservesTagsArtworkAndDuration()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();MusicEngine engine=MusicEngine.get(c);File source=tone(c,"tagged-source.wav",1000),mp3=new File(source.getParentFile(),"tagged-original.mp3"),cover=new File(source.getParentFile(),"tagged-cover.png");
+   android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(32,32,android.graphics.Bitmap.Config.ARGB_8888);bitmap.eraseColor(android.graphics.Color.BLUE);
+   try{
+    try(FileOutputStream out=new FileOutputStream(cover)){bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}
+    engine.normalizationProcess(java.util.Arrays.asList("-i",source.getPath(),"-i",cover.getPath(),"-map","0:a","-map","1:v","-c:a","libmp3lame","-q:a","0","-c:v","copy","-id3v2_version","3","-metadata","title=Original title","-metadata","artist=Original artist","-metadata","album=Original collection",mp3.getPath()));
+    android.media.MediaMetadataRetriever before=new android.media.MediaMetadataRetriever();before.setDataSource(mp3.getPath());long duration=Long.parseLong(before.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION));byte[] artwork=before.getEmbeddedPicture();before.release();assertNotNull(artwork);
+    android.net.Uri uri=android.net.Uri.fromFile(mp3);assertEquals(uri,engine.prepareAudio(uri));
+    android.media.MediaMetadataRetriever after=new android.media.MediaMetadataRetriever();after.setDataSource(mp3.getPath());
+    try{assertEquals("Original title",after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE));assertEquals("Original artist",after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST));assertEquals("Original collection",after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM));assertArrayEquals(artwork,after.getEmbeddedPicture());assertTrue(Math.abs(duration-Long.parseLong(after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)))<150);}finally{after.release();}
+    assertNotNull(PreparedAudio.ready(c,uri));assertEquals(-7,engine.analyzeLoudness(uri).getDouble("integrated"),.6);
+   }finally{bitmap.recycle();source.delete();mp3.delete();cover.delete();}
+  }
+  @Test public void failedEncodingLeavesTheOriginalBytesUntouched()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();File file=tone(c,"failed-replacement.wav",1000);byte[] before=java.nio.file.Files.readAllBytes(file.toPath());
+   try{
+    try{OriginalNormalization.prepare(c,android.net.Uri.fromFile(file),args->{if(args.contains("-af")&&args.get(args.indexOf("-af")+1).startsWith("volume="))throw new java.io.IOException("Injected encoder failure");return "{\"input_i\":\"-30\",\"input_tp\":\"-20\",\"input_lra\":\"2\",\"input_thresh\":\"-40\",\"target_offset\":\"0\"}";});fail("Encoding failure was swallowed");}catch(java.io.IOException expected){assertTrue(expected.getMessage().contains("Injected"));}
+    assertArrayEquals(before,java.nio.file.Files.readAllBytes(file.toPath()));assertNull(PreparedAudio.ready(c,android.net.Uri.fromFile(file)));
+   }finally{file.delete();}
+  }
+  @Test public void legacyQuietCopiesCannotOverrideTheOriginalPlaybackSource()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();File file=tone(c,"legacy-source.wav",1000);android.net.Uri uri=android.net.Uri.fromFile(file);File legacy=new File(PreparedAudio.directory(c),PreparedAudio.key(c,uri)+".m4a");
+   try{
+    try(FileOutputStream out=new FileOutputStream(legacy)){out.write(new byte[100]);}
+    assertEquals(uri,PreparedAudio.playable(c,uri));OriginalAudioDataSource source=new OriginalAudioDataSource(c,new androidx.media3.datasource.DefaultDataSource.Factory(c).createDataSource());
+    try{source.open(new androidx.media3.datasource.DataSpec.Builder().setUri(uri).build());byte[] header=new byte[4];assertEquals(4,source.read(header,0,4));assertArrayEquals("RIFF".getBytes(java.nio.charset.StandardCharsets.US_ASCII),header);}finally{source.close();}
+    PreparedAudio.removeLegacyCopies(c);assertFalse(legacy.exists());
+   }finally{file.delete();legacy.delete();}
+  }
+  @Test public void interruptedReplacementRestoresTheOriginalFromItsTransactionJournal()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();File file=tone(c,"recovery-original.wav",1000);android.net.Uri uri=android.net.Uri.fromFile(file);byte[] before=java.nio.file.Files.readAllBytes(file.toPath());
+   File dir=new File(c.getNoBackupFilesDir(),"normalization-transactions");dir.mkdirs();File backup=File.createTempFile("test-before-",".audio",dir),output=File.createTempFile("test-after-",".audio",dir);
+   java.lang.reflect.Method journalMethod=OriginalNormalization.class.getDeclaredMethod("journal",android.content.Context.class,android.net.Uri.class);journalMethod.setAccessible(true);File journal=(File)journalMethod.invoke(null,c,uri);
+   try{
+    try(FileOutputStream out=new FileOutputStream(backup)){out.write(before);}try(FileOutputStream out=new FileOutputStream(output)){out.write(before);out.write(1);}
+    org.json.JSONObject job=new org.json.JSONObject().put("uri",uri.toString()).put("backup",backup.getPath()).put("output",output.getPath()).put("before",OriginalNormalization.hash(new java.io.ByteArrayInputStream(before))).put("after",OriginalNormalization.hash(new java.io.FileInputStream(output))).put("phase","writing").put("result",new org.json.JSONObject());
+    try(FileOutputStream out=new FileOutputStream(journal)){out.write(job.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+    try(FileOutputStream out=new FileOutputStream(file)){out.write(new byte[]{1,2,3});}
+    assertTrue(OriginalNormalization.recoverAll(c));assertArrayEquals(before,java.nio.file.Files.readAllBytes(file.toPath()));assertFalse(journal.exists());assertFalse(backup.exists());assertFalse(output.exists());
+   }finally{file.delete();backup.delete();output.delete();journal.delete();}
   }
 }

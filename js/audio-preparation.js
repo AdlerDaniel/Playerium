@@ -1,6 +1,6 @@
 // Preparing durable audio copies is independent of navigation and playback.
 export function installAudioPreparation(app){
- const {library,ui}=app;let timer,running=false,again=false,nativeSignature='',checking=null;const done=new Set(),listeners=new Set();
+ const {library,ui}=app;let timer,statusTimer,running=false,again=false,nativeSignature='',checking=null;const done=new Set(),listeners=new Set();
  const state={supported:!!(window.AndroidBridge?.musicRequest||window.electronAPI?.prepareAudio),total:0,ready:0,failed:0,pending:0,active:false,checked:false,error:null};
  const tracks=()=>library.getTracks().filter(t=>!t.catalog);
  const notify=()=>listeners.forEach(listener=>listener({...state,running}));
@@ -9,7 +9,15 @@ export function installAudioPreparation(app){
   checking=(async()=>{try{
    let result;if(window.AndroidBridge?.musicRequest)result=await app.music.request('normalizationStatus',{uris:[...new Set(tracks().map(t=>t.nativeUri).filter(Boolean))]});
    else if(window.electronAPI?.audioPreparationStatus)result=await window.electronAPI.audioPreparationStatus([...new Set(tracks().map(t=>t.filePath).filter(Boolean))]);
-   Object.assign(state,result||{},{checked:true,error:null});
+   let changed=false;
+   if(window.AndroidBridge&&result?.records){const byUri=new Map(tracks().map(t=>[t.nativeUri,t]));for(const record of result.records){
+    const track=byUri.get(record.uri);if(!track||!record.audioKey||!record.normalization?.profile)continue;
+    const signature=JSON.stringify([record.audioKey,record.normalization,record.size,record.lastModified]);if(track.normalizationStamp===signature&&track.fileSize===record.size&&track.lastModified===record.lastModified&&track.audioKey===record.audioKey)continue;
+    Object.assign(track,{audioKey:record.audioKey,normalization:record.normalization,fileSize:record.size,lastModified:record.lastModified,normalizationStamp:signature});delete track.normalizationGain;delete track.normalizationKey;
+    await library.putInStore('tracks',track);changed=true;
+   }}
+   Object.assign(state,result||{},{checked:true,error:null});if(changed)library.onLibraryChanged?.();
+   clearTimeout(statusTimer);if(window.AndroidBridge&&(state.pending||state.active)&&!document.hidden)statusTimer=setTimeout(refresh,3000);
   }catch(error){state.error='Не удалось проверить готовность музыки. Попробуйте ещё раз.';}finally{notify();checking=null;}})();
   return checking;
  }

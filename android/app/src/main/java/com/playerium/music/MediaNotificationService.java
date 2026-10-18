@@ -101,18 +101,7 @@ public class MediaNotificationService extends MediaSessionService {
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
         equalizerSettings=playbackPrefs.getString("equalizer",null);
 
-        androidx.media3.datasource.DataSource.Factory source=()->new androidx.media3.datasource.ResolvingDataSource(new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource(),new androidx.media3.datasource.ResolvingDataSource.Resolver(){
-            private Uri original,resolved;
-            @Override public androidx.media3.datasource.DataSpec resolveDataSpec(androidx.media3.datasource.DataSpec spec){
-                // Pin the source for this media period: finishing preparation during
-                // playback must not change byte offsets when seeking the original.
-                if(!spec.uri.equals(original)){
-                    if(!MainActivity.hasMusicPermission(MediaNotificationService.this,spec.uri))throw new SecurityException("Unauthorized URI");
-                    original=spec.uri;resolved=PreparedAudio.playable(MediaNotificationService.this,original);
-                }
-                return spec.withUri(resolved);
-            }
-        });
+        androidx.media3.datasource.DataSource.Factory source=()->new OriginalAudioDataSource(this,new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource());
         androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(5000,20000,150,300).setPrioritizeTimeOverSizeThresholds(true).build();
         player = new ExoPlayer.Builder(this).setLoadControl(loadControl).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
         player.addAnalyticsListener(new androidx.media3.exoplayer.analytics.AnalyticsListener(){

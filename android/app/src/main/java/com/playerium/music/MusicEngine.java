@@ -49,6 +49,16 @@ final class MusicEngine {
         if(saved==null)return null;JSONObject result=new JSONObject(saved);knownLoudness.put(key,result.getDouble("gain"));return result;
     }
     double knownLoudness(Uri uri){try{JSONObject cached=cachedLoudness(uri);return cached==null?1:cached.getDouble("gain");}catch(Exception ignored){return 1;}}
+    synchronized void noteNormalized(Uri uri,JSONObject result)throws Exception{
+        boolean changed=false;Iterator<String> keys=records().keys();
+        while(keys.hasNext()){
+            JSONObject record=records().getJSONObject(keys.next());if(!uri.toString().equals(record.optString("uri")))continue;
+            record.put("size",result.getLong("size")).put("lastModified",result.getLong("lastModified"));
+            JSONObject metadata=record.optJSONObject("metadata");if(metadata==null){metadata=new JSONObject();record.put("metadata",metadata);}
+            metadata.put("audioKey",result.getString("audioKey")).put("normalization",result.getJSONObject("normalization"));changed=true;
+        }
+        if(changed)saveRecords();
+    }
 
     private MusicEngine(Context context){this.context=context;runtime=new File(context.getNoBackupFilesDir(),"music-runtime-0.18.1-2026.08.19");}
     void cancel(String id){Process process=processes.remove(id);if(process!=null)process.destroy();Future<?> task=tasks.remove(id);if(task!=null)task.cancel(true);}
@@ -201,28 +211,11 @@ final class MusicEngine {
         }finally{input.delete();}
     }
     Uri prepareAudio(Uri uri)throws Exception{ synchronized(normalizationLock){
-        String key=PreparedAudio.key(context,uri);File target=new File(PreparedAudio.directory(context),key+".m4a");
-        if(target.isFile()&&target.length()>32)return Uri.fromFile(target);
-        initialize();File input=File.createTempFile("normalize-",".audio",context.getCacheDir());
-        File temporary=new File(target.getParentFile(),key+".part.m4a");
-        try{
-            try(InputStream in=context.getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(input)){if(in==null)throw new IOException("Audio unavailable");copy(in,out);}
-            if(target.getParentFile().getUsableSpace()<input.length()+32L*1024*1024)throw new IOException("Недостаточно места для подготовки музыки");
-            String filter="loudnorm=I=-14:TP=-1:LRA=11";
-            String log=normalizationProcess(Arrays.asList("-i",input.getAbsolutePath(),"-map","0:a:0","-vn","-af",filter+":print_format=json","-f","null","-"));
-            java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\{\\s*\"input_i\"[\\s\\S]*?\\}").matcher(log);
-            if(!match.find())throw new IOException("Missing loudness measurement");JSONObject stats=new JSONObject(match.group());
-            if(finite(measurementNumber(stats.getString("input_i")))){
-                for(String field:Arrays.asList("input_i","input_tp","input_lra","input_thresh","target_offset"))if(!finite(measurementNumber(stats.getString(field))))throw new IOException("Invalid loudness measurement");
-                filter+=":measured_I="+stats.getString("input_i")+":measured_TP="+stats.getString("input_tp")+":measured_LRA="+stats.getString("input_lra")+":measured_thresh="+stats.getString("input_thresh")+":offset="+stats.getString("target_offset")+":linear=true";
-            }else filter="anull";
-            normalizationProcess(Arrays.asList("-i",input.getAbsolutePath(),"-map","0:a:0","-vn","-map_metadata","0","-af",filter,"-ar","48000","-c:a","aac","-b:a","256k","-movflags","+faststart",temporary.getAbsolutePath()));
-            if(!key.equals(PreparedAudio.key(context,uri)))throw new IOException("Recording changed during preparation");
-            if(temporary.length()<=32||!temporary.renameTo(target))throw new IOException("Unable to save prepared audio");
-            return Uri.fromFile(target);
-        }finally{input.delete();temporary.delete();}
+        OriginalNormalization.recover(context,uri);
+        if(PreparedAudio.ready(context,uri)!=null)return uri;
+        initialize();return OriginalNormalization.prepare(context,uri,this::normalizationProcess);
     }}
-    private String normalizationProcess(List<String> arguments)throws Exception{
+    String normalizationProcess(List<String> arguments)throws Exception{
         List<String> command=new ArrayList<>();command.add(new File(context.getApplicationInfo().nativeLibraryDir,"libffmpeg.so").getAbsolutePath());command.addAll(Arrays.asList("-hide_banner","-nostdin","-y","-threads","1","-filter_threads","1"));command.addAll(arguments);
         ProcessBuilder builder=new ProcessBuilder(command);builder.environment().put("LD_LIBRARY_PATH",new File(runtime,"python/usr/lib")+":"+new File(runtime,"ffmpeg/usr/lib"));builder.redirectErrorStream(true);Process process=builder.start();
         FutureTask<byte[]> output=new FutureTask<>(()->read(process.getInputStream(),1024*1024));new Thread(output,"Playerium normalization output").start();

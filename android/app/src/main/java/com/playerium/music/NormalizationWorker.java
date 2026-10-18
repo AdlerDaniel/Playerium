@@ -19,19 +19,21 @@ public final class NormalizationWorker extends Worker {
         setForegroundAsync(Build.VERSION.SDK_INT>=29?new ForegroundInfo(7403,n,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC):new ForegroundInfo(7403,n)).get();
     }
     @NonNull @Override public Result doWork(){
-        Context c=getApplicationContext();java.util.Set<String> pending=PreparedAudio.pending(c);if(pending.isEmpty())return Result.success();
-        int completed=0,total=pending.size();long started=android.os.SystemClock.elapsedRealtime();boolean retry=false;
+        Context c=getApplicationContext();boolean recovered=OriginalNormalization.recoverAll(c);java.util.Set<String> pending=PreparedAudio.pending(c);if(pending.isEmpty())return recovered?Result.success():Result.retry();
+        int completed=0,total=pending.size();long started=android.os.SystemClock.elapsedRealtime();boolean retry=!recovered;
         try{
             progress(total,completed);
             for(String value:pending){
+                if(!PreparedAudio.pending(c).contains(value))continue;
                 if(isStopped()||android.os.SystemClock.elapsedRealtime()-started>360000)return Result.retry();
                 Uri uri=Uri.parse(value);
                 PreparedAudio.preferences(c).edit().putLong("activeUntil",System.currentTimeMillis()+300000).apply();
-                try{MusicEngine.get(c).prepareAudio(uri);PreparedAudio.succeeded(c,value);}
+                try{MusicEngine.get(c).prepareAudio(uri);PreparedAudio.succeeded(c,value);completed++;}
+                catch(OriginalNormalization.Busy waiting){retry=true;PreparedAudio.preferences(c).edit().remove("error:"+value).apply();}
                 catch(java.io.FileNotFoundException error){PreparedAudio.failed(c,value,"Missing recording");PreparedAudio.complete(c,value);}
                 catch(SecurityException error){PreparedAudio.failed(c,value,"Нет доступа к файлу");PreparedAudio.complete(c,value);}
                 catch(Exception error){retry=true;PreparedAudio.failed(c,value,String.valueOf(error.getMessage()));}
-                progress(total,++completed);
+                progress(total,completed);
             }
             return retry?Result.retry():Result.success();
         }catch(Exception error){return Result.retry();}finally{PreparedAudio.preferences(c).edit().remove("activeUntil").apply();}

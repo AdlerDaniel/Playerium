@@ -94,7 +94,11 @@ export class CloudSync {
     }
    }
    const link=this.links[key],data=this.metadata(track),signature=JSON.stringify(data),remote=view.tracks.get(key),coverSignature=await this.coverSignature(track);
-   if(remote?.data&&!remote.deleted&&!this.outbox.some(op=>op.key===key&&op.kind==='track')&&((link.metadata!==undefined&&link.metadata!==signature)||(!remote.data.album&&data.album)||(link.coverSignature!==undefined&&link.coverSignature!==coverSignature)||(!remote.data.coverId&&coverSignature))){this.operation('track',{key,track:{...remote.data,...data}});}
+   const pendingTrack=this.outbox.filter(op=>op.kind==='track'&&op.key===key).sort((a,b)=>b.clock-a.clock)[0],snapshot=pendingTrack?.track||remote?.data;
+   if(snapshot&&!remote?.deleted&&((link.metadata!==undefined&&link.metadata!==signature)||(!snapshot.album&&data.album)||(link.coverSignature!==undefined&&link.coverSignature!==coverSignature)||(!snapshot.coverId&&coverSignature))){
+    const next=this.operation('track',{key,track:{...snapshot,...data}});
+    this.outbox=this.outbox.filter(op=>op.kind!=='track'||op.key!==key||op.id===next.id);
+   }
    link.coverSignature=coverSignature;
    link.metadata=signature;
    if(link.liked===undefined){if(track.liked)this.operation('like',{key,liked:true});link.liked=!!track.liked;}else if(link.liked!==!!track.liked){this.operation('like',{key,liked:!!track.liked});link.liked=!!track.liked;}
@@ -109,7 +113,7 @@ export class CloudSync {
   }
   await this.save();
  }
- metadata(track){return {title:track.title||'Без названия',artist:track.artist||'Неизвестный исполнитель',album:track.album||'',duration:track.duration||0,year:track.year||null,genre:track.genre||null,trackNo:track.trackNo||null,isrc:track.isrc||null};}
+ metadata(track){return {title:track.title||'Без названия',artist:track.artist||'Неизвестный исполнитель',album:track.album||'',duration:track.duration||0,year:track.year||null,genre:track.genre||null,trackNo:track.trackNo||null,isrc:track.isrc||null,...(track.audioKey&&track.normalization?{audioKey:track.audioKey,normalization:track.normalization,size:track.fileSize??track.size}:{})};}
  async coverSignature(track){if(!track.pictureBlob)return '';this.coverSignatures||=new WeakMap();if(this.coverSignatures.has(track.pictureBlob))return this.coverSignatures.get(track.pictureBlob);let hash=2166136261;const bytes=new Uint8Array(await track.pictureBlob.arrayBuffer());for(const byte of bytes)hash=Math.imul(hash^byte,16777619);const signature=track.pictureBlob.type+':'+bytes.length+':'+(hash>>>0);this.coverSignatures.set(track.pictureBlob,signature);return signature;}
  async apply(view){
   this.applying=true;
@@ -123,6 +127,14 @@ export class CloudSync {
     let link=this.links[key],track=link&&this.library.getTrackById(link.localId);
     if(remote.deleted){if(track){if(this.ui.player.currentTrack?.id===track.id)this.ui.player.stop();await this.library.removeTrack(track.id);this.ui.player.removeTrack?.(track.id);}await this.request('removeLocal',{key});if(link)link.removed=true;await this.save();continue;}
     if(!remote.data)continue;
+    const localPending=this.outbox.some(op=>op.kind==='track'&&op.key===key),content=remote.data.audioKey||key;
+    if(track&&!localPending&&content===(track.cloudAudioKey||key)&&remote.data.normalization?.profile==='constant-lufs7-tp1-original-v1'&&track.normalization?.profile!==remote.data.normalization.profile){
+     const accepted=await this.request('acceptAudioRevision',{key,track:remote.data,source:track.nativeUri||track.filePath||''});if(!accepted)throw Error('Локальная песня изменилась до подтверждения громкости.');
+    }
+    if(track&&!localPending&&content!==(track.cloudAudioKey||key)&&content!==track.audioKey){
+     const file=await this.request('download',{key,track:remote.data,destination:track.nativeUri||track.filePath||'',expectedCurrentHash:track.audioKey||track.cloudAudioKey||key});
+     Object.assign(track,{fileSize:file.size,lastModified:file.lastModified,audioKey:content});
+    }
     if(!track){
      const file=await this.request('download',{key,track:remote.data});this.library.blockedSources?.delete(file.folderSource);track=await this.library.addDownloaded(file,null);
      if(file.coverBase64){const bytes=Uint8Array.from(atob(file.coverBase64),c=>c.charCodeAt(0));track.pictureBlob=new Blob([bytes],{type:file.coverMime||'image/jpeg'});track.pictureUrl=this.library.coverURL(track.id,track.pictureBlob);track.cloudCoverId=remote.data.coverId;}
@@ -130,7 +142,7 @@ export class CloudSync {
     }
     if(remote.data.coverId&&track.cloudCoverId!==remote.data.coverId&&!this.outbox.some(op=>op.kind==='track'&&op.key===key)){try{const cover=await this.request('cover',{id:remote.data.coverId});if(cover.base64){const bytes=Uint8Array.from(atob(cover.base64),c=>c.charCodeAt(0));track.pictureBlob=new Blob([bytes],{type:remote.data.coverMime||'image/jpeg'});track.pictureUrl=this.library.coverURL(track.id,track.pictureBlob);track.cloudCoverId=remote.data.coverId;}}catch(error){this.failures?.push(error.message);}}
     const pending=this.outbox.filter(op=>op.kind==='track'&&op.key===key).sort((a,b)=>b.clock-a.clock)[0];
-    track.cloudKey=key;Object.assign(track,this.metadata(pending?.track||remote.data));track.liked=remote.liked;link.liked=remote.liked;link.removed=false;link.metadata=JSON.stringify(this.metadata(track));await this.library.putInStore('tracks',track);
+    track.cloudKey=key;if(!pending)track.cloudAudioKey=content;Object.assign(track,this.metadata(pending?.track||remote.data));track.liked=remote.liked;link.liked=remote.liked;link.removed=false;link.metadata=JSON.stringify(this.metadata(track));await this.library.putInStore('tracks',track);
     link.coverSignature=await this.coverSignature(track);
     await this.save();
     if(downloads.some(([k])=>k===key)){this.progress.done++;if(this.ui.queueLibraryRefresh)this.ui.queueLibraryRefresh({skipSettings:true});else{this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();}this.changed?.();}

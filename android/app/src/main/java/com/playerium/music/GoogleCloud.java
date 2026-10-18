@@ -69,10 +69,11 @@ final class GoogleCloud {
         case "status":return new JSONObject().put("realtimeAvailable",true).put("connected",prefs.getBoolean("enabled",false)).put("configured",true).put("canFlush",true).put("account",prefs.getString("account","")).put("email",prefs.getString("email","")).put("error",prefs.getString("error","")).put("pending",pendingCount());
         case "disconnect":realtime.reset();prefs.edit().putBoolean("enabled",false).remove("email").remove("account").remove("error").apply();synchronized(this){token=null;}WorkManager.getInstance(context).cancelUniqueWork("playerium-drive");WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-retry");return true;
         case "fingerprint":return fingerprint(payload.getString("source"));
+        case "acceptAudioRevision":{String source=payload.getString("source");JSONObject track=payload.getJSONObject("track");if(!fingerprint(source).getString("key").equals(audioKey(track,payload.getString("key"))))return false;PreparedAudio.acceptCloudVersion(context,Uri.parse(source),track);return true;}
         case "pull":return pull(payload.optString("cursor",""));
         case "publish":publish(payload);return new JSONObject().put("queued",true);
         case "flush":runJobs();return true;
-        case "download":return download(payload.getString("key"),payload.getJSONObject("track"));
+        case "download":return download(payload.getString("key"),payload.getJSONObject("track"),payload.optString("destination",""),payload.optString("expectedCurrentHash",""));
         case "queueDownloads":queueDownloads(payload.getJSONArray("tracks"));return true;
         case "cover":JSONObject cover=metadata(payload.getString("id"),"cover");if(cover.getLong("size")>4*1024*1024)throw new IOException("Обложка слишком большая.");return new JSONObject().put("base64",Base64.encodeToString(media(payload.getString("id"),4*1024*1024),Base64.NO_WRAP));
         case "removeLocal":return removeLocal(payload.getString("key"));
@@ -107,7 +108,7 @@ final class GoogleCloud {
             for(java.util.concurrent.Future<JSONObject> future:futures)events.put(future.get());
         }finally{reads.shutdownNow();}return new JSONObject().put("cursor",next).put("events",events);
     }
-    private InputStream source(String value)throws Exception{Uri uri=Uri.parse(value);if(!MainActivity.hasMusicPermission(context,uri))throw new IOException("Выберите папку музыки повторно, чтобы восстановить доступ.");InputStream input=context.getContentResolver().openInputStream(uri);if(input==null)throw new IOException("Не удалось прочитать песню.");return input;}
+    private InputStream source(String value)throws Exception{Uri uri=Uri.parse(value);boolean queued="file".equals(uri.getScheme())&&new File(uri.getPath()).getCanonicalFile().getParentFile().equals(new File(jobs,"audio").getCanonicalFile())&&new File(uri.getPath()).getName().matches("queued-[A-Za-z0-9_-]+\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)");if(!queued&&!MainActivity.hasMusicPermission(context,uri))throw new IOException("Выберите папку музыки повторно, чтобы восстановить доступ.");InputStream input=context.getContentResolver().openInputStream(uri);if(input==null)throw new IOException("Не удалось прочитать песню.");return input;}
     static String hex(byte[] digest){StringBuilder result=new StringBuilder();for(byte b:digest)result.append(String.format(Locale.ROOT,"%02x",b&255));return result.toString();}
     private JSONObject fingerprint(String value)throws Exception{Uri uri=Uri.parse(value);String name;if("file".equals(uri.getScheme()))name=new File(uri.getPath()).getName();else {DocumentFile file=DocumentFile.fromSingleUri(context,uri);name=file==null?null:file.getName();}String extension=name!=null&&name.lastIndexOf('.')>=0?name.substring(name.lastIndexOf('.')).toLowerCase(Locale.ROOT):"";if(!extension.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)"))throw new IOException("Выберите аудиофайл.");MessageDigest hash=MessageDigest.getInstance("SHA-256");long size=0;try(InputStream in=source(value)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){size+=n;if(size>1073741824L)throw new IOException("Размер песни должен быть не больше 1 ГБ.");hash.update(buffer,0,n);}}if(size<1)throw new IOException("Аудиофайл пуст.");return new JSONObject().put("key",hex(hash.digest())).put("size",size).put("ext",extension);}
     private static void atomic(File file,JSONObject value)throws Exception{if(!file.getParentFile().isDirectory()&&!file.getParentFile().mkdirs())throw new IOException("Не удалось сохранить очередь.");File tmp=new File(file.getPath()+".tmp");try(FileOutputStream out=new FileOutputStream(tmp)){out.write(value.toString().getBytes("UTF-8"));out.getFD().sync();}if(!tmp.renameTo(file))throw new IOException("Не удалось сохранить очередь.");}
@@ -118,7 +119,33 @@ final class GoogleCloud {
             atomic(new File(jobs,"download-"+key+".json"),new JSONObject().put("account",prefs.getString("account","")).put("download",entry));}
         enqueue();
     }
-    private synchronized void publish(JSONObject payload)throws Exception{if(!prefs.getBoolean("enabled",false))throw new IOException("Подключите Google Диск.");JSONObject op=payload.getJSONObject("operation");requireId(op.getString("id"));if(op.getInt("version")!=1)throw new IOException("Некорректное изменение.");File file=new File(jobs,op.getString("id")+".json");if(file.exists()){enqueue();return;}if("track".equals(op.getString("kind"))){JSONObject info=fingerprint(payload.getString("source"));if(!info.getString("key").equals(op.getString("key")))throw new IOException("Песня изменилась. Повторите синхронизацию.");}payload.put("account",prefs.getString("account",""));atomic(file,payload);enqueue();}
+    private static String audioKey(JSONObject track,String key)throws Exception{String value=track.optString("audioKey",key);requireHash(value);return value;}
+    private String snapshot(JSONObject operation,InputStream source)throws Exception{
+        requireId(operation.getString("id"));String extension=operation.getJSONObject("track").getString("ext");
+        if(!extension.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)"))throw new IOException("Некорректный формат песни");
+        File snapshots=new File(jobs,"audio");if(!snapshots.isDirectory()&&!snapshots.mkdirs())throw new IOException("Unable to prepare upload");
+        File target=new File(new File(jobs,"audio"),"queued-"+operation.getString("id")+extension),partial=new File(target.getPath()+".tmp");
+        try(InputStream in=source;FileOutputStream out=new FileOutputStream(partial)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)out.write(b,0,n);out.getFD().sync();}
+        String expected=audioKey(operation.getJSONObject("track"),operation.getString("key"));
+        if(!expected.equals(OriginalNormalization.hash(new FileInputStream(partial)))){partial.delete();throw new IOException("Песня изменилась во время подготовки загрузки");}
+        if(!partial.renameTo(target))throw new IOException("Не удалось сохранить очередь загрузки");return Uri.fromFile(target).toString();
+    }
+    void freezeNormalizationJobs(Uri original,File before)throws Exception{synchronized(jobLock){
+        File[] files=jobs.listFiles();if(files==null)return;String digest=null;
+        for(File file:files)if(file.getName().matches("[A-Za-z0-9_-]+\\.json")){
+            JSONObject job;try{job=readJob(file);}catch(Exception malformed){continue;}JSONObject op=job.optJSONObject("operation");
+            if(op==null||!"track".equals(op.optString("kind"))||!original.toString().equals(job.optString("source")))continue;
+            if(digest==null)digest=OriginalNormalization.hash(new FileInputStream(before));
+            if(!digest.equals(audioKey(op.getJSONObject("track"),op.getString("key"))))continue;
+            job.put("source",snapshot(op,new FileInputStream(before)));atomic(file,job);
+        }
+    }}
+    private void clearSnapshot(JSONObject job)throws Exception{
+        JSONObject op=job.optJSONObject("operation");if(op==null||!"track".equals(op.optString("kind")))return;
+        File expected=new File(new File(jobs,"audio"),"queued-"+op.getString("id")+op.getJSONObject("track").getString("ext"));
+        if(Uri.fromFile(expected).toString().equals(job.optString("source")))expected.delete();
+    }
+    private synchronized void publish(JSONObject payload)throws Exception{if(!prefs.getBoolean("enabled",false))throw new IOException("Подключите Google Диск.");JSONObject op=payload.getJSONObject("operation");requireId(op.getString("id"));if(op.getInt("version")!=1)throw new IOException("Некорректное изменение.");File file=new File(jobs,op.getString("id")+".json");if(file.exists()){enqueue();return;}if("track".equals(op.getString("kind"))){JSONObject info=fingerprint(payload.getString("source"));if(!info.getString("key").equals(audioKey(op.getJSONObject("track"),op.getString("key"))))throw new IOException("Песня изменилась. Повторите синхронизацию.");op.getJSONObject("track").put("size",info.getLong("size")).put("ext",info.getString("ext"));payload.put("source",snapshot(op,source(payload.getString("source"))));}payload.put("account",prefs.getString("account",""));atomic(file,payload);enqueue();}
     private void enqueue(){Constraints constraints=new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();OneTimeWorkRequest work=new OneTimeWorkRequest.Builder(CloudWorker.class).setConstraints(constraints).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,TimeUnit.SECONDS).build();WorkManager manager=WorkManager.getInstance(context);manager.enqueueUniqueWork("playerium-drive",ExistingWorkPolicy.APPEND_OR_REPLACE,work);manager.enqueueUniquePeriodicWork("playerium-drive-retry",ExistingPeriodicWorkPolicy.KEEP,new PeriodicWorkRequest.Builder(CloudWorker.class,15,TimeUnit.MINUTES).setConstraints(constraints).build());}
     boolean hasPendingJobs(){if(!prefs.getBoolean("enabled",false))return false;return pendingCount()>0||realtime.pending()>0;}
     private JSONObject stage(JSONObject data)throws Exception{String extension=data.getString("ext");long size=data.getLong("size");if(!extension.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)")||size<1||size>1073741824L||stages.size()>=4)throw new IOException("Некорректный размер песни.");if(!cache.isDirectory()&&!cache.mkdirs())throw new IOException("Не удалось сохранить песню.");new File(cache,".nomedia").createNewFile();String id=UUID.randomUUID().toString();File file=new File(cache,"staged-"+id+extension);if(!file.createNewFile())throw new IOException("Не удалось сохранить песню.");stages.put(id,new JSONObject().put("path",file.getPath()).put("size",size).put("offset",0));return new JSONObject().put("id",id);}
@@ -143,14 +170,17 @@ final class GoogleCloud {
                 JSONObject existing=find(op.getString("id"));
                 if(existing==null){
                     if("track".equals(op.getString("kind"))){
-                        JSONObject info=fingerprint(job.getString("source"));if(!info.getString("key").equals(op.getString("key")))throw new IOException("Песня изменилась до завершения загрузки.");
-                        JSONObject track=op.getJSONObject("track");track.put("audioId",upload("audio:"+op.getString("key"),"audio",null,job.getString("source"),"application/octet-stream",job,file));
+                        File immutable=new File(new File(jobs,"audio"),"queued-"+op.getString("id")+op.getJSONObject("track").getString("ext"));
+                        if(!Uri.fromFile(immutable).toString().equals(job.getString("source"))){job.put("source",snapshot(op,source(job.getString("source"))));atomic(file,job);}
+                        JSONObject info=fingerprint(job.getString("source"));if(!info.getString("key").equals(audioKey(op.getJSONObject("track"),op.getString("key"))))throw new IOException("Песня изменилась до завершения загрузки.");
+                        JSONObject track=op.getJSONObject("track");track.put("audioId",upload("audio:"+audioKey(track,op.getString("key")),"audio",null,job.getString("source"),"application/octet-stream",job,file));
                         JSONObject cover=job.optJSONObject("cover");if(cover!=null){byte[] bytes=Base64.decode(cover.getString("base64"),Base64.DEFAULT);String mime=cover.getString("mime");if(bytes.length>4*1024*1024||!mime.matches("image/(jpeg|png|webp)"))throw new IOException("Некорректная обложка.");String key=hex(MessageDigest.getInstance("SHA-256").digest(bytes));track.put("coverId",upload("cover:"+key,"cover",bytes,null,mime,job,file));track.put("coverMime",mime);}
                     }
                     upload(op.getString("id"),"event",op.toString().getBytes("UTF-8"),null,"application/json",job,file);
                 }
                 if(existing!=null)op=new JSONObject(new String(media(existing.getString("id"),262144),"UTF-8"));
                 realtime.enqueue(op);
+                clearSnapshot(job);
                 if(!file.delete())throw new IOException("Не удалось завершить очередь.");
             }catch(Exception e){if(failure==null)failure=e;}finally{expectedAccount.remove();}
         }
@@ -158,14 +188,37 @@ final class GoogleCloud {
     }
     void recordFailure(Exception e){prefs.edit().putString("error",message(e)).apply();}
     JSONObject localCopy(String key,JSONObject track)throws Exception{
-        requireHash(key);String ext=track.getString("ext");if(!ext.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)"))throw new IOException("Некорректная песня.");File file=new File(cache,key+ext);if(!file.isFile()||file.length()!=track.getLong("size"))return null;
-        File marker=new File(cache,key+ext+".verified");String stamp=file.length()+":"+file.lastModified();boolean verified=false;try{verified=new String(read(new FileInputStream(marker),100),"UTF-8").equals(stamp);}catch(Exception ignored){}
-        if(!verified){if(!fingerprint(Uri.fromFile(file).toString()).getString("key").equals(key))return null;try(FileOutputStream out=new FileOutputStream(marker)){out.write(stamp.getBytes("UTF-8"));}}
+        requireHash(key);String content=audioKey(track,key);String ext=track.getString("ext");if(!ext.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)"))throw new IOException("Некорректная песня.");File file=new File(cache,key+ext);if(!file.isFile()||file.length()!=track.getLong("size"))return null;
+        File marker=new File(cache,key+ext+".verified");String stamp=content+":"+file.length()+":"+file.lastModified();boolean verified=false;try{verified=new String(read(new FileInputStream(marker),100),"UTF-8").equals(stamp);}catch(Exception ignored){}
+        if(!verified){if(!fingerprint(Uri.fromFile(file).toString()).getString("key").equals(content))return null;try(FileOutputStream out=new FileOutputStream(marker)){out.write(stamp.getBytes("UTF-8"));}}
+        PreparedAudio.acceptCloudVersion(context,Uri.fromFile(file),track);
         return new JSONObject().put("name",file.getName()).put("uri",Uri.fromFile(file).toString()).put("folderSource",Uri.fromFile(cache).toString()).put("folderName","Облачная медиатека").put("size",file.length()).put("lastModified",file.lastModified()).put("metadata",track);
     }
-    JSONObject download(String key,JSONObject track)throws Exception{synchronized(downloadLock){return downloadFile(key,track);}}
-    private JSONObject downloadFile(String key,JSONObject track)throws Exception{requireHash(key);String extension=track.getString("ext");long size=track.getLong("size");if(!extension.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)")||size<1||size>1073741824L)throw new IOException("Некорректная песня.");JSONObject meta=metadata(track.getString("audioId"),"audio");if(!("audio:"+key).equals(meta.getJSONObject("appProperties").getString("key"))||meta.getLong("size")!=size)throw new IOException("Облачная песня не совпадает с записью.");if(!cache.isDirectory()&&!cache.mkdirs())throw new IOException("Не удалось создать папку музыки.");new File(cache,".nomedia").createNewFile();File target=new File(cache,key+extension),partial=new File(cache,target.getName()+".part");boolean complete=false;if(target.isFile())complete=fingerprint(Uri.fromFile(target).toString()).getString("key").equals(key);
-        if(!complete){long offset=partial.length();if(offset>=size){if(!partial.delete())throw new IOException("Не удалось перезапустить загрузку.");offset=0;}HttpURLConnection c=connection(API+"files/"+track.getString("audioId")+"?alt=media","GET");try{if(offset>0)c.setRequestProperty("Range","bytes="+offset+"-");check(c);if(offset>0&&c.getResponseCode()!=206){if(!partial.delete())throw new IOException("Не удалось продолжить загрузку.");offset=0;}try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(partial,offset>0)){long total=offset;byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){total+=n;if(total>size)throw new IOException("Размер песни не совпадает.");out.write(buffer,0,n);}out.getFD().sync();if(total!=size)throw new IOException("Загрузка песни прервалась.");}}finally{c.disconnect();}MessageDigest digest=MessageDigest.getInstance("SHA-256");try(InputStream in=new FileInputStream(partial)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1)digest.update(buffer,0,n);}if(!hex(digest.digest()).equals(key))throw new IOException("Песня загрузилась с ошибкой. Повторите синхронизацию.");if(!partial.renameTo(target))throw new IOException("Не удалось сохранить песню.");}
-        JSONObject result=new JSONObject().put("name",target.getName()).put("uri",Uri.fromFile(target).toString()).put("folderSource",Uri.fromFile(cache).toString()).put("folderName","Облачная медиатека").put("size",size).put("lastModified",target.lastModified());JSONObject data=new JSONObject();for(String field:new String[]{"title","artist","album","duration","year","genre","trackNo","isrc"})if(track.has(field))data.put(field,track.get(field));result.put("metadata",data);if(track.has("coverId"))try{JSONObject m=metadata(track.getString("coverId"),"cover");if(m.getLong("size")<=4*1024*1024){result.put("coverBase64",Base64.encodeToString(media(track.getString("coverId"),4*1024*1024),Base64.NO_WRAP));result.put("coverMime",track.optString("coverMime","image/jpeg"));}}catch(Exception ignored){}return result;
+    JSONObject download(String key,JSONObject track)throws Exception{return download(key,track,"","");}
+    JSONObject download(String key,JSONObject track,String destination,String expectedBefore)throws Exception{synchronized(jobLock){synchronized(downloadLock){
+        if(!destination.isEmpty()){
+            Uri uri=Uri.parse(destination);String current=OriginalNormalization.hash(context,uri),expected=audioKey(track,key);
+            if(!expectedBefore.isEmpty()&&!current.equals(expectedBefore)&&!current.equals(expected))throw new IOException("Локальная песня изменилась во время синхронизации");
+            if(current.equals(expected)){
+                PreparedAudio.acceptCloudVersion(context,uri,track);long size,modified;
+                if("file".equals(uri.getScheme())){File f=new File(uri.getPath());size=f.length();modified=f.lastModified();}else{DocumentFile f=DocumentFile.fromSingleUri(context,uri);size=f.length();modified=f.lastModified();}
+                return new JSONObject().put("uri",destination).put("size",size).put("lastModified",modified).put("metadata",track);
+            }
+        }
+        JSONObject result=downloadFile(key,track);
+        if(!destination.isEmpty()&&!destination.equals(result.getString("uri"))){
+            Uri target=Uri.parse(destination);File downloaded=new File(Uri.parse(result.getString("uri")).getPath());
+            OriginalNormalization.installCloudVersion(context,target,downloaded,audioKey(track,key),track,expectedBefore);
+            result.put("uri",destination);
+            if("file".equals(target.getScheme())){File file=new File(target.getPath());result.put("size",file.length()).put("lastModified",file.lastModified());}
+            else{DocumentFile file=DocumentFile.fromSingleUri(context,target);result.put("size",file.length()).put("lastModified",file.lastModified());}
+            downloaded.delete();
+        }
+        return result;
+    }}}
+    private JSONObject downloadFile(String key,JSONObject track)throws Exception{requireHash(key);String content=audioKey(track,key);String extension=track.getString("ext");long size=track.getLong("size");if(!extension.matches("\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)")||size<1||size>1073741824L)throw new IOException("Некорректная песня.");JSONObject meta=metadata(track.getString("audioId"),"audio");if(!("audio:"+content).equals(meta.getJSONObject("appProperties").getString("key"))||meta.getLong("size")!=size)throw new IOException("Облачная песня не совпадает с записью.");if(!cache.isDirectory()&&!cache.mkdirs())throw new IOException("Не удалось создать папку музыки.");new File(cache,".nomedia").createNewFile();File target=new File(cache,key+extension),partial=new File(cache,target.getName()+(content.equals(key)?".part":".part-"+content));String before=target.isFile()?fingerprint(Uri.fromFile(target).toString()).getString("key"):"";boolean complete=before.equals(content);
+        if(!complete){long offset=partial.length();if(offset>=size){if(!partial.delete())throw new IOException("Не удалось перезапустить загрузку.");offset=0;}HttpURLConnection c=connection(API+"files/"+track.getString("audioId")+"?alt=media","GET");try{if(offset>0)c.setRequestProperty("Range","bytes="+offset+"-");check(c);if(offset>0&&c.getResponseCode()!=206){if(!partial.delete())throw new IOException("Не удалось продолжить загрузку.");offset=0;}try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(partial,offset>0)){long total=offset;byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1){total+=n;if(total>size)throw new IOException("Размер песни не совпадает.");out.write(buffer,0,n);}out.getFD().sync();if(total!=size)throw new IOException("Загрузка песни прервалась.");}}finally{c.disconnect();}MessageDigest digest=MessageDigest.getInstance("SHA-256");try(InputStream in=new FileInputStream(partial)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1)digest.update(buffer,0,n);}if(!hex(digest.digest()).equals(content))throw new IOException("Песня загрузилась с ошибкой. Повторите синхронизацию.");String current=target.isFile()?fingerprint(Uri.fromFile(target).toString()).getString("key"):"";if(!current.equals(before))throw new IOException("Local recording changed during download");if(target.isFile()){OriginalNormalization.installCloudVersion(context,Uri.fromFile(target),partial,content,track,before);partial.delete();}else if(!partial.renameTo(target))throw new IOException("Не удалось сохранить песню.");}
+        PreparedAudio.acceptCloudVersion(context,Uri.fromFile(target),track);
+        JSONObject result=new JSONObject().put("name",target.getName()).put("uri",Uri.fromFile(target).toString()).put("folderSource",Uri.fromFile(cache).toString()).put("folderName","Облачная медиатека").put("size",size).put("lastModified",target.lastModified());JSONObject data=new JSONObject();for(String field:new String[]{"title","artist","album","duration","year","genre","trackNo","isrc","audioKey","normalization"})if(track.has(field))data.put(field,track.get(field));result.put("metadata",data);if(track.has("coverId"))try{JSONObject m=metadata(track.getString("coverId"),"cover");if(m.getLong("size")<=4*1024*1024){result.put("coverBase64",Base64.encodeToString(media(track.getString("coverId"),4*1024*1024),Base64.NO_WRAP));result.put("coverMime",track.optString("coverMime","image/jpeg"));}}catch(Exception ignored){}return result;
     }
 }

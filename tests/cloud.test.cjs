@@ -55,7 +55,7 @@ class Library {
  constructor(){this.tracks=new Map();this.playlists=new Map();this.settings=new Map();}
  getTracks(){return [...this.tracks.values()];}getTrackById(id){return this.tracks.get(id);}getPlaylists(){return [...this.playlists.values()];}getPlaylistById(id){return this.playlists.get(id);}
  async getFromStore(_,key){return this.settings.get(key);}async putInStore(store,value){if(store==='settings')this.settings.set(value.key,structuredClone(value));}
- async addDownloaded(file){let t=this.getTracks().find(t=>t.filePath===file.fullPath);if(!t){t={id:crypto.randomUUID(),filePath:file.fullPath,...file.metadata};this.tracks.set(t.id,t);}return t;}
+ async addDownloaded(file){let t=this.getTracks().find(t=>t.filePath===file.fullPath);if(!t){t={id:crypto.randomUUID(),filePath:file.fullPath,fileSize:file.size,lastModified:file.lastModified,...file.metadata};this.tracks.set(t.id,t);}return t;}
  async removeTrack(id){this.tracks.delete(id);for(const pl of this.playlists.values())pl.trackIds=pl.trackIds.filter(x=>x!==id);}
  async deletePlaylist(id){this.playlists.delete(id);}coverURL(){return 'blob:cover';}
 }
@@ -63,8 +63,9 @@ function network(){const events=[],files=new Map(),requests=[];let offline=false
  requests.push(name);if(offline)throw Error('Offline');if(name==='status')return {connected:true,account:'account',email:'test@example.invalid'};
  if(name==='pull')return {events:structuredClone(events.slice(Number(payload.cursor)||0)),cursor:String(events.length)};
  if(name==='fingerprint'){const bytes=files.get(payload.source);assert.ok(bytes);return {key:crypto.createHash('sha256').update(bytes).digest('hex'),size:bytes.length,ext:'.mp3'};}
- if(name==='publish'){if(!events.some(op=>op.id===payload.operation.id)){const op=structuredClone(payload.operation);if(op.kind==='track'){op.track.audioId='audio_'+op.key;files.set(op.track.audioId,files.get(payload.source));if(payload.cover){op.track.coverId='cover_'+crypto.createHash('sha256').update(payload.cover.base64).digest('hex');op.track.coverMime=payload.cover.mime;files.set(op.track.coverId,payload.cover.base64);}}events.push(op);}return {queued:true};}
- if(name==='download'){const bytes=files.get(payload.track.audioId);assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),payload.key);const path='/cloud/'+payload.key+'.mp3';files.set(path,bytes);return {fullPath:path,metadata:payload.track,coverBase64:payload.track.coverId?files.get(payload.track.coverId):null,coverMime:payload.track.coverMime};}
+ if(name==='publish'){if(!events.some(op=>op.id===payload.operation.id)){const op=structuredClone(payload.operation);if(op.kind==='track'){op.track.audioId='audio_'+(op.track.audioKey||op.key);files.set(op.track.audioId,Buffer.from(files.get(payload.source)));if(payload.cover){op.track.coverId='cover_'+crypto.createHash('sha256').update(payload.cover.base64).digest('hex');op.track.coverMime=payload.cover.mime;files.set(op.track.coverId,payload.cover.base64);}}events.push(op);}return {queued:true};}
+ if(name==='download'){const bytes=files.get(payload.track.audioId);assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),payload.track.audioKey||payload.key);const path=payload.destination||'/cloud/'+payload.key+'.mp3';files.set(path,Buffer.from(bytes));return {fullPath:path,size:bytes.length,lastModified:Date.now(),metadata:payload.track,coverBase64:payload.track.coverId?files.get(payload.track.coverId):null,coverMime:payload.track.coverMime};}
+ if(name==='acceptAudioRevision')return crypto.createHash('sha256').update(files.get(payload.source)).digest('hex')===(payload.track.audioKey||payload.key);
  if(name==='cover')return {base64:files.get(payload.id)};if(name==='removeLocal')return true;throw Error(name);
  }};}
 function peer(net){const lib=new Library(),cloud=new CloudSync(lib,{player:{stop(){},removeTrack(){}}},net.transport);cloud.states={};return {lib,cloud};}
@@ -119,4 +120,40 @@ test('foreground sync waits for durable native uploads before its final pull so 
  };
  add(phone,net,'New phone recording','new recording');await phone.cloud.sync();assert.equal(staged.length,0);assert.equal(phone.cloud.outbox.length,0);
  await pc.cloud.sync();assert.equal(pc.lib.getTracks()[0].title,'New phone recording');
+});
+
+const normalization=()=>({profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:6,integrated:-7,truePeak:-2,peakLimited:false});
+test('normalizing an original synchronizes its audio revision without duplicates or losing likes and playlist identity',async()=>{
+ const net=network(),phone=peer(net),pc=peer(net),original=add(phone,net,'Song','original song');original.liked=true;
+ phone.lib.playlists.set('mix',{id:'mix',name:'Mix',trackIds:[original.id]});await phone.cloud.sync();await pc.cloud.sync();
+ const logicalKey=Object.keys(phone.cloud.links)[0],local=pc.lib.getTracks()[0],localId=local.id,localPath=local.filePath;
+ const bytes=Buffer.from('the normalized original recording');net.files.set(original.filePath,bytes);
+ Object.assign(original,{audioKey:crypto.createHash('sha256').update(bytes).digest('hex'),fileSize:bytes.length,normalization:normalization()});
+ await phone.cloud.sync();await pc.cloud.sync();await phone.cloud.sync();await pc.cloud.sync();
+ assert.equal(phone.lib.getTracks().length,1);assert.equal(pc.lib.getTracks().length,1);assert.equal(pc.lib.getTracks()[0].id,localId);assert.equal(local.filePath,localPath);
+ assert.deepEqual(net.files.get(localPath),bytes);assert.equal(local.liked,true);assert.deepEqual(pc.lib.getPlaylistById('mix').trackIds,[localId]);
+ assert.equal(Object.keys(phone.cloud.links)[0],logicalKey);assert.equal(net.events.filter(op=>op.kind==='track').length,2);
+ assert.equal(model.cloudView(net.events).tracks.get(logicalKey).data.audioKey,original.audioKey);
+ assert.equal(local.normalization.profile,normalization().profile);assert.equal(local.cloudAudioKey,original.audioKey);
+});
+test('a new normalized audio revision supersedes an unpublished stale-byte operation',async()=>{
+ const net=network(),phone=peer(net),pc=peer(net),track=add(phone,net,'Song','before normalization'),base=phone.cloud.transport;let fail=true;
+ phone.cloud.transport=async(name,payload)=>{if(name==='publish'&&fail)throw Error('offline');return base(name,payload);};
+ await assert.rejects(phone.cloud.sync(),/offline/);const logical=Object.keys(phone.cloud.links)[0];
+ const bytes=Buffer.from('after normalization');net.files.set(track.filePath,bytes);Object.assign(track,{audioKey:crypto.createHash('sha256').update(bytes).digest('hex'),fileSize:bytes.length,normalization:normalization()});
+ fail=false;await phone.cloud.sync();await pc.cloud.sync();assert.equal(phone.cloud.outbox.length,0);assert.equal(net.events.filter(op=>op.kind==='track').length,1);
+ assert.equal(net.events.find(op=>op.kind==='track').key,logical);assert.deepEqual(net.files.get(pc.lib.getTracks()[0].filePath),bytes);
+ assert.equal(model.validOperation(operation('track',{track:{...song().track,audioKey:'../outside'}})),false);
+ assert.equal(model.validOperation(operation('track',{track:{...song().track,normalization:{...normalization(),gainDb:Infinity}}})),false);
+});
+
+test('a verified unchanged original disables legacy attenuation on the receiving device without redownloading',async()=>{
+ const net=network(),phone=peer(net),pc=peer(net),track=add(phone,net,'Peak constrained','unchanged-original');
+ await phone.cloud.sync();await pc.cloud.sync();const local=pc.lib.getTracks()[0],id=local.id,source=local.filePath;
+ track.audioKey=crypto.createHash('sha256').update(net.files.get(track.filePath)).digest('hex');
+ track.normalization={profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:0,integrated:-12,truePeak:0,peakLimited:true};
+ track.fileSize=net.files.get(track.filePath).length;await phone.cloud.sync();net.requests.length=0;await pc.cloud.sync();
+ assert.ok(net.requests.includes('acceptAudioRevision'));assert.equal(net.requests.includes('download'),false);
+ assert.equal(pc.lib.getTracks().length,1);assert.equal(local.id,id);assert.equal(local.filePath,source);assert.equal(local.normalization.profile,track.normalization.profile);
+ net.requests.length=0;await pc.cloud.sync();assert.equal(net.requests.includes('acceptAudioRevision'),false);
 });

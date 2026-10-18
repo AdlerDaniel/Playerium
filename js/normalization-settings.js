@@ -5,10 +5,11 @@ export function renderNormalizationSettings(ui,container){
  const status=section.querySelector('[data-normalization-status]'),progress=section.querySelector('progress'),count=section.querySelector('[data-normalization-count]'),check=section.querySelector('[data-normalization-check]'),run=section.querySelector('[data-normalization-run]');let busy=false,stop,timer;
  const preparation=()=>ui.audioPreparation||window.playerApp?.audioPreparation;
  function update(state){
+  if(state?.writesOriginal)section.querySelector('.settings-desc').textContent='Цель −7 LUFS. Одна постоянная поправка на всю песню, без приглушения во время воспроизведения. Результат сохраняется в исходном файле.';
   const supported=state?.supported,busyWork=state?.running||state?.active,complete=state?.checked&&state.total>0&&state.ready===state.total;
   status.textContent=!supported?'Доступно в приложении для Windows и Android.':state.error||(!state.checked?'Проверка готовности…':complete?'Нормализация завершена. Все скачанные треки готовы.':!state.total?'Скачанных треков пока нет.':busyWork?'Нормализация выполняется…':state.failed?'Есть треки, которые не удалось подготовить. Проверьте доступ к файлам и свободное место.':state.pending?'Треки ожидают фоновой обработки.':'Есть треки без нормализации. Можно запустить подготовку.');
   section.dataset.state=complete?'complete':busyWork?'working':state?.failed?'error':'idle';
-  count.textContent=state?.checked&&state.total?`Готово ${state.ready} из ${state.total}${state.failed?` · Ошибок: ${state.failed}`:''}`:'';
+  count.textContent=state?.checked&&state.total?`Готово ${state.ready} из ${state.total}${state.failed?` · Ошибок: ${state.failed}`:''}${state.peakLimited?` · ${state.peakLimited} тише цели для защиты от перегруза`:''}`:'';
   progress.hidden=!state?.total;progress.max=Math.max(1,state?.total||0);progress.value=state?.ready||0;
   run.disabled=busy||!supported||busyWork||!state?.total;check.disabled=busy||!supported;
   const latency=section.querySelector('[data-playback-latency]');latency.hidden=!Number.isFinite(ui.player.lastNativeStartMs);if(!latency.hidden)latency.textContent=`Последний запуск звука: ${Math.round(ui.player.lastNativeStartMs)} мс`;

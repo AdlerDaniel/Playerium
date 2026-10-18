@@ -67,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         instance = this;
+        PreparedAudio.recoverLater(this);
 
         updater = new AppUpdater(this);
         webView = new WebView(this);

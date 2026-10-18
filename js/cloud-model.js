@@ -12,6 +12,8 @@ export function validOperation(op) {
   }
   if(['track','delete','restore','like','member'].includes(op.kind)&&!hash.test(op.key))return false;
   if(op.kind==='track'&&(!op.track||!id.test(op.track.audioId)||typeof op.track.title!=='string'||typeof op.track.artist!=='string'||op.track.title.length>1000||op.track.artist.length>1000||!/^\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)$/i.test(op.track.ext)||!Number.isSafeInteger(op.track.size)||op.track.size<1||op.track.size>1073741824))return false;
+  if(op.kind==='track'&&op.track.audioKey!==undefined&&!hash.test(op.track.audioKey))return false;
+  if(op.kind==='track'&&op.track.normalization!==undefined){const n=op.track.normalization;if(!n||typeof n.profile!=='string'||!/^[a-z0-9-]{1,80}$/.test(n.profile)||!Number.isFinite(n.targetLUFS)||!Number.isFinite(n.gainDb)||!(n.integrated===null||Number.isFinite(n.integrated))||!(n.truePeak===null||Number.isFinite(n.truePeak)))return false;}
   if(op.kind==='restore'&&(!Array.isArray(op.deletes)||op.deletes.some(value=>!id.test(value))))return false;
   if(op.kind==='like'&&typeof op.liked!=='boolean')return false;
   if(op.kind==='member'&&typeof op.present!=='boolean')return false;

@@ -44,3 +44,26 @@ test('expired change cursor resets the snapshot and another account cannot send 
   await fs.mkdir(f.cloud.jobs,{recursive:true});await fs.writeFile(path.join(f.cloud.jobs,'other.json'),JSON.stringify({account:'other',operation:{id:'old'}}));await f.cloud.runJobs();assert.equal(await f.cloud.pendingCount(),0);assert.equal(f.net.calls.filter(x=>x.url.includes('/upload/')).length,0);
  }finally{await f.cleanup();}
 });
+
+test('queued uploads retain their original bytes while normalization replaces the local file',async()=>{
+ const f=await fixture();try{
+  const source=path.join(f.root,'Song.mp3'),before=Buffer.alloc(4*1024*1024+32,7);await fs.writeFile(source,before);const fingerprint=await f.cloud.fingerprint(source);
+  const operation={version:1,id:crypto.randomUUID(),device:'pc',clock:1,kind:'track',key:fingerprint.key,track:{title:'Song',artist:'Artist',ext:'.mp3',size:before.length,audioId:'pending'}};
+  f.net.setFailure(true);await f.cloud.publish({operation,source});await settle(f.cloud);
+  const jobFile=path.join(f.cloud.jobs,operation.id+'.json'),queued=JSON.parse(await fs.readFile(jobFile,'utf8'));assert.notEqual(queued.source,source);assert.deepEqual(await fs.readFile(queued.source),before);
+  const after=Buffer.from('new normalized original');await fs.writeFile(source,after);f.net.setFailure(false);await f.cloud.runJobs();
+  const event=(await f.cloud.pull(null)).events[0];assert.deepEqual(f.net.files.get(event.track.audioId).bytes,before);assert.deepEqual(await fs.readFile(source),after);
+  await assert.rejects(fs.stat(queued.source),error=>error.code==='ENOENT');
+ }finally{await f.cleanup();}
+});
+test('an audio revision atomically replaces the existing original and bypasses the old quiet-copy normalizer',async()=>{
+ const f=await fixture();try{
+  const source=path.join(f.root,'Song.mp3'),before=Buffer.from('original'),after=Buffer.from('normalized original'),key=crypto.createHash('sha256').update(before).digest('hex'),audioKey=crypto.createHash('sha256').update(after).digest('hex');await fs.writeFile(source,before);
+  f.net.files.set('normalized',{id:'normalized',size:String(after.length),appProperties:{playeriumCloud:'1',kind:'audio',key:'audio:'+audioKey},bytes:after});
+  const normalized={profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:7,integrated:-7,truePeak:-2,peakLimited:false},track={ext:'.mp3',size:after.length,audioId:'normalized',audioKey,normalization:normalized};
+  const prepared=new (require('../desktop-normalization').PreparedAudio)('missing-ffmpeg',path.join(f.root,'prepared'));f.cloud.onAudioRevision=(file,metadata)=>prepared.acceptOriginal(file,metadata);
+  const result=await f.cloud.download({key,track,destination:source,expectedCurrentHash:key});assert.equal(result.fullPath,source);assert.deepEqual(await fs.readFile(source),after);assert.equal(await prepared.prepare(source),source);
+  await assert.rejects(fs.stat(path.join(f.cloud.cache,key+'.mp3')),error=>error.code==='ENOENT');
+  const edited=Buffer.from('user edited original');await fs.writeFile(source,edited);await assert.rejects(f.cloud.download({key,track,destination:source,expectedCurrentHash:key}),/изменилась/);assert.deepEqual(await fs.readFile(source),edited);
+ }finally{await f.cleanup();}
+});
