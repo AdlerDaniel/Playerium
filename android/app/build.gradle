@@ -64,12 +64,16 @@ tasks.register("generateRegionalAppNames") {
     outputs.dir(regionalNameResources)
     doLast {
         def root = regionalNameResources.get().asFile
+        assert root.canonicalPath.startsWith(layout.buildDirectory.get().asFile.canonicalPath + File.separator)
+        delete(root)
         def languages = (Locale.getISOLanguages().toList() + ["fil"]).unique().findAll { !["in", "iw", "ji"].contains(it) }
         languages.findAll { it != "ru" }.each { language ->
-            def base = new File(root, language.length() == 2 ? "values-${language}" : "values-b+${language}")
+            // Android's resource matching still uses the legacy ISO codes.
+            def resourceLanguage = ["he":"iw", "id":"in", "yi":"ji"].get(language, language)
+            def base = new File(root, resourceLanguage.length() == 2 ? "values-${resourceLanguage}" : "values-b+${resourceLanguage}")
             base.mkdirs()
             new File(base, "strings.xml").setText('<resources><string name="app_name">Playerium</string><string name="title_activity_main">Playerium</string></resources>', "UTF-8")
-            def qualifier = language.length() == 2 ? "values-${language}-rRU" : "values-b+${language}+RU"
+            def qualifier = resourceLanguage.length() == 2 ? "values-${resourceLanguage}-rRU" : "values-b+${resourceLanguage}+RU"
             def folder = new File(root, qualifier)
             folder.mkdirs()
             new File(folder, "strings.xml").setText('<resources><string name="app_name">Проигрыватель</string><string name="title_activity_main">Проигрыватель</string></resources>', "UTF-8")
