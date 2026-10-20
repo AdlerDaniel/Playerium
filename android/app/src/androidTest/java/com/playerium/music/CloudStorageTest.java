@@ -136,33 +136,47 @@ public class CloudStorageTest {
             for(File file:cleanup)file.delete();
         }
     }
-    @Test public void firstDrivePullReadsEveryJournalEntryWithoutRedundantMetadataRequests()throws Exception{
+    @Test public void firstDrivePullCachesVersionedEventsAndRetriesWithoutReadingTheWholeJournal()throws Exception{
         Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);
         android.content.SharedPreferences prefs=cloud.prefs;String previous=prefs.getString("account",null);boolean enabled=prefs.getBoolean("enabled",false);
         java.lang.reflect.Field token=GoogleCloud.class.getDeclaredField("token"),until=GoogleCloud.class.getDeclaredField("tokenUntil");token.setAccessible(true);until.setAccessible(true);
         Object savedToken=token.get(cloud);long savedUntil=until.getLong(cloud);GoogleCloud.Connections connections=cloud.connections;
         java.util.concurrent.atomic.AtomicInteger reads=new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.CountDownLatch parallel=new java.util.concurrent.CountDownLatch(12);
+        java.util.concurrent.atomic.AtomicBoolean fail=new java.util.concurrent.atomic.AtomicBoolean(false);
+        String account="first-pull-test-"+java.util.UUID.randomUUID();
+        String owner=GoogleCloud.hex(java.security.MessageDigest.getInstance("SHA-256").digest(account.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        File eventCache=new File(context.getNoBackupFilesDir(),"cloud-events/"+owner);
         try{
-            prefs.edit().putBoolean("enabled",true).putString("account","first-pull-test").commit();token.set(cloud,"test-only");until.setLong(cloud,System.currentTimeMillis()+60000);
+            prefs.edit().putBoolean("enabled",true).putString("account",account).commit();token.set(cloud,"test-only");until.setLong(cloud,System.currentTimeMillis()+60000);
             org.json.JSONArray first=new org.json.JSONArray(),second=new org.json.JSONArray();
-            for(int i=0;i<1224;i++)(i<1000?first:second).put(new JSONObject().put("id","event_"+i).put("appProperties",new JSONObject().put("playeriumCloud","1").put("kind","event")));
-            String listing=new JSONObject().put("files",first).put("nextPageToken","more").toString(),nextListing=new JSONObject().put("files",second).toString();
+            for(int i=0;i<1224;i++)(i<1000?first:second).put(new JSONObject().put("id","event_"+i).put("version","1").put("appProperties",new JSONObject().put("playeriumCloud","1").put("kind","event")));
             cloud.connections=address->new java.net.HttpURLConnection(new java.net.URL(address)){
                 public void connect(){}public void disconnect(){}public boolean usingProxy(){return false;}
                 public int getResponseCode(){return 200;}
-                public java.io.InputStream getInputStream(){
+                public java.io.InputStream getInputStream()throws java.io.IOException{
+                    try{
                     String body;
                     if(address.contains("changes/startPageToken"))body="{\"startPageToken\":\"after-snapshot\"}";
-                    else if(address.contains("files?q="))body=address.contains("pageToken=more")?nextListing:listing;
-                    else if(address.contains("?alt=media")){reads.incrementAndGet();String id=address.substring(address.lastIndexOf('/')+1,address.indexOf('?'));body="{\"id\":\""+id+"\"}";}
+                    else if(address.contains("files?q="))body=address.contains("pageToken=more")?new JSONObject().put("files",second).toString():new JSONObject().put("files",first).put("nextPageToken","more").toString();
+                    else if(address.contains("?alt=media")){reads.incrementAndGet();parallel.countDown();assertTrue("Twelve event reads must run concurrently",parallel.await(5,java.util.concurrent.TimeUnit.SECONDS));String id=address.substring(address.lastIndexOf('/')+1,address.indexOf('?'));if(fail.get()&&id.equals("event_0"))throw new java.io.IOException("Interrupted event");body="{\"id\":\""+id+"\"}";}
                     else throw new AssertionError("Unexpected or redundant Drive request: "+address);
                     return new java.io.ByteArrayInputStream(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    }catch(java.io.IOException e){throw e;}catch(Exception e){throw new java.io.IOException(e);}
                 }
             };
             JSONObject result=(JSONObject)request("pull",new JSONObject());
             assertEquals("after-snapshot",result.getString("cursor"));assertEquals(1224,result.getJSONArray("events").length());assertEquals(1224,reads.get());
             java.util.Set<String> ids=new java.util.HashSet<>();for(int i=0;i<1224;i++)ids.add(result.getJSONArray("events").getJSONObject(i).getString("id"));assertEquals(1224,ids.size());
-        }finally{cloud.connections=connections;token.set(cloud,savedToken);until.setLong(cloud,savedUntil);prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();}
+            JSONObject cached=(JSONObject)request("pull",new JSONObject());assertEquals(1224,cached.getJSONArray("events").length());assertEquals(1224,reads.get());
+            // An edited event cannot be served from the old version's cache.
+            first.getJSONObject(0).put("version","2");fail.set(true);
+            try{request("pull",new JSONObject());org.junit.Assert.fail("A failed event must not return a new cursor");}catch(java.io.IOException expected){}
+            fail.set(false);JSONObject recovered=(JSONObject)request("pull",new JSONObject());
+            assertEquals("after-snapshot",recovered.getString("cursor"));assertEquals(1224,recovered.getJSONArray("events").length());assertEquals(1226,reads.get());
+            // Unknown versions must always be fetched, never trusted from cache.
+            first.getJSONObject(0).remove("version");request("pull",new JSONObject());assertEquals(1227,reads.get());
+        }finally{File[] cachedFiles=eventCache.listFiles();if(cachedFiles!=null)for(File file:cachedFiles)file.delete();eventCache.delete();cloud.connections=connections;token.set(cloud,savedToken);until.setLong(cloud,savedUntil);prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();}
     }
 
 }

@@ -31,15 +31,16 @@ export class CloudSync {
   try{
    await this.refreshStatus();if(!this.status.connected)return;
    this.setStage('Получение списка песен…');
+   let initialPull=false;
    const account=this.status.account;if(!account)throw Error('Не удалось определить аккаунт Google.');
    if(this.account!==account){this.account=account;const state=this.states[account]||{};this.events=state.events||[];this.outbox=state.outbox||[];this.links=state.links||{};this.cursor=state.cursor||null;this.shadow=state.shadow||{};
-    if(!this.cursor){this.setStage('Получение списка песен…');const initial=await this.request('pull',{});this.events=mergeOperations(this.events,initial.events||[]);this.cursor=initial.cursor;}
+    if(!this.cursor){this.setStage('Получение списка песен…');const initial=await this.request('pull',{});this.events=mergeOperations(this.events,initial.events||[]);this.cursor=initial.cursor;initialPull=true;}
    }
    // Capture edits before applying remote state, so an offline edit is not overwritten.
    this.setStage('Проверка изменений на устройстве…');await this.capture();
-   this.setStage('Получение изменений…');const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;
+   if(!initialPull){this.setStage('Получение изменений…');const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;}
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
-    this.setStage('Сохранение изменений…');let published=false;
+    this.setStage('Сохранение изменений…');let published=false;const outgoingPending=this.status.outgoingPending??this.status.pending;
     for(const op of [...this.outbox]){
      try{
     const link=this.links[op.key];
@@ -51,8 +52,10 @@ export class CloudSync {
      published=true;
      }catch(error){this.failures.push(error.message);}
    }
-    if(this.status.canFlush&&(published||this.status.pending))try{await this.request('flush');}catch(error){this.failures.push(error.message);}
-    this.setStage('Получение изменений…');const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;
+    if(this.status.canFlush&&(published||outgoingPending))try{await this.request('flush');}catch(error){this.failures.push(error.message);}
+    // Only outgoing work can add journal entries since the pull above.
+    // An incoming-only device can start importing immediately.
+    if(published||outgoingPending){this.setStage('Получение изменений…');const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;}
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
    // Preserve edits made while native transfers were running.
    await this.capture();
