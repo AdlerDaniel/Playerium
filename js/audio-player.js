@@ -326,20 +326,40 @@ export class AudioPlayer {
     }
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks, index: this.queueIndex, play, reset,requestedAt,
       repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume,
+      ...(this.isShuffle&&this.playbackOrder().length===this.queue.length?{playbackOrder:this.playbackOrder()}:{}),
       ...(Number.isFinite(position) ? {position:Math.max(0,Math.round(position * 1000))} : {}) }));
     this.nativeQueueSignature=signature;
     this.publishNativeArtwork();
   }
 
+  queueOrderKey() { return JSON.stringify(this.queue.map(t=>[t.id,t.nativeUri,t.queueEntry])); }
+
+  playbackOrder() {
+    if(!this.nativePlayback||!this.isShuffle)return this.queue.map((_,index)=>index);
+    return this.nativeOrderKey===this.queueOrderKey()?this.nativePlaybackOrder||[]:[];
+  }
+
+  getUpcomingQueue() {
+    const order=this.playbackOrder(),position=order.indexOf(this.queueIndex);
+    return (position<0&&this.queueIndex>=0?[]:order.slice(position+1)).map(index=>({track:this.queue[index],index}));
+  }
+
+  getNextQueueEntry() {
+    const upcoming=this.getUpcomingQueue();if(upcoming.length)return upcoming[0];
+    const first=this.playbackOrder()[0];
+    return this.repeatMode==='all'&&first!==undefined?{track:this.queue[first],index:first}:null;
+  }
+
   publishNativeArtwork() {
     if(!this.nativePlayback||!window.AndroidBridge?.storePlaybackArtwork)return;
-    for(const track of [this.currentTrack,this.queue[this.queueIndex+1]]) {
+    for(const track of [this.currentTrack,this.getNextQueueEntry()?.track]) {
       const blob=track?.pictureBlob;
       const nativeId=this.nativeMediaIds?.[this.queue.indexOf(track)]||track?.id;
       if(!blob||blob.size>4*1024*1024||this.nativeArtworkSent.get(nativeId)===blob)continue;
       this.nativeArtworkSent.set(nativeId,blob);
       if(this.nativeArtworkSent.size>256)this.nativeArtworkSent.delete(this.nativeArtworkSent.keys().next().value);
       blob.arrayBuffer().then(buffer=>{
+        if(this.nativeArtworkSent.get(nativeId)!==blob)return;
         const bytes=new Uint8Array(buffer),chunks=[];
         for(let i=0;i<bytes.length;i+=32768)chunks.push(String.fromCharCode(...bytes.subarray(i,i+32768)));
         window.AndroidBridge?.storePlaybackArtwork?.(nativeId,btoa(chunks.join('')));
@@ -384,9 +404,14 @@ export class AudioPlayer {
     this.queue = this.queue.map(track => {const base=this.library.getTrackById?.(track.id)
        || [...(this.library.tracks?.values() || [])].find(saved => saved.nativeUri === track.nativeUri)
        || track;if(track.queueOrigin==='manual'){const entry=track.queueEntry;Object.assign(track,base,{queueOrigin:'manual',queueEntry:entry});return track;}return base;});
+    const previousOrder=JSON.stringify(this.playbackOrder()),previousRepeat=this.repeatMode,previousShuffle=this.isShuffle;
     if(typeof state.shuffle==='boolean'&&this.isShuffle!==state.shuffle){this.isShuffle=state.shuffle;this.onShuffleChange?.(this.isShuffle);this.savePreferences();}
     const repeat=['off','one','all'][state.repeat];
     if(repeat&&repeat!==this.repeatMode){this.repeatMode=repeat;this.onRepeatChange?.(repeat);this.savePreferences();}
+    if(Array.isArray(state.playbackOrder)&&state.playbackOrder.length===this.queue.length&&new Set(state.playbackOrder).size===this.queue.length&&state.playbackOrder.every(index=>Number.isInteger(index)&&index>=0&&index<this.queue.length)){
+      this.nativePlaybackOrder=state.playbackOrder.slice();this.nativeOrderKey=this.queueOrderKey();
+    }else if(state.playbackOrder!==undefined){this.nativePlaybackOrder=null;this.nativeOrderKey=null;}
+    const orderChanged=previousOrder!==JSON.stringify(this.playbackOrder())||previousRepeat!==this.repeatMode||previousShuffle!==this.isShuffle;
     const nativeUri = state.tracks?.[state.index]?.uri;
     const index = Number.isInteger(state.index) && (this.queue[state.index]?.id === state.id || (nativeUri && this.queue[state.index]?.nativeUri === nativeUri)) ? state.index : this.queue.findIndex(t => t.id === state.id);
     if (index < 0) return;
@@ -396,7 +421,7 @@ export class AudioPlayer {
       this.onTrackChange?.(this.currentTrack);
       this.onQueueChange?.(this.queue, index);
       this.publishNativeArtwork();
-    }
+    }else if(orderChanged){this.onQueueChange?.(this.queue,index);this.publishNativeArtwork();}
     if (this.isPlaying !== state.playing) {
       this.isPlaying = state.playing;
       this.onPlayStateChange?.(state.playing);
@@ -546,7 +571,8 @@ export class AudioPlayer {
     this.isShuffle = !this.isShuffle;
     if(this.nativePlayback){
       window.AndroidBridge?.playbackCommand?.('shuffle',this.isShuffle?1:0);
-      this.savePreferences();this.onShuffleChange?.(this.isShuffle);return;
+      this.nativePlaybackOrder=null;this.nativeOrderKey=null;
+      this.savePreferences();this.onShuffleChange?.(this.isShuffle);this.onQueueChange?.(this.queue,this.queueIndex);return;
     }
     if (this.isShuffle) {
       this.queue = this.createShuffledQueue(this.originalQueue, this.currentTrack);
@@ -564,22 +590,18 @@ export class AudioPlayer {
     if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
   }
 
-  createShuffledQueue(list, current) {
+  createShuffledQueue(list, current, random = Math.random) {
     const result = [...list];
-    // Fisher-Yates shuffle
+    // Preserve the exact queue entry when the same recording occurs twice.
+    let currentIndex=current?result.indexOf(current):-1;
+    if(current&&currentIndex<0)currentIndex=result.findIndex(t=>current.queueEntry?t.queueEntry===current.queueEntry:t.id===current.id);
+    const pinned=currentIndex<0?null:result.splice(currentIndex,1)[0];
+    // Fisher-Yates gives every permutation of the remaining entries equal odds.
     for (let i = result.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(random() * (i + 1));
       [result[i], result[j]] = [result[j], result[i]];
     }
-
-    // Place current track at index 0 if present
-    if (current) {
-      const curIdx = result.findIndex((t) => t.id === current.id);
-      if (curIdx > -1) {
-        result.splice(curIdx, 1);
-        result.unshift(current);
-      }
-    }
+    if(pinned)result.unshift(pinned);
     return result;
   }
 
@@ -593,7 +615,7 @@ export class AudioPlayer {
     }
     if (this.nativePlayback) window.AndroidBridge.playbackCommand("repeat", ["off", "one", "all"].indexOf(this.repeatMode));
     if (this.onRepeatChange) this.onRepeatChange(this.repeatMode);
-    this.savePreferences();
+    this.savePreferences();this.onQueueChange?.(this.queue,this.queueIndex);
   }
 
   // --- Queue Actions ---
@@ -639,6 +661,12 @@ export class AudioPlayer {
 
   moveUpcomingTrack(from, to) {
     // Editing the future queue must never reload or seek the playing track.
+    if(this.nativePlayback&&this.isShuffle){
+      const order=this.playbackOrder().slice(),current=order.indexOf(this.queueIndex),start=order.indexOf(from),end=order.indexOf(to);
+      if(current<0||start<=current||end<=current||start===end)return;
+      order.splice(end,0,...order.splice(start,1));this.nativePlaybackOrder=order;
+      this.syncNativeQueue();this.onQueueChange?.(this.queue,this.queueIndex);return;
+    }
     const first=this.queueIndex+1;
     if(!Number.isInteger(from)||!Number.isInteger(to)||from<first||to<first||from>=this.queue.length||to>=this.queue.length||from===to)return;
     const [track]=this.queue.splice(from,1);this.queue.splice(to,0,track);
@@ -651,9 +679,10 @@ export class AudioPlayer {
   }
 
   removeUpcomingTracks(indices) {
-    const wanted=new Set(indices),removed=this.queue.filter((_,index)=>index>this.queueIndex&&wanted.has(index));
+    const future=new Set(this.getUpcomingQueue().map(entry=>entry.index)),wanted=new Set(indices.filter(index=>future.has(index))),removed=this.queue.filter((_,index)=>wanted.has(index));
     if(!removed.length)return;
-    this.queue=this.queue.filter((_,index)=>index<=this.queueIndex||!wanted.has(index));
+    this.queueIndex-=this.queue.filter((_,index)=>index<this.queueIndex&&wanted.has(index)).length;
+    this.queue=this.queue.filter((_,index)=>!wanted.has(index));
     const key=track=>track.queueEntry?'manual:'+track.queueEntry:'track:'+track.id,remaining=new Map();
     for(const track of this.queue)remaining.set(key(track),(remaining.get(key(track))||0)+1);
     this.originalQueue=this.originalQueue.filter(track=>{const count=remaining.get(key(track))||0;remaining.set(key(track),Math.max(0,count-1));return count>0;});

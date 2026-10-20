@@ -203,7 +203,7 @@ test('Android notification artwork sends durable image bytes once and follows au
   await new Promise(resolve=>setTimeout(resolve,0));
   assert.deepEqual(pictures.map(t=>[t.id,atob(t.bytes)]),[['art-a','cover-a'],['art-b','cover-b']]);
   p.syncNativeQueue();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(pictures.length,2);
-  p.applyNativeState({id:'art-b',index:1,playing:true,position:500,duration:42000,shuffle:true,repeat:1});
+  p.applyNativeState({id:'art-b',index:1,playing:true,position:500,duration:42000,shuffle:true,repeat:1,playbackOrder:[0,1,2]});
   await new Promise(resolve=>setTimeout(resolve,0));assert.equal(pictures.at(-1).id,'art-c');
   assert.equal(p.currentTrack,b);assert.equal(p.isShuffle,true);assert.equal(p.repeatMode,'one');
   p.next();p.prev();p.toggleShuffle();
@@ -309,4 +309,66 @@ test('adding a large batch to the native queue publishes once and preserves manu
  const p=new AudioPlayer({}),current={id:'current',nativeUri:'content://current'},future={id:'future',nativeUri:'content://future'};p.queue=[current,future];p.originalQueue=[...p.queue];p.currentTrack=current;p.queueIndex=0;p.nativePlayback=true;p.isPlaying=true;
  p.addTracksToQueue(Array.from({length:183},(_,i)=>({id:'batch-'+i,nativeUri:'content://batch/'+i})));
  assert.equal(writes.length,1);assert.equal(p.queue.length,185);assert.equal(p.queue[1].id,'batch-0');assert.equal(p.queue[183].id,'batch-182');assert.equal(p.queue[184],future);assert.equal(p.currentTrack,current);assert.equal(new Set(p.queue.slice(1,184).map(t=>t.queueEntry)).size,183);
+});
+
+test('native shuffle previews and artwork use the service permutation even when the current track does not change',async()=>{
+ const {AudioPlayer}=await modules(),pictures=[],commands=[];
+ window.AndroidBridge={setPlaybackQueue(){},playbackCommand:(...args)=>commands.push(args),storePlaybackArtwork:(id,bytes)=>pictures.push(id)};
+ const tracks=['a','b','c','d'].map(id=>({id,nativeUri:'content://'+id,pictureBlob:new Blob(['art-'+id])}));
+ const p=new AudioPlayer({getTrackById:id=>tracks.find(t=>t.id===id)});p.nativePlayback=true;p.queue=tracks;p.currentTrack=tracks[0];p.queueIndex=0;
+ let updates=0;p.onQueueChange=()=>updates++;
+ const snapshot={id:'a',index:0,playing:false,position:0,duration:10000,shuffle:true,repeat:0,playbackOrder:[0,3,1,2]};
+ p.applyNativeState(snapshot);
+ assert.deepEqual(p.getUpcomingQueue().map(entry=>entry.index),[3,1,2]);assert.equal(p.getNextQueueEntry().track.id,'d');assert.equal(updates,1);
+ await new Promise(resolve=>setTimeout(resolve,0));assert.deepEqual(pictures,['a','d']);
+ p.applyNativeState({...snapshot,playbackOrder:[0,2,3,1]});assert.equal(p.getNextQueueEntry().index,2);assert.equal(updates,2);
+ p.next();assert.deepEqual(commands,[['next',0]]);
+ p.applyNativeState({...snapshot,id:'c',index:2,playbackOrder:[0,3,1,2]});assert.equal(p.getNextQueueEntry(),null);
+ p.applyNativeState({...snapshot,id:'c',index:2,repeat:2});assert.equal(p.getNextQueueEntry().index,0);
+ p.applyNativeState({...snapshot,shuffle:false});assert.equal(p.getNextQueueEntry().index,1);
+});
+
+test('native shuffled future entries retain exact indices when reordered or removed before the physical current index',async()=>{
+ const {AudioPlayer}=await modules(),sent=[];window.AndroidBridge={setPlaybackQueue:json=>sent.push(JSON.parse(json))};
+ const tracks=['a','b','c','d'].map(id=>({id,nativeUri:'content://'+id}));
+ const p=new AudioPlayer({getTrackById:id=>tracks.find(t=>t.id===id)});p.nativePlayback=true;p.queue=tracks;p.originalQueue=tracks.slice();
+ p.applyNativeState({id:'c',index:2,playing:false,position:0,duration:10000,shuffle:true,repeat:0,playbackOrder:[3,2,1,0]});
+ assert.deepEqual(p.getUpcomingQueue().map(e=>e.index),[1,0]);p.moveUpcomingTrack(0,1);
+ assert.deepEqual(sent.at(-1).playbackOrder,[3,2,0,1]);assert.equal(sent.at(-1).index,2);assert.equal(sent.at(-1).reset,false);assert.equal(p.currentTrack.id,'c');
+ p.removeUpcomingTracks([3,0]);assert.deepEqual(p.queue.map(t=>t.id),['b','c','d']);assert.equal(p.queueIndex,1);assert.equal(p.currentTrack.id,'c');
+ assert.equal(sent.at(-1).index,1);assert.deepEqual(p.originalQueue.map(t=>t.id),['b','c','d']);
+});
+
+test('a late artwork encoding cannot overwrite a newer cover for the same native recording',async()=>{
+ const {AudioPlayer}=await modules(),sent=[];window.AndroidBridge={storePlaybackArtwork:(id,bytes)=>sent.push(atob(bytes))};
+ let finishOld;const old={size:3,arrayBuffer:()=>new Promise(resolve=>finishOld=resolve)},current=new Blob(['new']);
+ const track={id:'same',nativeUri:'content://same',pictureBlob:old},p=new AudioPlayer({});
+ p.nativePlayback=true;p.queue=[track];p.queueIndex=0;p.currentTrack=track;p.publishNativeArtwork();
+ track.pictureBlob=current;p.publishNativeArtwork();await new Promise(resolve=>setTimeout(resolve,0));
+ finishOld(new TextEncoder().encode('old').buffer);await new Promise(resolve=>setTimeout(resolve,0));
+ assert.deepEqual(sent,['new']);
+});
+
+test('invalid native shuffle permutations cannot select an unrelated next track',async()=>{
+ const {AudioPlayer}=await modules(),tracks=['a','b','c'].map(id=>({id,nativeUri:'content://'+id}));
+ const p=new AudioPlayer({getTrackById:id=>tracks.find(t=>t.id===id)});p.nativePlayback=true;p.queue=tracks;p.currentTrack=tracks[0];p.queueIndex=0;
+ for(const playbackOrder of [[0,0,1],[0,1,99],[0,1],['0',1,2]]){
+  p.applyNativeState({id:'a',index:0,shuffle:true,playing:false,repeat:0,position:0,duration:10000,playbackOrder});
+  assert.equal(p.getNextQueueEntry(),null);
+ }
+});
+
+test('desktop shuffle distributes the remaining entries evenly while preserving the active occurrence',async()=>{
+ const {AudioPlayer}=await modules(),p=new AudioPlayer({});
+ let seed=70137;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+ const tracks=Array.from({length:5},(_,id)=>({id:String(id)})),positions=Array.from({length:4},()=>[0,0,0,0]),permutations=new Map();
+ for(let i=0;i<24000;i++){
+  const result=p.createShuffledQueue(tracks,tracks[2],random);assert.equal(result[0],tracks[2]);assert.equal(new Set(result).size,5);
+  const key=result.map(t=>t.id).join();permutations.set(key,(permutations.get(key)||0)+1);
+  const others=[tracks[0],tracks[1],tracks[3],tracks[4]];for(let at=1;at<5;at++)positions[at-1][others.indexOf(result[at])]++;
+ }
+ assert.equal(permutations.size,24);for(const count of permutations.values())assert.ok(count>800&&count<1200,'Uneven permutation distribution: '+count);
+ for(const row of positions)for(const count of row)assert.ok(count>5600&&count<6400,'Favoured position: '+count);
+ const current={id:'duplicate',queueEntry:'second'},other={id:'duplicate',queueEntry:'first'},list=[other,current,{id:'third'}];
+ const shuffled=p.createShuffledQueue(list,current,random);assert.equal(shuffled[0],current);assert.equal(shuffled.filter(t=>t===current).length,1);assert.ok(shuffled.includes(other));assert.deepEqual(list,[other,current,list[2]]);
 });

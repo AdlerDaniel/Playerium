@@ -29,3 +29,25 @@ test('playlist collage and uploaded cover persist; only an exact artist match in
  Object.defineProperty(a.music,'available',{value:true});a.music.request=async(op,payload)=>op==='catalog'?{data:[{name:payload.query==='Wrong artist'?'Another artist':'Portrait Artist',picture_big:'https://api.deezer.com/portrait.jpg'}]}:{type:'image/png',base64:first.split(',')[1]};const correct=document.createElement('div'),wrong=document.createElement('div');document.body.append(correct,wrong);mountArtistPortrait(a.ui,correct,{name:'Portrait Artist'});mountArtistPortrait(a.ui,wrong,{name:'Wrong artist'});const deadline=Date.now()+2000;while(Date.now()<deadline&&!correct.querySelector('img'))await new Promise(r=>setTimeout(r,10));return {cells,custom,correct:!!correct.querySelector('img'),wrong:!!wrong.querySelector('img'),stored:!!(await a.library.getFromStore('settings','portrait:portrait artist'))};});
  expect(result).toEqual({cells:4,custom:true,correct:true,wrong:false,stored:true});
 });
+
+for(const mobile of [false,true])test(`native shuffle updates the next card and queue without changing the playing song (${mobile?'phone':'PC'})`,async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));await prepare(page,mobile);
+ await page.evaluate((mobile)=>{
+  const app=window.playerApp,p=app.player,tracks=app.library.getTracks();
+  tracks.push({id:'third',title:'Third',artist:'Artist',duration:8});
+  tracks.forEach((t,i)=>{t.nativeUri='content://fixture/'+i;app.library.tracks.set(t.id,t);});
+  p.audio.pause();p.nativePlayback=true;p.queue=tracks;p.originalQueue=tracks.slice();p.queueIndex=0;p.currentTrack=tracks[0];
+  window.AndroidBridge={playbackCommand:(command)=>{window.lastNativeCommand=command;}};
+  window.nativeFixtureState={id:tracks[0].id,index:0,playing:false,position:0,duration:8000,shuffle:true,repeat:0,playbackOrder:[0,2,1]};
+  p.onTrackChange?.(tracks[0]);p.applyNativeState(window.nativeFixtureState);
+  if(mobile)app.ui.experience.openCinema();else app.ui.openRightPanel('queue');
+ },mobile);
+ const host=mobile?'.cinema-upcoming':'#rightPanelContent';
+ await expect(page.locator(host+' .next-song-card strong')).toHaveText('Third');
+ if(!mobile)await expect(page.locator('.queue-list .queue-item-title')).toHaveText(['Third','Second']);
+ await page.evaluate(()=>window.playerApp.player.applyNativeState({...window.nativeFixtureState,playbackOrder:[0,1,2]}));
+ await expect(page.locator(host+' .next-song-card strong')).toHaveText('Second');
+ if(!mobile)await expect(page.locator('.queue-list .queue-item-title')).toHaveText(['Second','Third']);
+ await page.locator(host+' .next-song-card').click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('next');
+ expect(errors).toEqual([]);
+});
