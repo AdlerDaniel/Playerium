@@ -357,3 +357,18 @@ test('invalid native shuffle permutations cannot select an unrelated next track'
   assert.equal(p.getNextQueueEntry(),null);
  }
 });
+
+test('desktop shuffle distributes the remaining entries evenly while preserving the active occurrence',async()=>{
+ const {AudioPlayer}=await modules(),p=new AudioPlayer({});
+ let seed=70137;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+ const tracks=Array.from({length:5},(_,id)=>({id:String(id)})),positions=Array.from({length:4},()=>[0,0,0,0]),permutations=new Map();
+ for(let i=0;i<24000;i++){
+  const result=p.createShuffledQueue(tracks,tracks[2],random);assert.equal(result[0],tracks[2]);assert.equal(new Set(result).size,5);
+  const key=result.map(t=>t.id).join();permutations.set(key,(permutations.get(key)||0)+1);
+  const others=[tracks[0],tracks[1],tracks[3],tracks[4]];for(let at=1;at<5;at++)positions[at-1][others.indexOf(result[at])]++;
+ }
+ assert.equal(permutations.size,24);for(const count of permutations.values())assert.ok(count>800&&count<1200,'Uneven permutation distribution: '+count);
+ for(const row of positions)for(const count of row)assert.ok(count>5600&&count<6400,'Favoured position: '+count);
+ const current={id:'duplicate',queueEntry:'second'},other={id:'duplicate',queueEntry:'first'},list=[other,current,{id:'third'}];
+ const shuffled=p.createShuffledQueue(list,current,random);assert.equal(shuffled[0],current);assert.equal(shuffled.filter(t=>t===current).length,1);assert.ok(shuffled.includes(other));assert.deepEqual(list,[other,current,list[2]]);
+});

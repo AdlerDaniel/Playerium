@@ -43,3 +43,27 @@ regressions cover the next card and queue on desktop and phone layouts.
 in a fixed shuffled order. It checks both the platform MediaController bitmap
 and the posted notification title/large icon. Android emulator verification runs
 in GitHub Actions; no physical tablet is connected to this workspace.
+
+## Shuffle randomness follow-up
+
+The desktop Fisher-Yates shuffle was already uniform; Android's enable command
+only enabled ExoPlayer's existing permutation, so disabling/re-enabling shuffle
+reused the same sequence. It could also leave already preceding positions out of
+the remaining traversal when enabled in the middle of the queue.
+
+Both in-app and notification toggle commands now create a fresh Fisher-Yates
+permutation on off -> on, with the active occurrence first. New queues also get a
+fresh order; ordinary updates, explicit queue edits and restored sessions retain
+their existing order. Playback position is not changed. A fresh shuffle is random
+and may legitimately match a previous order, especially for short queues.
+
+A shuffled pass intentionally has a stable order: next/previous must agree with
+the preview and each queued occurrence plays once before wrapping. Repeat-all
+reuses that order until shuffle is enabled again or a new queue is started.
+
+Native and desktop distribution tests each generate 24,000 seeded shuffles with
+four remaining entries, check all 24 permutations, and check the frequency of
+each entry in each slot. Native tests also cover empty/large queues and exact
+occurrence preservation. The pure Java JUnit tests run locally under JDK 17;
+MediaCardTest verifies the actual toggle preserves position, anchors the active
+item, keeps ordinary queue updates stable and advances to the reported next item.

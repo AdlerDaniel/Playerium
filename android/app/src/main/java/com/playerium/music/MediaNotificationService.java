@@ -54,6 +54,7 @@ public class MediaNotificationService extends MediaSessionService {
         context.startService(new Intent(context, MediaNotificationService.class).setAction("playerium.SET_QUEUE"));
     }
     private ExoPlayer player;
+    private final java.util.Random shuffleRandom=new java.security.SecureRandom();
     private MediaSession session;
     private Equalizer equalizer;
     private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -137,7 +138,7 @@ public class MediaNotificationService extends MediaSessionService {
                         .setAvailablePlayerCommands(defaults.availablePlayerCommands).build();
                 }
                 @Override public ListenableFuture<SessionResult> onCustomCommand(MediaSession mediaSession,MediaSession.ControllerInfo controller,SessionCommand command,android.os.Bundle args){
-                    if(SHUFFLE.equals(command))player.setShuffleModeEnabled(!player.getShuffleModeEnabled());
+                    if(SHUFFLE.equals(command))setShuffle(!player.getShuffleModeEnabled());
                     else if(REPEAT.equals(command))player.setRepeatMode((player.getRepeatMode()+1)%3);
                     else return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED));
                     return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
@@ -224,13 +225,16 @@ public class MediaNotificationService extends MediaSessionService {
         }
         player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
         player.setVolume((float)data.optDouble("volume", 0.8));
-        player.setShuffleModeEnabled(data.optBoolean("shuffle"));
+        boolean suppliedValid=false;
         JSONArray suppliedOrder=data.optJSONArray("playbackOrder");
         if(suppliedOrder!=null&&suppliedOrder.length()==player.getMediaItemCount()){
             int[] order=new int[suppliedOrder.length()];boolean[] seen=new boolean[order.length];boolean valid=true;
             for(int i=0;i<order.length;i++){int entry=suppliedOrder.optInt(i,-1);if(entry<0||entry>=order.length||seen[entry]){valid=false;break;}seen[entry]=true;order[i]=entry;}
-            if(valid)player.setShuffleOrder(new androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(order,new java.util.Random().nextLong()));
+            if(valid){player.setShuffleOrder(new androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(order,shuffleRandom.nextLong()));suppliedValid=true;}
         }
+        boolean shuffle=data.optBoolean("shuffle");
+        if(!suppliedValid&&shuffle&&(!player.getShuffleModeEnabled()||(!sameQueue&&!preserve)))freshShuffle();
+        player.setShuffleModeEnabled(shuffle);
         savePlayback();
     }
 
@@ -327,6 +331,17 @@ public class MediaNotificationService extends MediaSessionService {
                 connect.acknowledge(device,message.getString("id"));
     }
 
+    private void freshShuffle(){
+        int[] order=PlaybackShuffle.create(player.getMediaItemCount(),player.getCurrentMediaItemIndex(),shuffleRandom);
+        player.setShuffleOrder(new androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(order,shuffleRandom.nextLong()));
+    }
+    private void setShuffle(boolean enabled){
+        // A repeated status/queue update must not change the next song. A new
+        // off -> on gesture deliberately creates a fresh permutation.
+        if(enabled&&!player.getShuffleModeEnabled())freshShuffle();
+        player.setShuffleModeEnabled(enabled);
+    }
+
     private void command(String command, double value) {
         switch (command) {
             case "play": player.play(); break;
@@ -335,7 +350,7 @@ public class MediaNotificationService extends MediaSessionService {
             case "seek": player.seekTo(Math.max(0, (long)value)); break;
             case "volume": player.setVolume((float)Math.max(0, Math.min(1, value))); break;
             case "repeat": player.setRepeatMode((int)value); break;
-            case "shuffle": player.setShuffleModeEnabled(value!=0); break;
+            case "shuffle": setShuffle(value!=0); break;
             case "next":
                 int next=player.getNextMediaItemIndex();if(next==C.INDEX_UNSET)player.pause();else player.seekTo(next,0);break;
             case "previous":

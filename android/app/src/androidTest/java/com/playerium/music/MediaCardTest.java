@@ -148,6 +148,22 @@ public class MediaCardTest {
             java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();late.compress(Bitmap.CompressFormat.PNG,100,bytes);late.recycle();
             assertNotNull(PlaybackArtwork.save(context,prefix+2,bytes.toByteArray()));MediaNotificationService.artworkChanged(prefix+2);
             assertCover(context,controls,"Cover order 2",Color.GREEN);
+            controls.getTransportControls().sendCustomAction("playerium.SHUFFLE",android.os.Bundle.EMPTY);
+            long toggleEnd=System.currentTimeMillis()+5000;
+            while(new JSONObject(MediaNotificationService.currentState()).optBoolean("shuffle")&&System.currentTimeMillis()<toggleEnd)Thread.sleep(50);
+            assertFalse(new JSONObject(MediaNotificationService.currentState()).optBoolean("shuffle"));
+            long position=new JSONObject(MediaNotificationService.currentState()).optLong("position");
+            controls.getTransportControls().sendCustomAction("playerium.SHUFFLE",android.os.Bundle.EMPTY);
+            toggleEnd=System.currentTimeMillis()+5000;JSONObject shuffled;
+            do{shuffled=new JSONObject(MediaNotificationService.currentState());if(shuffled.optBoolean("shuffle"))break;Thread.sleep(50);}while(System.currentTimeMillis()<toggleEnd);
+            assertTrue(shuffled.optBoolean("shuffle"));assertEquals(2,shuffled.getJSONArray("playbackOrder").getInt(0));
+            assertEquals(prefix+2,shuffled.getString("id"));assertTrue(shuffled.optLong("position")>=position);
+            String stableOrder=shuffled.getJSONArray("playbackOrder").toString();
+            String update=new JSONObject().put("tracks",tracks).put("index",2).put("play",true).put("shuffle",true).toString();
+            instrumentation.runOnMainSync(()->MediaNotificationService.submitQueue(context,update));Thread.sleep(250);
+            assertEquals(stableOrder,new JSONObject(MediaNotificationService.currentState()).getJSONArray("playbackOrder").toString());
+            int expectedNext=new JSONArray(stableOrder).getInt(1);controls.getTransportControls().skipToNext();waitFor(prefix+expectedNext,true,10000);
+
         }finally{
             context.stopService(new Intent(context,MediaNotificationService.class));file.delete();instrumentation.runOnMainSync(activity::finish);
         }

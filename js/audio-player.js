@@ -590,22 +590,18 @@ export class AudioPlayer {
     if (this.onQueueChange) this.onQueueChange(this.queue, this.queueIndex);
   }
 
-  createShuffledQueue(list, current) {
+  createShuffledQueue(list, current, random = Math.random) {
     const result = [...list];
-    // Fisher-Yates shuffle
+    // Preserve the exact queue entry when the same recording occurs twice.
+    let currentIndex=current?result.indexOf(current):-1;
+    if(current&&currentIndex<0)currentIndex=result.findIndex(t=>current.queueEntry?t.queueEntry===current.queueEntry:t.id===current.id);
+    const pinned=currentIndex<0?null:result.splice(currentIndex,1)[0];
+    // Fisher-Yates gives every permutation of the remaining entries equal odds.
     for (let i = result.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(random() * (i + 1));
       [result[i], result[j]] = [result[j], result[i]];
     }
-
-    // Place current track at index 0 if present
-    if (current) {
-      const curIdx = result.findIndex((t) => t.id === current.id);
-      if (curIdx > -1) {
-        result.splice(curIdx, 1);
-        result.unshift(current);
-      }
-    }
+    if(pinned)result.unshift(pinned);
     return result;
   }
 
