@@ -16,6 +16,22 @@ import java.util.Arrays;
 /** Private, bounded artwork cache usable after the WebView and its blob URLs are gone. */
 final class PlaybackArtwork {
     private static final java.util.concurrent.ThreadPoolExecutor writer=new java.util.concurrent.ThreadPoolExecutor(1,1,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(8),new java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy());
+    // Always give Media3 an image, including while the current cover is loading.
+    // Its 1.3.x notification provider otherwise leaves an old image callback pending.
+    private static final class Placeholder {
+        static final byte[] PNG=create();
+        private static byte[] create(){
+            Bitmap bitmap=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);
+            bitmap.eraseColor(android.graphics.Color.rgb(32,32,32));
+            ByteArrayOutputStream out=new ByteArrayOutputStream();
+            try{bitmap.compress(Bitmap.CompressFormat.PNG,100,out);return out.toByteArray();}finally{bitmap.recycle();}
+        }
+    }
+    static androidx.media3.common.MediaMetadata.Builder metadata(Context context,String id,androidx.media3.common.MediaMetadata.Builder builder){
+        Uri cached=find(context,id);
+        return cached!=null?builder.setArtworkData(null,androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER).setArtworkUri(cached)
+            :builder.setArtworkUri(null).setArtworkData(Placeholder.PNG,androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER);
+    }
     static void storeAsync(Context context,String id,String encoded){
         if(id==null||encoded==null||id.isEmpty()||id.length()>512||encoded.length()>6*1024*1024)return;
         Context app=context.getApplicationContext();

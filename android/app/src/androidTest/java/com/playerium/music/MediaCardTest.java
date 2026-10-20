@@ -95,6 +95,63 @@ public class MediaCardTest {
         assertNull(PlaybackArtwork.save(context,"../cache-version-fixture",new byte[]{1,2,3}));
         assertEquals(previous,PlaybackArtwork.find(context,"../cache-version-fixture"));
     }
+    private static void assertCover(Context context,MediaController controls,String title,int color)throws Exception{
+        long deadline=System.currentTimeMillis()+10000;
+        while(System.currentTimeMillis()<deadline){
+            MediaMetadata metadata=controls.getMetadata();Bitmap bitmap=artwork(metadata);
+            if(metadata!=null&&title.equals(metadata.getString(MediaMetadata.METADATA_KEY_TITLE))&&bitmap!=null){
+                int actual=bitmap.getPixel(0,0);
+                if(matchesColor(actual,color)){
+                    NotificationManager manager=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
+                    for(StatusBarNotification posted:manager.getActiveNotifications()){
+                        Notification notification=posted.getNotification();
+                        if(!title.equals(String.valueOf(notification.extras.getCharSequence(Notification.EXTRA_TITLE)))||notification.getLargeIcon()==null)continue;
+                        android.graphics.drawable.Drawable icon=notification.getLargeIcon().loadDrawable(context);if(icon==null)continue;
+                        Bitmap rendered=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);icon.setBounds(0,0,32,32);icon.draw(new Canvas(rendered));
+                        int postedColor=rendered.getPixel(16,16);rendered.recycle();if(matchesColor(postedColor,color))return;
+                    }
+                }
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("System artwork did not follow "+title);
+    }
+    private static boolean matchesColor(int actual,int expected){
+        return Math.abs(Color.red(actual)-Color.red(expected))<12&&Math.abs(Color.green(actual)-Color.green(expected))<12&&Math.abs(Color.blue(actual)-Color.blue(expected))<12;
+    }
+    @Test public void shuffledNextAndCoverlessTransitionsFollowTheCurrentMediaItem()throws Exception{
+        android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();Context context=instrumentation.getTargetContext();
+        android.app.Activity activity=instrumentation.startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        File file=fixture(context,30);String prefix="cover-order-"+java.util.UUID.randomUUID();JSONArray tracks=new JSONArray();
+        try{
+            for(int i=0;i<3;i++){
+                String id=prefix+i;
+                if(i<2){
+                    Bitmap image=Bitmap.createBitmap(64,64,Bitmap.Config.ARGB_8888);image.eraseColor(i==0?Color.RED:Color.BLUE);
+                    java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();image.compress(Bitmap.CompressFormat.PNG,100,bytes);image.recycle();
+                    assertNotNull(PlaybackArtwork.save(context,id,bytes.toByteArray()));
+                }
+                tracks.put(new JSONObject().put("id",id).put("uri",android.net.Uri.fromFile(file).toString()).put("title","Cover order "+i).put("artist","Fixture"));
+            }
+            String queue=new JSONObject().put("tracks",tracks).put("play",true).put("reset",true).put("shuffle",true).put("playbackOrder",new JSONArray("[0,2,1]")).toString();
+            instrumentation.runOnMainSync(()->MediaNotificationService.submitQueue(context,queue));waitFor(prefix+0,true,15000);
+            Notification card=foregroundCard(context);MediaController controls=new MediaController(context,(MediaSession.Token)card.extras.getParcelable(Notification.EXTRA_MEDIA_SESSION));
+            assertCover(context,controls,"Cover order 0",Color.RED);
+            JSONObject state=new JSONObject(MediaNotificationService.currentState());assertEquals("[0,2,1]",state.getJSONArray("playbackOrder").toString());
+            controls.getTransportControls().skipToNext();waitFor(prefix+2,true,10000);
+            assertCover(context,controls,"Cover order 2",Color.rgb(32,32,32));
+            controls.getTransportControls().skipToNext();waitFor(prefix+1,true,10000);assertCover(context,controls,"Cover order 1",Color.BLUE);
+            controls.getTransportControls().seekTo(0);Thread.sleep(200);
+            controls.getTransportControls().skipToPrevious();waitFor(prefix+2,true,10000);assertCover(context,controls,"Cover order 2",Color.rgb(32,32,32));
+            // A cover arriving after the coverless item started replaces its placeholder.
+            Bitmap late=Bitmap.createBitmap(64,64,Bitmap.Config.ARGB_8888);late.eraseColor(Color.GREEN);
+            java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();late.compress(Bitmap.CompressFormat.PNG,100,bytes);late.recycle();
+            assertNotNull(PlaybackArtwork.save(context,prefix+2,bytes.toByteArray()));MediaNotificationService.artworkChanged(prefix+2);
+            assertCover(context,controls,"Cover order 2",Color.GREEN);
+        }finally{
+            context.stopService(new Intent(context,MediaNotificationService.class));file.delete();instrumentation.runOnMainSync(activity::finish);
+        }
+    }
     private static Bitmap artwork(MediaMetadata metadata){
         if(metadata==null)return null;
         Bitmap art=metadata.getBitmap(MediaMetadata.METADATA_KEY_ART);

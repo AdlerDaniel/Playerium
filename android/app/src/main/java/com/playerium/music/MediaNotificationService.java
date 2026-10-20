@@ -184,8 +184,8 @@ public class MediaNotificationService extends MediaSessionService {
             JSONObject t = tracks.getJSONObject(i);
             Uri uri = Uri.parse(t.getString("uri"));
             android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));extras.putString("cloudKey",t.optString("cloudKey"));extras.putString("queueOrigin","manual".equals(t.optString("queueOrigin"))?"manual":"collection");extras.putString("queueEntry",t.optString("queueEntry").substring(0,Math.min(160,t.optString("queueEntry").length())));
-            MediaMetadata metadata = new MediaMetadata.Builder().setTitle(t.optString("title"))
-                .setArtist(t.optString("artist")).setExtras(extras).build();
+            MediaMetadata metadata = PlaybackArtwork.metadata(this,t.getString("id"),new MediaMetadata.Builder().setTitle(t.optString("title"))
+                .setArtist(t.optString("artist")).setExtras(extras)).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
             indices.put(t.getString("id"),i);
         }
@@ -224,6 +224,12 @@ public class MediaNotificationService extends MediaSessionService {
         player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
         player.setVolume((float)data.optDouble("volume", 0.8));
         player.setShuffleModeEnabled(data.optBoolean("shuffle"));
+        JSONArray suppliedOrder=data.optJSONArray("playbackOrder");
+        if(suppliedOrder!=null&&suppliedOrder.length()==player.getMediaItemCount()){
+            int[] order=new int[suppliedOrder.length()];boolean[] seen=new boolean[order.length];boolean valid=true;
+            for(int i=0;i<order.length;i++){int entry=suppliedOrder.optInt(i,-1);if(entry<0||entry>=order.length||seen[entry]){valid=false;break;}seen[entry]=true;order[i]=entry;}
+            if(valid)player.setShuffleOrder(new androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(order,new java.util.Random().nextLong()));
+        }
         savePlayback();
     }
 
@@ -247,7 +253,7 @@ public class MediaNotificationService extends MediaSessionService {
         for(int index=0;index<player.getMediaItemCount();index++){
             MediaItem item=player.getMediaItemAt(index);
             if(item.mediaId.equals(id)&&!artwork.equals(item.mediaMetadata.artworkUri))
-                player.replaceMediaItem(index,item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkUri(artwork).build()).build());
+                player.replaceMediaItem(index,item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkData(null,MediaMetadata.PICTURE_TYPE_FRONT_COVER).setArtworkUri(artwork).build()).build());
         }
     }
 
@@ -275,6 +281,7 @@ public class MediaNotificationService extends MediaSessionService {
             JSONObject data=new JSONObject().put("tracks",tracks).put("index",player.getCurrentMediaItemIndex())
                 .put("play",player.getPlayWhenReady()).put("position",Math.max(0,player.getCurrentPosition()))
                 .put("volume",player.getVolume()).put("shuffle",player.getShuffleModeEnabled()).put("repeat",player.getRepeatMode()==Player.REPEAT_MODE_ONE?"one":player.getRepeatMode()==Player.REPEAT_MODE_ALL?"all":"off");
+            if(player.getShuffleModeEnabled())data.put("playbackOrder",playbackOrder());
             playbackPrefs.edit().putString("queue",data.toString()).apply();lastSaved=SystemClock.elapsedRealtime();
         }catch(Exception ignored){}
     }
@@ -356,6 +363,14 @@ public class MediaNotificationService extends MediaSessionService {
         } catch (Exception ignored) { /* Audio effects are optional on some devices. */ }
     }
 
+    private JSONArray playbackOrder(){
+        JSONArray order=new JSONArray();androidx.media3.common.Timeline timeline=player.getCurrentTimeline();
+        int index=timeline.getFirstWindowIndex(player.getShuffleModeEnabled());
+        while(index!=C.INDEX_UNSET&&order.length()<player.getMediaItemCount()){
+            order.put(index);index=timeline.getNextWindowIndex(index,Player.REPEAT_MODE_OFF,player.getShuffleModeEnabled());
+        }
+        return order;
+    }
     private JSONObject state() {
         JSONObject data = new JSONObject();
         try {
@@ -374,6 +389,7 @@ public class MediaNotificationService extends MediaSessionService {
                 tracks.put(track);
             }
             data.put("queue", queue);
+            data.put("playbackOrder",playbackOrder());
             data.put("tracks", tracks);
             data.put("index", player.getCurrentMediaItemIndex());
             data.put("repeat", player.getRepeatMode());
