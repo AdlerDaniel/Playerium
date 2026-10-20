@@ -1,4 +1,4 @@
-# New Android device synchronization — 1.7.39
+# New Android device synchronization — 1.7.40
 
 ## Report and evidence
 
@@ -40,3 +40,5 @@ Three regression tests failed on the previous implementation and pass after the 
 Official references reviewed: https://supabase.com/docs/reference/javascript/setauth and https://supabase.com/docs/guides/realtime/postgres-changes#custom-tokens . The current changelog was checked; the upcoming TLS cipher removal and schema-lockdown notices do not require policy changes for this fix. No database policies or account rows were changed.
 
 The preliminary v1.7.38 workflow was canceled before publication to include this correction in v1.7.39.
+
+Final queue audit also moved the outgoing-only download filter ahead of lock acquisition, so even skipping pending downloads never waits on their active transfer. Local deletion cleanup uses the same fair lock as foreground imports. The concurrent native test now proves outgoing flush completes while a transfer is blocked, and both ready-file import and deletion cleanup complete before the next blocked transfer. The preliminary v1.7.39 workflow was superseded before publication.

@@ -81,7 +81,7 @@ final class GoogleCloud {
         case "removeLocal":return removeLocal(payload.getString("key"));
         default:throw new IOException("Неизвестная операция синхронизации.");
     }}
-    private boolean removeLocal(String key)throws Exception{synchronized(downloadLock){return removeLocalFile(key);}}
+    private boolean removeLocal(String key)throws Exception{jobLock.lock();try{synchronized(downloadLock){return removeLocalFile(key);}}finally{jobLock.unlock();}}
     private boolean removeLocalFile(String key)throws Exception{
         requireHash(key);File queued=new File(jobs,"download-"+key+".json");if(queued.exists()&&!queued.delete())throw new IOException("Не удалось отменить загрузку.");
         File[] files=cache.listFiles();if(files!=null)for(File file:files)if(file.getName().startsWith(key+".")&&file.getName().matches(key+"\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)(\\.part)?"))if(!file.delete())throw new IOException("Не удалось удалить локальную копию.");return true;
@@ -163,9 +163,12 @@ final class GoogleCloud {
     boolean runJobs()throws Exception{return runJobs(true);}
     private boolean runJobs(boolean includeDownloads)throws Exception{
         if(!prefs.getBoolean("enabled",false))return true;File[] files=jobs.listFiles();if(files==null)files=new File[0];Exception failure=null;
-        for(File file:files){jobLock.lock();try{
-            if(!prefs.getBoolean("enabled",false))return true;if(!file.getName().matches("[A-Za-z0-9_-]+\\.json"))continue;
+        for(File file:files){
+            if(!file.getName().matches("[A-Za-z0-9_-]+\\.json"))continue;
+            // Do not wait for a transfer just to skip its download job.
             if(!includeDownloads&&file.getName().startsWith("download-"))continue;
+            jobLock.lock();try{
+            if(!prefs.getBoolean("enabled",false))return true;
             if(!file.isFile())continue;
             try{JSONObject job=readJob(file);if(!prefs.getString("account","").equals(job.optString("account")))continue;
                 expectedAccount.set(job.getString("account"));

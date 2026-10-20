@@ -94,7 +94,9 @@ public class CloudStorageTest {
         java.util.concurrent.atomic.AtomicInteger transfers=new java.util.concurrent.atomic.AtomicInteger();
         java.util.concurrent.FutureTask<Boolean> worker=new java.util.concurrent.FutureTask<>(()->cloud.runJobs());
         java.util.concurrent.FutureTask<JSONObject> foreground=new java.util.concurrent.FutureTask<>(()->cloud.download(readyKey,ready));
-        Thread workerThread=new Thread(worker),foregroundThread=new Thread(foreground);
+        java.util.concurrent.FutureTask<Object> outgoing=new java.util.concurrent.FutureTask<>(()->request("flush",new JSONObject()));
+        java.util.concurrent.FutureTask<Object> cleanupTask=new java.util.concurrent.FutureTask<>(()->request("removeLocal",new JSONObject().put("key",String.format(java.util.Locale.ROOT,"%064x",99001))));
+        Thread workerThread=new Thread(worker),foregroundThread=new Thread(foreground),outgoingThread=new Thread(outgoing),cleanupThread=new Thread(cleanupTask);
         try{
             prefs.edit().putBoolean("enabled",true).putString("account","fair-transfer-test").commit();token.set(cloud,"test-only");until.setLong(cloud,System.currentTimeMillis()+60000);
             try(java.io.FileOutputStream out=new java.io.FileOutputStream(readyFile)){out.write("ready".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
@@ -118,13 +120,18 @@ public class CloudStorageTest {
                     }catch(Exception e){throw new AssertionError(e);}
                 }
             };
-            workerThread.start();assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));foregroundThread.start();
+            workerThread.start();assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+            outgoingThread.start();assertEquals(Boolean.TRUE,outgoing.get(3,java.util.concurrent.TimeUnit.SECONDS));
+            foregroundThread.start();cleanupThread.start();
             long deadline=System.currentTimeMillis()+3000;while(!lock.hasQueuedThread(foregroundThread)&&System.currentTimeMillis()<deadline)Thread.sleep(10);
-            assertTrue(lock.hasQueuedThread(foregroundThread));firstRelease.countDown();
+            assertTrue(lock.hasQueuedThread(foregroundThread));
+            deadline=System.currentTimeMillis()+3000;while(!lock.hasQueuedThread(cleanupThread)&&System.currentTimeMillis()<deadline)Thread.sleep(10);
+            assertTrue(lock.hasQueuedThread(cleanupThread));firstRelease.countDown();
             assertEquals(Uri.fromFile(readyFile).toString(),foreground.get(5,java.util.concurrent.TimeUnit.SECONDS).getString("uri"));
+            assertEquals(Boolean.TRUE,cleanupTask.get(5,java.util.concurrent.TimeUnit.SECONDS));
             secondRelease.countDown();assertTrue(worker.get(5,java.util.concurrent.TimeUnit.SECONDS));assertEquals(2,transfers.get());
         }finally{
-            firstRelease.countDown();secondRelease.countDown();workerThread.join(12000);foregroundThread.join(12000);
+            firstRelease.countDown();secondRelease.countDown();workerThread.join(12000);foregroundThread.join(12000);outgoingThread.join(12000);cleanupThread.join(12000);
             cloud.connections=connections;token.set(cloud,savedToken);until.setLong(cloud,savedUntil);prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();
             for(File file:cleanup)file.delete();
         }
