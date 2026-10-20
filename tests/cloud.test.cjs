@@ -197,3 +197,38 @@ test('native journal progress updates its pending request without completing it 
  assert.equal(completed,false);assert.equal(cloud.pending.size,1);assert.equal(cloud.stage,'Чтение облачной медиатеки: 10 из 1224');
  window.onCloudResponse({id,data:{events:[],cursor:'next'}});assert.equal((await pending).cursor,'next');assert.equal(cloud.pending.size,0);
 });
+
+test('an incoming-only device downloads after a single pull without waiting for another journal read',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net);add(pc,net,'First','first');await pc.cloud.sync();
+ const base=phone.cloud.transport;let pulls=0;
+ phone.cloud.transport=async(name,payload)=>{
+  if(name==='pull'&&++pulls>1)throw Error('Unnecessary journal read before download');
+  return base(name,payload);
+ };
+ await phone.cloud.sync();assert.equal(pulls,1);assert.equal(phone.lib.getTracks().length,1);
+ pulls=0;await phone.cloud.sync();assert.equal(pulls,1);
+});
+
+test('the complete journal including deletions is read before any audio is downloaded',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net),track=add(pc,net,'Deleted song','deleted');
+ await pc.cloud.sync();await pc.lib.removeTrack(track.id);add(pc,net,'Kept song','kept');await pc.cloud.sync();
+ const base=phone.cloud.transport;let pulls=0,downloads=0;
+ phone.cloud.transport=async(name,payload)=>{
+  if(name==='pull')pulls++;
+  if(name==='download'){downloads++;assert.equal(pulls,1);assert.equal(payload.track.title,'Kept song');}
+  return base(name,payload);
+ };
+ await phone.cloud.sync();assert.equal(downloads,1);assert.equal(phone.lib.getTracks()[0].title,'Kept song');
+});
+
+test('pending background downloads do not trigger outgoing flush or an extra pull',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net);add(pc,net,'First','first');await pc.cloud.sync();
+ const base=phone.cloud.transport;let pulls=0;
+ phone.cloud.transport=async(name,payload)=>{
+  if(name==='status')return {...await base(name,payload),canFlush:true,pending:1224,outgoingPending:0};
+  if(name==='flush')throw Error('Download backlog must not delay import');
+  if(name==='pull'&&++pulls>1)throw Error('Unnecessary pull');
+  return base(name,payload);
+ };
+ await phone.cloud.sync();assert.equal(pulls,1);assert.equal(phone.lib.getTracks().length,1);
+});
