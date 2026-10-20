@@ -18,8 +18,10 @@ https://github.com/androidx/media/blob/1.3.1/libraries/session/src/main/java/and
 
 ## Changes
 
-- Every native queue item starts with its own cached cover or an explicit neutral
-  PNG placeholder. A later real cover replaces the placeholder bytes and URI.
+- The selected native queue item starts with its own cached cover or an explicit
+  neutral PNG placeholder. Future items receive a placeholder until transition,
+  avoiding disk lookups for every song while constructing a large queue. A real
+  cover replaces the placeholder bytes and URI as soon as it is available.
 - A late WebView encoding cannot overwrite a newer cover for the same recording.
 - Native snapshots include the exact Media3 shuffle permutation, preserving
   duplicate queue positions. The next card, upcoming list and artwork prefetch

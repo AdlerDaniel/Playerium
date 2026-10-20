@@ -177,6 +177,7 @@ public class MediaNotificationService extends MediaSessionService {
 
     private void setQueue(JSONObject data) throws Exception {
         JSONArray tracks = data.getJSONArray("tracks");
+        int selectedIndex=Math.max(0,Math.min(tracks.length()-1,data.optInt("index")));
         if(data.optBoolean("play")&&data.optBoolean("reset")){requestedStartAt=data.optLong("requestedAt",System.currentTimeMillis());if(requestedStartAt<=0)requestedStartAt=System.currentTimeMillis();startLatencyMs=-1;}
         List<MediaItem> items = new ArrayList<>();
         java.util.Map<String,Integer> indices=new java.util.HashMap<>();
@@ -185,7 +186,7 @@ public class MediaNotificationService extends MediaSessionService {
             Uri uri = Uri.parse(t.getString("uri"));
             android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));extras.putString("cloudKey",t.optString("cloudKey"));extras.putString("queueOrigin","manual".equals(t.optString("queueOrigin"))?"manual":"collection");extras.putString("queueEntry",t.optString("queueEntry").substring(0,Math.min(160,t.optString("queueEntry").length())));
             MediaMetadata metadata = PlaybackArtwork.metadata(this,t.getString("id"),new MediaMetadata.Builder().setTitle(t.optString("title"))
-                .setArtist(t.optString("artist")).setExtras(extras)).build();
+                .setArtist(t.optString("artist")).setExtras(extras),i==selectedIndex).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
             indices.put(t.getString("id"),i);
         }
@@ -193,7 +194,7 @@ public class MediaNotificationService extends MediaSessionService {
         if (items.isEmpty()) { player.stop(); player.clearMediaItems(); stopSelf(); return; }
         boolean play = data.optBoolean("play");
         String currentId = player.getCurrentMediaItem() == null ? "" : player.getCurrentMediaItem().mediaId;
-        int index = Math.max(0, Math.min(items.size() - 1, data.optInt("index")));
+        int index = selectedIndex;
         if(data.optBoolean("play")&&data.optBoolean("reset"))requestedStartId=items.get(index).mediaId;
         MediaItem current = player.getCurrentMediaItem();
         boolean preserve = !data.optBoolean("reset") && current != null

@@ -27,8 +27,8 @@ final class PlaybackArtwork {
             try{bitmap.compress(Bitmap.CompressFormat.PNG,100,out);return out.toByteArray();}finally{bitmap.recycle();}
         }
     }
-    static androidx.media3.common.MediaMetadata.Builder metadata(Context context,String id,androidx.media3.common.MediaMetadata.Builder builder){
-        Uri cached=find(context,id);
+    static androidx.media3.common.MediaMetadata.Builder metadata(Context context,String id,androidx.media3.common.MediaMetadata.Builder builder,boolean loadCached){
+        Uri cached=loadCached?find(context,id):null;
         return cached!=null?builder.setArtworkData(null,androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER).setArtworkUri(cached)
             :builder.setArtworkUri(null).setArtworkData(Placeholder.PNG,androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER);
     }
