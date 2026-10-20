@@ -70,6 +70,14 @@ function network(){const events=[],files=new Map(),requests=[];let offline=false
  }};}
 function peer(net){const lib=new Library(),cloud=new CloudSync(lib,{player:{stop(){},removeTrack(){}}},net.transport);cloud.states={};return {lib,cloud};}
 function add(peer,net,name,bytes){const track={id:crypto.randomUUID(),title:name,artist:'Artist',filePath:'/music/'+crypto.randomUUID()+'.mp3',liked:false};peer.lib.tracks.set(track.id,track);net.files.set(track.filePath,Buffer.from(bytes));return track;}
+
+test('an empty device reports synchronization stages and clears stale download progress on retry',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net);add(pc,net,'First','first');await pc.cloud.sync();
+ const stages=[];phone.cloud.progress={done:30,total:30};phone.cloud.changed=()=>stages.push({stage:phone.cloud.stage,progress:phone.cloud.progress});
+ await phone.cloud.sync();assert.equal(phone.lib.getTracks().length,1);
+ assert.equal(stages[0].progress,null);assert.ok(stages.some(s=>s.stage==='Получение списка песен…'));
+ assert.ok(stages.some(s=>s.progress?.total===1&&s.progress.done===1));assert.equal(phone.cloud.stage,null);assert.equal(phone.cloud.busy,false);
+});
 test('PC and phone independently upload, download, deduplicate, preserve covers, likes and playlists',async()=>{
  const net=network(),pc=peer(net),phone=peer(net);const first=add(pc,net,'PC song','song');first.liked=true;first.pictureBlob=new Blob(['cover'],{type:'image/png'});
  pc.lib.playlists.set('mix',{id:'mix',name:'My mix',trackIds:[first.id]});await pc.cloud.sync();await phone.cloud.sync();
@@ -180,4 +188,12 @@ test('an offline playlist reorder cannot resurrect a concurrently removed member
  for(const peer of [pc,phone])assert.deepEqual(peer.lib.getPlaylistById('ordered').trackIds.map(id=>peer.lib.getTrackById(id).title),['Three','One']);
  const remove=operation('member',{playlist:'mix',present:false},5),move=operation('member',{playlist:'mix',present:true,position:0,orderOnly:true},99);
  assert.equal(model.cloudView([remove,move]).playlists.get('mix').members.get(key).present,false);
+});
+
+test('native journal progress updates its pending request without completing it prematurely',async()=>{
+ const cloud=new CloudSync(new Library(),{});let id;window.AndroidBridge={cloudRequest:requestId=>{id=requestId;}};
+ const pending=cloud.nativeRequest('pull',{});let completed=false;pending.then(()=>completed=true);
+ window.onCloudResponse({id,progress:{done:10,total:1224}});await Promise.resolve();
+ assert.equal(completed,false);assert.equal(cloud.pending.size,1);assert.equal(cloud.stage,'Чтение облачной медиатеки: 10 из 1224');
+ window.onCloudResponse({id,data:{events:[],cursor:'next'}});assert.equal((await pending).cursor,'next');assert.equal(cloud.pending.size,0);
 });

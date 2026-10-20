@@ -3,7 +3,7 @@ import {cloudView,mergeOperations} from './cloud-model.js';
 export class CloudSync {
  constructor(library,ui,transport=null){
   this.library=library;this.ui=ui;this.transport=transport;this.realtime=new RealtimeSync(this);this.pending=new Map();this.count=0;this.busy=false;this.status={connected:false};this.events=[];this.outbox=[];this.device=localStorage.getItem('playerium_cloud_device')||crypto.randomUUID();localStorage.setItem('playerium_cloud_device',this.device);
-  window.onCloudResponse=message=>{const task=this.pending.get(message.id);if(!task)return;clearTimeout(task.timer);this.pending.delete(message.id);message.error?task.reject(Error(message.error)):task.resolve(message.data);};
+  window.onCloudResponse=message=>{const task=this.pending.get(message.id);if(!task)return;if(message.progress){const {done,total}=message.progress;if(task.operation==='pull'&&Number.isInteger(done)&&Number.isInteger(total)&&done>=0&&total>=done)this.setStage(`Чтение облачной медиатеки: ${done} из ${total}`);return;}clearTimeout(task.timer);this.pending.delete(message.id);message.error?task.reject(Error(message.error)):task.resolve(message.data);};
  }
  get available(){return !!(this.transport||window.electronAPI?.cloudRequest||window.AndroidBridge?.cloudRequest);}
  request(operation,payload={}) {return operation==='pull'?this.realtime.pullLibrary(payload):this.nativeRequest(operation,payload);}
@@ -12,7 +12,7 @@ export class CloudSync {
   if(window.electronAPI?.cloudRequest)return window.electronAPI.cloudRequest(operation,payload);
   if(!window.AndroidBridge?.cloudRequest)return Promise.reject(Error('Синхронизация доступна в приложении для ПК и Android.'));
   const id=`cloud-${Date.now()}-${++this.count}`;
-  return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('Не удалось завершить синхронизацию. Попробуйте ещё раз.'));},660000);this.pending.set(id,{resolve,reject,timer});window.AndroidBridge.cloudRequest(id,operation,JSON.stringify(payload));});
+  return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('Не удалось завершить синхронизацию. Попробуйте ещё раз.'));},660000);this.pending.set(id,{resolve,reject,timer,operation});window.AndroidBridge.cloudRequest(id,operation,JSON.stringify(payload));});
  }
  async init(){
   const state=await this.library.getFromStore('settings','cloudSync');this.states=state?.value||{};
@@ -27,18 +27,19 @@ export class CloudSync {
  async connect(){await this.request('connect');await this.refreshStatus();await this.sync();}
  async disconnect(){this.realtime.reset();await this.request('disconnect');this.status={connected:false};this.changed?.();}
  async sync(){
-  if(this.busy||!this.available)return;this.busy=true;this.error=null;this.failures=[];this.changed?.();
+  if(this.busy||!this.available)return;this.busy=true;this.error=null;this.failures=[];this.progress=null;this.stage='Проверка подключения…';this.changed?.();
   try{
    await this.refreshStatus();if(!this.status.connected)return;
+   this.setStage('Получение списка песен…');
    const account=this.status.account;if(!account)throw Error('Не удалось определить аккаунт Google.');
    if(this.account!==account){this.account=account;const state=this.states[account]||{};this.events=state.events||[];this.outbox=state.outbox||[];this.links=state.links||{};this.cursor=state.cursor||null;this.shadow=state.shadow||{};
-    if(!this.cursor){const initial=await this.request('pull',{});this.events=mergeOperations(this.events,initial.events||[]);this.cursor=initial.cursor;}
+    if(!this.cursor){this.setStage('Получение списка песен…');const initial=await this.request('pull',{});this.events=mergeOperations(this.events,initial.events||[]);this.cursor=initial.cursor;}
    }
    // Capture edits before applying remote state, so an offline edit is not overwritten.
-   await this.capture();
-   const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;
+   this.setStage('Проверка изменений на устройстве…');await this.capture();
+   this.setStage('Получение изменений…');const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
-    let published=false;
+    this.setStage('Сохранение изменений…');let published=false;
     for(const op of [...this.outbox]){
      try{
     const link=this.links[op.key];
@@ -51,15 +52,16 @@ export class CloudSync {
      }catch(error){this.failures.push(error.message);}
    }
     if(this.status.canFlush&&(published||this.status.pending))try{await this.request('flush');}catch(error){this.failures.push(error.message);}
-    const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;
+    this.setStage('Получение изменений…');const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
    // Preserve edits made while native transfers were running.
    await this.capture();
    await this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))));
    this.lastSync=Date.now();await this.save();
     if(this.failures.length)throw Error(`Не завершено операций: ${this.failures.length}. ${this.failures[0]}`);
-  }finally{this.busy=false;globalThis.document?.querySelectorAll('.loading-rows[data-cloud-loading]').forEach(node=>node.remove());this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
+  }finally{this.busy=false;this.stage=null;globalThis.document?.querySelectorAll('.loading-rows[data-cloud-loading]').forEach(node=>node.remove());this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
  }
+ setStage(stage){this.stage=stage;this.changed?.();}
  captureDeletions(){if(!this.account||!this.links||!this.shadow)return;if(!Object.values(this.links).some(link=>link.localId&&!link.removed&&!this.library.getTrackById(link.localId))&&!Object.entries(this.shadow).some(([id,old])=>!old.deleted&&!this.library.getPlaylistById(id)))return;const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));let changed=false;
   for(const [key,link] of Object.entries(this.links))if(link.localId&&!this.library.getTrackById(link.localId)&&!link.removed&&!view.tracks.get(key)?.deleted){this.operation('delete',{key});link.removed=true;changed=true;}
   for(const [id,old] of Object.entries(this.shadow))if(!this.library.getPlaylistById(id)&&!old.deleted&&!view.playlists.get(id)?.deleted){this.operation('playlist-delete',{playlist:id});old.deleted=true;changed=true;}
