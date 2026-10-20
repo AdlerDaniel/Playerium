@@ -29,7 +29,7 @@ def native_archive(data):
 if '--windows' in sys.argv:
     target = ROOT / 'build' / 'music-tools'
     write(target / 'yt-dlp.exe', download('https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe', '66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a'))
-    archive = zipfile.ZipFile(io.BytesIO(download('https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-06-13-06/ffmpeg-n8.1.3-14-g330caae0c1-win64-gpl-8.1.zip','c63157b215689081065ae7e545e6b60ca57f2a004c5f5625100483e8942899b5')))
+    archive = zipfile.ZipFile(io.BytesIO(download('https://github.com/AdlerDaniel/Playerium/releases/download/music-runtime-2026-10-06/ffmpeg-n8.1.3-14-g330caae0c1-win64-gpl-8.1.zip','c63157b215689081065ae7e545e6b60ca57f2a004c5f5625100483e8942899b5')))
     for name in ['ffmpeg.exe','ffprobe.exe']:
         member = next(n for n in archive.namelist() if n.endswith('/bin/' + name))
         write(target / name, archive.read(member))

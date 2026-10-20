@@ -5,7 +5,7 @@ standard command-line/JSON interface. The Android Java/Kotlin wrapper classes fr
 the distribution archives are not linked or included in Playerium.
 
 - yt-dlp 2026.08.19 (Windows): [source and licenses](https://github.com/yt-dlp/yt-dlp/tree/2026.08.19). The packaged executable includes third-party components; see its upstream third-party licenses.
-- FFmpeg 8.1 build `n8.1.3-14-g330caae0c1` (Windows): GPLv3 build. [Build scripts and source retrieval instructions](https://github.com/BtbN/FFmpeg-Builds/tree/autobuild-2026-10-06-13-06), [FFmpeg source](https://github.com/FFmpeg/FFmpeg/tree/330caae0c1).
+- FFmpeg 8.1 build `n8.1.3-14-g330caae0c1` (Windows): GPLv3 build. [Build scripts and source retrieval instructions](https://github.com/BtbN/FFmpeg-Builds/tree/9acad4a9ef1583096af7836cc1e9c8cbcb4d3950), [FFmpeg source](https://github.com/FFmpeg/FFmpeg/tree/330caae0c1).
 - Android Python, QuickJS, yt-dlp and FFmpeg executables are extracted from the pinned `library`/`ffmpeg` 0.18.1 runtime distributions. [Distribution source and build instructions](https://github.com/yausername/youtubedl-android), [Python](https://www.python.org/psf/license/), [QuickJS](https://bellard.org/quickjs/), [yt-dlp](https://github.com/yt-dlp/yt-dlp), [FFmpeg](https://ffmpeg.org/legal.html).
 
 Exact download URLs and SHA-256 checksums are recorded in
@@ -26,3 +26,7 @@ Source retrieval/build instructions for the Android executables:
 [Python](https://github.com/yausername/youtubedl-android/blob/0.18.1/BUILD_PYTHON.md),
 [FFmpeg](https://github.com/yausername/youtubedl-android/blob/0.18.1/BUILD_FFMPEG.md),
 [QuickJS](https://github.com/yausername/youtubedl-android/tree/0.18.1).
+
+The unmodified Windows FFmpeg archive and corresponding source archives are preserved
+in the [pinned runtime mirror](https://github.com/AdlerDaniel/Playerium/releases/tag/music-runtime-2026-10-06)
+after the upstream rotating autobuild was removed. The original binary checksum is unchanged.

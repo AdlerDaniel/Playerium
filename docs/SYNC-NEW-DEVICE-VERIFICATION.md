@@ -1,4 +1,4 @@
-# New Android device synchronization — 1.7.37
+# New Android device synchronization — 1.7.38
 
 ## Report and evidence
 
@@ -23,3 +23,7 @@ JavaScript tests cover first import, stale progress reset, native progress respo
 Native tests cover foreground flush skipping queued downloads, verified cached imports without networking, rejection of changed bytes, foreground import between two background transfers, and the first 1,224-entry Drive pull across two pages.
 
 The release workflow runs the full native suite on Android API 29 and API 36 with 16 KB pages, plus browser and Windows runtime tests. Final release claims must use completed workflow results. Physical Honor synchronization remains to be confirmed after installing the update.
+
+## Release dependency recovery
+
+The preliminary v1.7.37 build could not fetch the removed upstream FFmpeg autobuild (HTTP 404); no application release was published for that tag. v1.7.38 uses the byte-identical cached original archive, pinned by its existing SHA-256, from a separate prerelease dependency mirror. Matching FFmpeg sources and the build-script snapshot at the original build date are attached. Audio executables and their versions remain unchanged.
