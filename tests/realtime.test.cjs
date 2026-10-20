@@ -43,6 +43,26 @@ class FakeClient {
  get channelObject(){if(!this._channel)this._channel={on:(_type,filter,handler)=>{this.listeners.set(filter.event,handler);return this._channel;},subscribe:handler=>{this.notify=handler;handler('SUBSCRIBED');},send:async()=> 'ok'};return this._channel;}
 }
 const session=(account='a')=>({account,userId:'18d898ed-8494-4edf-88fe-212acda78010',accessToken:'test-user-token',expiresAt:Date.now()+3600000});
+test('a cold private channel is created only after its user token has been installed',async()=>{
+ const {RealtimeSync}=await import('../js/realtime-sync.js');
+ class AuthorizedClient extends FakeClient {channel(...args){assert.equal(this.token,'test-user-token','private subscription must not race asynchronous token discovery');return super.channel(...args);}}
+ const cloud={device:'self',schedule(){},nativeRequest:async()=>session()},sync=new RealtimeSync(cloud,{Client:AuthorizedClient});
+ await sync.start('a');assert.equal(sync.state,'online');sync.reset();
+});
+test('failed initial channel authentication can be retried instead of retaining a half-open session',async()=>{
+ const {RealtimeSync}=await import('../js/realtime-sync.js');let fail=true,calls=0;
+ class AuthClient extends FakeClient {async setAuth(token){if(fail)throw Error('Temporary authorization failure');return super.setAuth(token);}}
+ const cloud={device:'self',schedule(){},nativeRequest:async()=>{calls++;return session();}},sync=new RealtimeSync(cloud,{Client:AuthClient});
+ await assert.rejects(sync.start('a'),/Temporary authorization failure/);assert.equal(sync.session,null);assert.equal(sync.client,null);
+ fail=false;await sync.start('a');assert.equal(sync.state,'online');assert.equal(calls,2);sync.reset();
+});
+test('an account reset during initial channel authentication cannot resurrect the old private channel',async()=>{
+ const {RealtimeSync}=await import('../js/realtime-sync.js');let release,client;
+ class AuthClient extends FakeClient {constructor(){super();client=this;}async setAuth(token){await new Promise(resolve=>release=resolve);return super.setAuth(token);}}
+ const cloud={device:'self',schedule(){},nativeRequest:async()=>session()},sync=new RealtimeSync(cloud,{Client:AuthClient});
+ const opening=sync.start('a');await Promise.resolve();assert.equal(typeof release,'function');sync.reset();release();await opening;
+ assert.equal(sync.session,null);assert.equal(sync.client,null);assert.equal(sync.channel,null);assert.equal(client.closed,true);
+});
 test('account switching discards a delayed session and closes the old private channel',async()=>{
  const {RealtimeSync}=await import('../js/realtime-sync.js');let resolve;const cloud={device:'self',schedule(){},nativeRequest:()=>new Promise(r=>resolve=r)};const sync=new RealtimeSync(cloud,{Client:FakeClient});const opening=sync.start('a');sync.reset();resolve(session());await opening;assert.equal(sync.session,null);assert.equal(sync.client,null);
  cloud.nativeRequest=async()=>session();await sync.start('a');const client=sync.client;sync.reset();assert.equal(client.closed,true);assert.deepEqual(sync.devices(),[]);

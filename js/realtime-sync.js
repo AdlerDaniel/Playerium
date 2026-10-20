@@ -18,12 +18,15 @@ export class RealtimeSync {
    this.session=session;
    if(this.client){await this.client.setAuth(session.accessToken);return;}
    this.client=new this.Client(REALTIME_URL+'/realtime/v1',{params:{apikey:REALTIME_KEY},accessToken:async()=>{await this.start(this.account);return this.session?.accessToken||null;}});
+   // A private join must carry the user JWT on its very first request.
+   const client=this.client;await client.setAuth(session.accessToken);
+   if(generation!==this.generation||this.client!==client){client.disconnect();return;}
    this.channel=this.client.channel('playerium:'+session.userId,{config:{private:true,broadcast:{ack:true,self:false}}});
    this.channel.on('broadcast',{event:'library'},()=>this.wake());
    this.channel.on('broadcast',{event:'state'},({payload})=>this.receiveState(payload));
    this.channel.on('broadcast',{event:'command'},async({payload})=>{if(payload?.target!==this.cloud.device||!this.onCommand)return;try{await this.onCommand({...payload,realtime:true});}catch{/* Sender falls back to the native transport on timeout. */}});
    this.channel.subscribe(status=>{if(generation!==this.generation)return;this.state=status==='SUBSCRIBED'?'online':'reconnecting';this.cloud.changed?.();if(status==='SUBSCRIBED')this.wake();});
-  })();this.opening={account,promise};try{await promise;}catch(error){if(generation===this.generation){this.error=error.message;this.state='offline';}throw error;}finally{if(this.opening?.promise===promise)this.opening=null;}
+  })();this.opening={account,promise};try{await promise;}catch(error){if(generation===this.generation){this.session=null;if(!this.channel){this.client?.disconnect();this.client=null;}this.error=error.message;this.state='offline';}throw error;}finally{if(this.opening?.promise===promise)this.opening=null;}
  }
  wake(){if(this.cloud.busy)this.cloud.resync=true;else this.cloud.schedule(100);}
  async api(path,options={}){const account=this.account;await this.start(account);const session=this.session;if(!session||session.account!==account)throw Error('Синхронизация не подключена.');const response=await this.fetcher(REALTIME_URL+'/rest/v1/'+path,{...options,headers:{apikey:REALTIME_KEY,Authorization:'Bearer '+session.accessToken,'Content-Type':'application/json',...options.headers},signal:AbortSignal.timeout(10000),redirect:'error'});if(this.account!==account||this.session!==session)throw Error('Аккаунт изменился.');if(!response.ok){if(response.status===401)this.session=null;throw Error('Быстрая синхронизация временно недоступна.');}return response;}
