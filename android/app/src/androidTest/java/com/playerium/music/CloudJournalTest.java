@@ -13,6 +13,16 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class CloudJournalTest {
+    @Test public void stoppedBackgroundWorkCannotReadOrQueueAnotherAccount()throws Exception{
+        Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);
+        String account=cloud.prefs.getString("account",null);boolean enabled=cloud.isConnected();GoogleCloud.Connections connections=cloud.connections;
+        try{
+            cloud.prefs.edit().putBoolean("enabled",true).putString("account","stopped-fixture").commit();
+            cloud.connections=url->{throw new AssertionError("Cancelled work must not use a later account's network");};
+            try{new CloudJournal(cloud,context,tracks->{throw new AssertionError("Cancelled work queued a download");}).refresh(()->true);fail("Cancelled refresh continued");}catch(InterruptedIOException expected){}
+            assertTrue(cloud.runJobs(()->true));
+        }finally{cloud.connections=connections;cloud.prefs.edit().putBoolean("enabled",enabled).putString("account",account).commit();}
+    }
     private static final String KEY=String.format(Locale.ROOT,"%064x",987654321);
     private JSONObject op(String kind,String id,long clock)throws Exception{return new JSONObject().put("version",1).put("id",id).put("device","test").put("clock",clock).put("kind",kind).put("key",KEY);}
     private JSONObject track(String id,long clock)throws Exception{return op("track",id,clock).put("track",new JSONObject().put("title",id).put("artist","Artist").put("audioId","ready-file").put("ext",".mp3").put("size",4));}

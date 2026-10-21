@@ -14,6 +14,32 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class CloudStorageTest {
+    @Test public void cancelledSnapshotStopsItsParallelReadsWithoutAdvancingTheCursor()throws Exception{
+        Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);
+        String previous=cloud.prefs.getString("account",null),account="cancel-pull-"+java.util.UUID.randomUUID();boolean enabled=cloud.isConnected();
+        java.lang.reflect.Field token=GoogleCloud.class.getDeclaredField("token"),until=GoogleCloud.class.getDeclaredField("tokenUntil");token.setAccessible(true);until.setAccessible(true);
+        Object oldToken=token.get(cloud);long oldUntil=until.getLong(cloud);GoogleCloud.Connections connections=cloud.connections;
+        java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(1),release=new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean stopped=new java.util.concurrent.atomic.AtomicBoolean();java.util.concurrent.atomic.AtomicInteger reads=new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.FutureTask<JSONObject> task=new java.util.concurrent.FutureTask<>(()->cloud.pull("",stopped::get));Thread thread=new Thread(task);
+        try{
+            cloud.prefs.edit().putBoolean("enabled",true).putString("account",account).commit();token.set(cloud,"test-only");until.setLong(cloud,System.currentTimeMillis()+60000);
+            org.json.JSONArray files=new org.json.JSONArray();for(int i=0;i<200;i++)files.put(new JSONObject().put("id","cancel_event_"+i).put("version","1"));
+            cloud.connections=address->new java.net.HttpURLConnection(new java.net.URL(address)){
+                public void connect(){}public void disconnect(){}public boolean usingProxy(){return false;}public int getResponseCode(){return 200;}
+                public java.io.InputStream getInputStream()throws java.io.IOException{
+                    try{String body;if(address.contains("changes/startPageToken"))body="{\"startPageToken\":\"must-not-advance\"}";
+                        else if(address.contains("files?q="))body=new JSONObject().put("files",files).toString();
+                        else{reads.incrementAndGet();entered.countDown();release.await(5,java.util.concurrent.TimeUnit.SECONDS);body="{}";}
+                        return new java.io.ByteArrayInputStream(body.getBytes("UTF-8"));
+                    }catch(Exception e){throw new java.io.IOException(e);}
+                }
+            };
+            thread.start();assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));stopped.set(true);
+            try{task.get(2,java.util.concurrent.TimeUnit.SECONDS);fail("Cancelled snapshot returned a new cursor");}catch(java.util.concurrent.ExecutionException expected){assertTrue(expected.getCause() instanceof java.io.InterruptedIOException);}
+            assertTrue("Cancellation must not read the complete snapshot",reads.get()<=12);
+        }finally{stopped.set(true);release.countDown();thread.join(10000);cloud.connections=connections;token.set(cloud,oldToken);until.setLong(cloud,oldUntil);cloud.prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();}
+    }
     @Test public void incomingRecordingPrecedesAnUnavailableOutgoingBackup()throws Exception{
         Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);
         String account=cloud.prefs.getString("account",null);boolean enabled=cloud.isConnected();
@@ -81,7 +107,7 @@ public class CloudStorageTest {
         String previous=prefs.getString("account",null);boolean enabled=prefs.getBoolean("enabled",false);prefs.edit().putBoolean("enabled",true).putString("account","queue-test").commit();
         org.json.JSONArray entries=new org.json.JSONArray();for(int i=0;i<75;i++){String key=String.format(java.util.Locale.ROOT,"%064x",i);entries.put(new JSONObject().put("key",key).put("track",new JSONObject().put("audioId","audio_"+i).put("ext",".mp3").put("size",4).put("title","Song "+i).put("artist","Artist").put("album","Album")));}
         try{request("queueDownloads",new JSONObject().put("tracks",entries));assertEquals(75,GoogleCloud.get(context).pendingCount());}
-        finally{prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();androidx.work.WorkManager.getInstance(context).cancelUniqueWork("playerium-drive");androidx.work.WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-retry");java.lang.reflect.Field jobs=GoogleCloud.class.getDeclaredField("jobs");jobs.setAccessible(true);File[] files=((File)jobs.get(GoogleCloud.get(context))).listFiles();if(files!=null)for(File file:files)if(file.getName().startsWith("download-"))file.delete();}
+        finally{androidx.work.WorkManager.getInstance(context).cancelUniqueWork("playerium-drive").getResult().get(5,java.util.concurrent.TimeUnit.SECONDS);androidx.work.WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-retry").getResult().get(5,java.util.concurrent.TimeUnit.SECONDS);prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();java.lang.reflect.Field jobs=GoogleCloud.class.getDeclaredField("jobs");jobs.setAccessible(true);File[] files=((File)jobs.get(GoogleCloud.get(context))).listFiles();if(files!=null)for(File file:files)if(file.getName().startsWith("download-"))file.delete();}
     }
     @Test public void foregroundFlushLeavesBackgroundDownloadsQueued()throws Exception{
         Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);
@@ -182,6 +208,7 @@ public class CloudStorageTest {
         String account="first-pull-test-"+java.util.UUID.randomUUID();
         String owner=GoogleCloud.hex(java.security.MessageDigest.getInstance("SHA-256").digest(account.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         File eventCache=new File(context.getNoBackupFilesDir(),"cloud-events/"+owner);
+        java.util.concurrent.FutureTask<JSONObject> simultaneous=new java.util.concurrent.FutureTask<>(()->(JSONObject)request("pull",new JSONObject()));Thread simultaneousThread=new Thread(simultaneous);
         try{
             prefs.edit().putBoolean("enabled",true).putString("account",account).commit();token.set(cloud,"test-only");until.setLong(cloud,System.currentTimeMillis()+60000);
             org.json.JSONArray first=new org.json.JSONArray(),second=new org.json.JSONArray();
@@ -200,7 +227,8 @@ public class CloudStorageTest {
                     }catch(java.io.IOException e){throw e;}catch(Exception e){throw new java.io.IOException(e);}
                 }
             };
-            JSONObject result=(JSONObject)request("pull",new JSONObject());
+            simultaneousThread.start();JSONObject result=(JSONObject)request("pull",new JSONObject());
+            assertEquals(1224,simultaneous.get(10,java.util.concurrent.TimeUnit.SECONDS).getJSONArray("events").length());
             assertEquals("after-snapshot",result.getString("cursor"));assertEquals(1224,result.getJSONArray("events").length());assertEquals(1224,reads.get());
             java.util.Set<String> ids=new java.util.HashSet<>();for(int i=0;i<1224;i++)ids.add(result.getJSONArray("events").getJSONObject(i).getString("id"));assertEquals(1224,ids.size());
             JSONObject cached=(JSONObject)request("pull",new JSONObject());assertEquals(1224,cached.getJSONArray("events").length());assertEquals(1224,reads.get());
@@ -211,7 +239,7 @@ public class CloudStorageTest {
             assertEquals("after-snapshot",recovered.getString("cursor"));assertEquals(1224,recovered.getJSONArray("events").length());assertEquals(1226,reads.get());
             // Unknown versions must always be fetched, never trusted from cache.
             first.getJSONObject(0).remove("version");request("pull",new JSONObject());assertEquals(1227,reads.get());
-        }finally{File[] cachedFiles=eventCache.listFiles();if(cachedFiles!=null)for(File file:cachedFiles)file.delete();eventCache.delete();cloud.connections=connections;token.set(cloud,savedToken);until.setLong(cloud,savedUntil);prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();}
+        }finally{simultaneousThread.join(12000);File[] cachedFiles=eventCache.listFiles();if(cachedFiles!=null)for(File file:cachedFiles)file.delete();eventCache.delete();cloud.connections=connections;token.set(cloud,savedToken);until.setLong(cloud,savedUntil);prefs.edit().putBoolean("enabled",enabled).putString("account",previous).commit();}
     }
 
 }

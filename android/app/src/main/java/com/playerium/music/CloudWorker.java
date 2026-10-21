@@ -18,7 +18,7 @@ public final class CloudWorker extends Worker {
         return Build.VERSION.SDK_INT>=29?new ForegroundInfo(7402,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC):new ForegroundInfo(7402,notification);
     }
     @NonNull @Override public Result doWork(){GoogleCloud cloud=GoogleCloud.get(getApplicationContext());try{
-        if(!cloud.isConnected())return Result.success();
+        if(isStopped()||!cloud.isConnected())return Result.success();
         boolean metadataOnly=getInputData().getBoolean("metadataOnly",false);
         android.util.Log.i("PlayeriumSync",metadataOnly?"Incoming library refresh started":"Native synchronization started");
         cloud.connect.restoreFilePeers();
@@ -27,8 +27,9 @@ public final class CloudWorker extends Worker {
         android.app.Notification notification=new NotificationCompat.Builder(context,"playerium_cloud").setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle(context.getString(R.string.app_name)).setContentText("Синхронизация музыки · осталось: "+cloud.pendingCount()).setProgress(0,0,true).setOngoing(true).setSilent(true).build();
         ForegroundInfo info=Build.VERSION.SDK_INT>=29?new ForegroundInfo(7402,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC):new ForegroundInfo(7402,notification);
         setForegroundAsync(info).get();Exception incomingFailure=null;
-        if(!getInputData().getBoolean("filesOnly",false))try{cloud.refreshIncoming();android.util.Log.i("PlayeriumSync","Incoming library refresh completed");}catch(Exception e){incomingFailure=e;}
+        if(!getInputData().getBoolean("filesOnly",false))try{cloud.refreshIncoming(this::isStopped);android.util.Log.i("PlayeriumSync","Incoming library refresh completed");}catch(Exception e){incomingFailure=e;}
+        if(isStopped())return Result.success();
         if(metadataOnly){if(incomingFailure!=null)throw incomingFailure;cloud.wakeFileTransfers();return Result.success();}
-        cloud.runJobs();if(incomingFailure!=null)throw incomingFailure;return cloud.hasPendingJobs()?Result.retry():Result.success();
-    }catch(Exception e){cloud.recordFailure(e);return Result.retry();}}
+        cloud.runJobs(this::isStopped);if(isStopped())return Result.success();if(incomingFailure!=null)throw incomingFailure;return cloud.hasPendingJobs()?Result.retry():Result.success();
+    }catch(Exception e){if(isStopped())return Result.success();cloud.recordFailure(e);return Result.retry();}}
 }

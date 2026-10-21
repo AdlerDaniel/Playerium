@@ -136,7 +136,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: |
-            gradle -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.playerium.music.LoudnessTest,com.playerium.music.NormalizationDocumentTest --no-daemon
+            gradle -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.playerium.music.LoudnessTest,com.playerium.music.NormalizationDocumentTest,com.playerium.music.CloudStorageTest,com.playerium.music.CloudJournalTest,com.playerium.music.CloudPushTest,com.playerium.music.RealtimeSyncTest,com.playerium.music.ConnectTest --no-daemon
             gradle -p android connectedDebugAndroidTest --no-daemon
             adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-29.png
             adb pull /data/local/tmp/playerium-playlist-start.log android/app/build/outputs/androidTest-results/playlist-start-29.log

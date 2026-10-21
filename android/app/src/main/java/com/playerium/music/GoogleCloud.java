@@ -28,6 +28,7 @@ final class GoogleCloud {
     final SharedPreferences prefs;
     private final ExecutorService controlExecutor=Executors.newFixedThreadPool(2),transferExecutor=Executors.newFixedThreadPool(3),executor=Executors.newSingleThreadExecutor(),connectExecutor=Executors.newSingleThreadExecutor(),liveExecutor=Executors.newFixedThreadPool(2);
     private final ConcurrentHashMap<String,Object> downloadLocks=new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String,Object> journalLocks=new ConcurrentHashMap<>();
     private Object downloadLock(String key){Object value=downloadLocks.get(key);if(value!=null)return value;Object fresh=new Object(),old=downloadLocks.putIfAbsent(key,fresh);return old==null?fresh:old;}
     private final java.util.concurrent.locks.ReentrantLock jobLock=new java.util.concurrent.locks.ReentrantLock(true);
     private final File jobs,cache;
@@ -41,6 +42,7 @@ final class GoogleCloud {
     final CloudJournal journal;
     final PeerFiles peerFiles;
     interface Connections {HttpURLConnection open(String url)throws Exception;}
+    interface Cancellation {boolean stopped();}
     Connections connections=url->(HttpURLConnection)new URL(url).openConnection();
     private final ThreadLocal<String> expectedAccount=new ThreadLocal<>(),requestId=new ThreadLocal<>();
     private GoogleCloud(Context ctx){context=ctx.getApplicationContext();prefs=context.getSharedPreferences("playerium_cloud",Context.MODE_PRIVATE);jobs=new File(context.getNoBackupFilesDir(),"cloud-jobs");cache=new File(MusicEngine.managedDirectory(context),"Cloud");connect=new GoogleConnect(this,context);realtime=new RealtimeSync(this,context);journal=new CloudJournal(this,context);peerFiles=new PeerFiles(this,context);connect.live.fileReader=peerFiles::read;}
@@ -74,7 +76,7 @@ final class GoogleCloud {
         case "stageChunk":return stageChunk(payload);
         case "stageComplete":JSONObject staged=stages.get(payload.getString("id"));if(staged==null||staged.getLong("offset")!=staged.getLong("size"))throw new IOException("Импорт песни ещё не завершён.");stages.remove(payload.getString("id"));return new JSONObject().put("source",Uri.fromFile(new File(staged.getString("path"))).toString());
         case "status":return new JSONObject().put("realtimeAvailable",true).put("connected",prefs.getBoolean("enabled",false)).put("configured",true).put("canFlush",true).put("account",prefs.getString("account","")).put("email",prefs.getString("email","")).put("error",prefs.getString("error","")).put("pending",pendingCount()).put("outgoingPending",pendingCount(false));
-        case "disconnect":realtime.reset();prefs.edit().remove("pushAccount").remove("pushUser").apply();WorkManager.getInstance(context).cancelUniqueWork("playerium-push-register");WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-push");prefs.edit().putBoolean("enabled",false).remove("email").remove("account").remove("error").apply();synchronized(this){token=null;}WorkManager.getInstance(context).cancelUniqueWork("playerium-drive");WorkManager.getInstance(context).cancelUniqueWork("playerium-drive-retry");return true;
+        case "disconnect":prefs.edit().putBoolean("enabled",false).remove("email").remove("account").remove("error").remove("pushAccount").remove("pushUser").apply();for(String work:new String[]{"playerium-push-register","playerium-drive-push","playerium-library-push","playerium-live-files","playerium-drive","playerium-drive-retry"})WorkManager.getInstance(context).cancelUniqueWork(work);realtime.reset();synchronized(this){token=null;}return true;
         case "registerSources":peerFiles.register(payload.getJSONArray("sources"));return true;
         case "fingerprint":return fingerprint(payload.getString("source"));
         case "acceptAudioRevision":{String source=payload.getString("source");JSONObject track=payload.getJSONObject("track");if(!fingerprint(source).getString("key").equals(audioKey(track,payload.getString("key"))))return false;PreparedAudio.acceptCloudVersion(context,Uri.parse(source),track);return true;}
@@ -114,28 +116,38 @@ final class GoogleCloud {
     private static JSONObject properties(String kind,String key)throws JSONException{return new JSONObject().put("playeriumCloud","1").put("kind",kind).put("key",key);}
     private JSONObject metadata(String id,String kind)throws Exception{requireId(id);JSONObject m=json("files/"+id+"?fields=id,appProperties,mimeType,size");JSONObject props=m.getJSONObject("appProperties");if(!"1".equals(props.optString("playeriumCloud"))||!kind.equals(props.optString("kind")))throw new IOException("Этот файл не принадлежит медиатеке Playerium.");return m;}
     byte[] media(String id,int limit)throws Exception{requireId(id);HttpURLConnection c=connection(API+"files/"+id+"?alt=media","GET");try{check(c);return read(c.getInputStream(),limit);}finally{c.disconnect();}}
-    JSONObject pull(String cursor)throws Exception{JSONArray files=new JSONArray(),events=new JSONArray();String next=cursor;
+    JSONObject pull(String cursor)throws Exception{return pull(cursor,()->false);}
+    private static void checkCancellation(Cancellation cancellation)throws InterruptedIOException{if(cancellation.stopped())throw new InterruptedIOException("Синхронизация отменена.");}
+    JSONObject pull(String cursor,Cancellation cancellation)throws Exception{
+        String account=prefs.getString("account","");Object fresh=new Object(),lock=journalLocks.putIfAbsent(account,fresh);if(lock==null)lock=fresh;
+        synchronized(lock){
+            checkCancellation(cancellation);peerFiles.check(account);String previous=expectedAccount.get();expectedAccount.set(account);
+            try{return pullJournal(cursor,account,cancellation);}finally{if(previous==null)expectedAccount.remove();else expectedAccount.set(previous);}
+        }
+    }
+    private JSONObject pullJournal(String cursor,String account,Cancellation cancellation)throws Exception{checkCancellation(cancellation);JSONArray files=new JSONArray(),events=new JSONArray();String next=cursor;
         if(cursor.isEmpty()||"null".equals(cursor)){next=json("changes/startPageToken").getString("startPageToken");files=list("appProperties has { key='kind' and value='event' }");}
-        else {String page=cursor;do{JSONObject data;try{data=json("changes?pageToken="+query(page)+"&pageSize=1000&fields="+query("nextPageToken,newStartPageToken,changes(removed,file(id,appProperties,version))"));}catch(DriveException e){if(e.status==410)return pull("");throw e;}JSONArray changes=data.optJSONArray("changes");if(changes!=null)for(int i=0;i<changes.length();i++){JSONObject change=changes.getJSONObject(i),file=change.optJSONObject("file");if(!change.optBoolean("removed")&&file!=null&&file.optJSONObject("appProperties")!=null&&"1".equals(file.getJSONObject("appProperties").optString("playeriumCloud"))&&"event".equals(file.getJSONObject("appProperties").optString("kind")))files.put(file);}page=data.optString("nextPageToken","");next=data.optString("newStartPageToken",next);}while(!page.isEmpty());}
+        else {String page=cursor;do{checkCancellation(cancellation);JSONObject data;try{data=json("changes?pageToken="+query(page)+"&pageSize=1000&fields="+query("nextPageToken,newStartPageToken,changes(removed,file(id,appProperties,version))"));}catch(DriveException e){if(e.status==410)return pullJournal("",account,cancellation);throw e;}JSONArray changes=data.optJSONArray("changes");if(changes!=null)for(int i=0;i<changes.length();i++){JSONObject change=changes.getJSONObject(i),file=change.optJSONObject("file");if(!change.optBoolean("removed")&&file!=null&&file.optJSONObject("appProperties")!=null&&"1".equals(file.getJSONObject("appProperties").optString("playeriumCloud"))&&"event".equals(file.getJSONObject("appProperties").optString("kind")))files.put(file);}page=data.optString("nextPageToken","");next=data.optString("newStartPageToken",next);}while(!page.isEmpty());}
+        checkCancellation(cancellation);peerFiles.check(account);
         java.util.concurrent.ExecutorService reads=java.util.concurrent.Executors.newFixedThreadPool(12);
         try{CompletionService<JSONObject> completed=new ExecutorCompletionService<>(reads);
-            final String account=prefs.getString("account","");
             String owner=hex(MessageDigest.getInstance("SHA-256").digest(account.getBytes("UTF-8")));
             final File eventCache=new File(context.getNoBackupFilesDir(),"cloud-events/"+owner);
             for(int i=0;i<files.length();i++){
                 final JSONObject file=files.getJSONObject(i);
-                completed.submit(()->{expectedAccount.set(account);try{return readEvent(file,eventCache);}finally{expectedAccount.remove();}});
+                completed.submit(()->{expectedAccount.set(account);try{checkCancellation(cancellation);return readEvent(file,eventCache,cancellation);}finally{expectedAccount.remove();}});
             }
             pullProgress(0,files.length());
-            for(int i=0;i<files.length();i++){
-                try{events.put(completed.take().get());}
+            for(int i=0;i<files.length();){
+                checkCancellation(cancellation);Future<JSONObject> ready=completed.poll(250,TimeUnit.MILLISECONDS);if(ready==null)continue;
+                try{events.put(ready.get());i++;}
                 catch(ExecutionException e){if(e.getCause() instanceof Exception)throw (Exception)e.getCause();throw e;}
                 if(events.length()%10==0||events.length()==files.length())pullProgress(events.length(),files.length());
             }
             if(!account.equals(prefs.getString("account",""))||!prefs.getBoolean("enabled",false))throw new IOException("Аккаунт синхронизации изменился.");
         }finally{reads.shutdownNow();}return new JSONObject().put("cursor",next).put("events",events);
     }
-    private JSONObject readEvent(JSONObject file,File eventCache)throws Exception{
+    private JSONObject readEvent(JSONObject file,File eventCache,Cancellation cancellation)throws Exception{
         String id=file.getString("id"),version=file.optString("version","");requireId(id);
         // The file version invalidates edited content. Never reuse an entry whose
         // version is unknown, and keep each Google account in a separate directory.
@@ -145,6 +157,7 @@ final class GoogleCloud {
             if(version.equals(saved.optString("version")))return saved.getJSONObject("event");
         }catch(Exception ignored){/* A missing/corrupt cache is recovered from Drive. */}
         JSONObject event=new JSONObject(new String(media(id,262144),"UTF-8"));
+        checkCancellation(cancellation);peerFiles.check(expectedAccount.get());
         if(!version.isEmpty())try{atomic(cached,new JSONObject().put("version",version).put("event",event));}
         catch(Exception ignored){/* Cache availability must not prevent synchronization. */}
         return event;
@@ -213,6 +226,7 @@ final class GoogleCloud {
         WorkManager.getInstance(context).enqueueUniqueWork("playerium-library-push",ExistingWorkPolicy.REPLACE,builder.build());
     }
     void refreshIncoming()throws Exception{journal.refresh();}
+    void refreshIncoming(Cancellation cancellation)throws Exception{journal.refresh(cancellation);}
     void wakeFileTransfers(){
         controlExecutor.execute(()->{synchronized(fileWakeLock){
             if(!isConnected()||!hasPendingJobs())return;
@@ -283,12 +297,15 @@ MusicEngine.get(context).prepareAudio(Uri.parse(job.getString("source")));
                             controlExecutor.execute(()->{try{realtime.drain();}catch(Exception ignored){}});
                         }
     }
-    boolean runJobs()throws Exception{return runJobs(true);}
-    private boolean runJobs(boolean includeDownloads)throws Exception{
+    boolean runJobs()throws Exception{return runJobs(true,()->false);}
+    boolean runJobs(Cancellation cancellation)throws Exception{return runJobs(true,cancellation);}
+    private boolean runJobs(boolean includeDownloads)throws Exception{return runJobs(includeDownloads,()->false);}
+    private boolean runJobs(boolean includeDownloads,Cancellation cancellation)throws Exception{
         if(!prefs.getBoolean("enabled",false))return true;File[] files=jobs.listFiles();if(files==null)files=new File[0];Exception failure=null;
         // Incoming local copies are ready for playback before slow backup uploads.
         Arrays.sort(files,(a,b)->Boolean.compare(!a.getName().startsWith("download-"),!b.getName().startsWith("download-")));
         for(File file:files){
+            if(cancellation.stopped())return true;
             if(!file.getName().matches("[A-Za-z0-9_-]+\\.json"))continue;
             // Do not wait for a transfer just to skip its download job.
             if(!includeDownloads&&file.getName().startsWith("download-"))continue;
@@ -316,6 +333,7 @@ MusicEngine.get(context).prepareAudio(Uri.parse(job.getString("source")));
                 if(!file.delete())throw new IOException("Не удалось завершить очередь.");
             }catch(Exception e){if(failure==null)failure=e;}finally{expectedAccount.remove();}
         }finally{preparingJobs.remove(file.getName());}}
+        if(cancellation.stopped())return true;
         if(failure!=null)throw failure;try{realtime.drain();}catch(Exception ignored){/* Drive is complete; the realtime outbox is retried by the next worker/sync. */}prefs.edit().remove("error").apply();return true;
     }
     void recordFailure(Exception e){prefs.edit().putString("error",message(e)).apply();}

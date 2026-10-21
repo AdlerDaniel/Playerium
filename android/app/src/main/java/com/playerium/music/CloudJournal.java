@@ -31,23 +31,28 @@ final class CloudJournal {
         try(FileOutputStream out=new FileOutputStream(temporary)){out.write(state.toString().getBytes("UTF-8"));out.getFD().sync();}
         if(!temporary.renameTo(file))throw new IOException("Не удалось сохранить медиатеку.");
     }
-    synchronized void refresh()throws Exception{
+    private void check(String account,GoogleCloud.Cancellation cancellation)throws IOException{
+        if(cancellation.stopped())throw new InterruptedIOException("Синхронизация отменена.");checkAccount(account);
+    }
+    void refresh()throws Exception{refresh(()->false);}
+    synchronized void refresh(GoogleCloud.Cancellation cancellation)throws Exception{
         long started=android.os.SystemClock.elapsedRealtime();
-        String account=cloud.prefs.getString("account","");checkAccount(account);
+        String account=cloud.prefs.getString("account","");check(account,cancellation);
         File file=path(account);JSONObject state=load(file);JSONArray events=state.getJSONArray("events");
         Set<String> known=new HashSet<>();for(int i=0;i<events.length();i++)known.add(events.getJSONObject(i).getString("id"));
         long revision=state.getLong("revision");
         for(;;){
+            check(account,cancellation);
             JSONObject page;
             try{page=cloud.realtime.changes(revision);}
             catch(Exception realtimeFailure){
-                checkAccount(account);JSONObject backup=cloud.pull(state.optString("driveCursor",""));checkAccount(account);
+                check(account,cancellation);JSONObject backup=cloud.pull(state.optString("driveCursor",""),cancellation);check(account,cancellation);
                 JSONArray recovered=backup.getJSONArray("events");boolean added=false;
                 for(int i=0;i<recovered.length();i++){JSONObject op=recovered.getJSONObject(i);if(known.add(op.getString("id"))){events.put(op);added=true;}}
                 String cursor=backup.getString("cursor");boolean changed=!cursor.equals(state.optString("driveCursor",""))||added||!file.isFile();
                 state.put("driveCursor",cursor);if(changed)save(file,state);break;
             }
-            checkAccount(account);
+            check(account,cancellation);
             JSONArray incoming=page.getJSONArray("events");
             for(int i=0;i<incoming.length();i++){JSONObject op=incoming.getJSONObject(i);if(known.add(op.getString("id")))events.put(op);}
             long next=page.getLong("revision");if(next<revision)throw new IOException("Некорректный журнал.");
@@ -58,13 +63,13 @@ final class CloudJournal {
         android.util.Log.i("PlayeriumSync","Incoming journal received in "+(android.os.SystemClock.elapsedRealtime()-started)+" ms");
         Map<String,JSONObject> active=activeTracks(events);Set<String> deleted=new HashSet<>();
         for(int i=0;i<events.length();i++){JSONObject op=events.getJSONObject(i);if("delete".equals(op.optString("kind"))&&!active.containsKey(op.optString("key")))deleted.add(op.optString("key"));}
-        checkAccount(account);cloud.reconcileDownloads(account,active,deleted);
+        check(account,cancellation);cloud.reconcileDownloads(account,active,deleted);
         JSONArray pending=new JSONArray();
         for(Map.Entry<String,JSONObject> entry:active.entrySet()){
-            checkAccount(account);
+            check(account,cancellation);
             if(cloud.localCopy(entry.getKey(),entry.getValue())==null)pending.put(new JSONObject().put("key",entry.getKey()).put("track",entry.getValue()));
         }
-        checkAccount(account);if(pending.length()>0)downloads.queue(pending);
+        check(account,cancellation);if(pending.length()>0)downloads.queue(pending);
         android.util.Log.i("PlayeriumSync","Incoming file reconciliation completed in "+(android.os.SystemClock.elapsedRealtime()-started)+" ms");
     }
     boolean accepts(String account,String key,JSONObject requested)throws Exception{
