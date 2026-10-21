@@ -94,6 +94,9 @@ final class GoogleCloud {
             JSONObject job=readJob(file);JSONObject entry=job.optJSONObject("download");
             if(entry!=null&&key.equals(entry.optString("key"))&&prefs.getString("account","").equals(job.optString("account"))&&!file.delete())throw new IOException("Не удалось отменить загрузку.");
         }
+        return removeCachedLocalFile(key);
+    }
+    private boolean removeCachedLocalFile(String key)throws Exception{
         File[] files=cache.listFiles();if(files!=null)for(File file:files)if(file.getName().startsWith(key+".")&&file.getName().matches(key+"\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)(\\.part(-[a-f0-9]{64})?|\\.verified)?"))if(!file.delete())throw new IOException("Не удалось удалить локальную копию.");return true;
     }
     private static void requireHash(String key)throws IOException{if(!key.matches("[a-f0-9]{64}"))throw new IOException("Некорректная запись песни.");}
@@ -239,7 +242,9 @@ final class GoogleCloud {
             }
         }finally{jobLock.unlock();}
         // A running download checks the persisted journal before installation.
-        for(String key:deleted){peerFiles.check(account);removeLocal(key);}
+        // Queued deletions were already reconciled in one pass above. Re-reading
+        // every queued JSON for every historical deletion made each wake O(D*Q).
+        for(String key:deleted){peerFiles.check(account);synchronized(downloadLock(key)){removeCachedLocalFile(key);}}
     }
     private void requireCurrentRecording(String account,String key,JSONObject track)throws Exception{
         peerFiles.check(account);if(!journal.accepts(account,key,track))throw new IOException("Песня удалена или обновлена во время загрузки.");

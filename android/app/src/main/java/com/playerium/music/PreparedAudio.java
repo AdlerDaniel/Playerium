@@ -40,6 +40,8 @@ final class PreparedAudio {
     static void acceptCloudVersion(Context c,Uri uri,org.json.JSONObject track)throws Exception{
         org.json.JSONObject normalization=track.optJSONObject("normalization");
         if(normalization!=null&&PROFILE.equals(normalization.optString("profile"))){
+            org.json.JSONObject existing=ready(c,uri);
+            if(existing!=null&&track.getString("audioKey").equals(existing.optString("audioKey")))return;
             org.json.JSONObject result=new org.json.JSONObject().put("normalization",normalization).put("audioKey",track.getString("audioKey"));
             verified(c,uri,result);
         }

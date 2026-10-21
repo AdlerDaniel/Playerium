@@ -61,6 +61,24 @@ public class LoudnessTest {
     org.json.JSONObject status=PreparedAudio.status(c,uris);assertEquals(2,status.getInt("total"));assertEquals(2,status.getInt("ready"));assertEquals(0,status.getInt("pending"));assertEquals(0,status.getInt("failed"));
    }finally{a.delete();b.delete();for(File output:outputs)output.delete();}
   }
+  @Test public void repeatedCloudVerificationDoesNotRewriteTheDownloadManifest()throws Exception{
+   android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();MusicEngine engine=MusicEngine.get(c);
+   File file=tone(c,"cloud-verification-cache.wav",1000),manifest=new File(c.getFilesDir(),"music-downloads.json");android.net.Uri uri=android.net.Uri.fromFile(file);
+   java.lang.reflect.Method records=MusicEngine.class.getDeclaredMethod("records"),save=MusicEngine.class.getDeclaredMethod("saveRecords");records.setAccessible(true);save.setAccessible(true);
+   org.json.JSONObject all=(org.json.JSONObject)records.invoke(engine);String id="cloud-verification-cache-fixture";
+   try{
+    all.put(id,new org.json.JSONObject().put("uri",uri.toString()).put("metadata",new org.json.JSONObject()));
+    String hash=OriginalNormalization.hash(new java.io.FileInputStream(file));org.json.JSONObject track=new org.json.JSONObject().put("audioKey",hash).put("normalization",new org.json.JSONObject().put("profile",PreparedAudio.PROFILE).put("targetLUFS",-7));
+    PreparedAudio.acceptCloudVersion(c,uri,track);assertTrue(manifest.isFile());long modified=manifest.lastModified();
+    Thread.sleep(30);
+    for(int i=0;i<5;i++)PreparedAudio.acceptCloudVersion(c,uri,track);
+    assertEquals("Unchanged cloud revisions must not rewrite every download record",modified,manifest.lastModified());
+    assertEquals(hash,PreparedAudio.ready(c,uri).getString("audioKey"));
+    // Replacing the bytes invalidates the cached stamp even at the same URI.
+    try(java.io.FileOutputStream out=new java.io.FileOutputStream(file,true)){out.write(0);}
+    assertNull(PreparedAudio.ready(c,uri));
+   }finally{all.remove(id);save.invoke(engine);PreparedAudio.preferences(c).edit().remove("verified:"+uri).commit();file.delete();}
+  }
   @Test public void originalFilesUseVerifiedConstantGainAndKeepTheirUriWithoutPlaybackAnalysis()throws Exception{
    android.content.Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();MusicEngine engine=MusicEngine.get(c);
    File quiet=tone(c,"prepared-quiet.wav",1000),loud=tone(c,"prepared-loud.wav",12000);java.util.List<File> outputs=new java.util.ArrayList<>();
