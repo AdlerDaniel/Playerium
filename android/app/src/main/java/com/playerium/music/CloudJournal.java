@@ -79,16 +79,19 @@ final class CloudJournal {
                 JSONObject track=op.optJSONObject("track");if(track==null||"pending".equals(track.optString("audioId")))continue;
                 JSONObject previous=metadata.get(key);
                 if(previous==null||op.optLong("clock")>previous.optLong("clock")||op.optLong("clock")==previous.optLong("clock")&&(!kind.equals(previous.optString("kind"))?"track".equals(kind):op.getString("id").compareTo(previous.getString("id"))>0))metadata.put(key,op);
-            }else if("delete".equals(kind))deleted.computeIfAbsent(key,k->new HashSet<>()).add(op.getString("id"));
+            }else if("delete".equals(kind))bucket(deleted,key).add(op.getString("id"));
             else if("restore".equals(kind)){
-                JSONArray ids=op.optJSONArray("deletes");if(ids!=null)for(int j=0;j<ids.length();j++)restored.computeIfAbsent(key,k->new HashSet<>()).add(ids.getString(j));
+                JSONArray ids=op.optJSONArray("deletes");if(ids!=null)for(int j=0;j<ids.length();j++)bucket(restored,key).add(ids.getString(j));
             }
         }
         Map<String,JSONObject> result=new HashMap<>();
         for(Map.Entry<String,JSONObject> entry:metadata.entrySet()){
-            Set<String> tombstones=new HashSet<>(deleted.getOrDefault(entry.getKey(),Collections.emptySet()));tombstones.removeAll(restored.getOrDefault(entry.getKey(),Collections.emptySet()));
+            Set<String> tombstones=new HashSet<>(bucket(deleted,entry.getKey()));tombstones.removeAll(bucket(restored,entry.getKey()));
             if(tombstones.isEmpty())result.put(entry.getKey(),entry.getValue().getJSONObject("track"));
         }
         return result;
+    }
+    private static Set<String> bucket(Map<String,Set<String>> values,String key){
+        Set<String> value=values.get(key);if(value==null){value=new HashSet<>();values.put(key,value);}return value;
     }
 }

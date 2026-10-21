@@ -28,10 +28,10 @@ final class GoogleCloud {
     final SharedPreferences prefs;
     private final ExecutorService controlExecutor=Executors.newFixedThreadPool(2),transferExecutor=Executors.newFixedThreadPool(3),executor=Executors.newSingleThreadExecutor(),connectExecutor=Executors.newSingleThreadExecutor(),liveExecutor=Executors.newFixedThreadPool(2);
     private final ConcurrentHashMap<String,Object> downloadLocks=new ConcurrentHashMap<>();
-    private Object downloadLock(String key){return downloadLocks.computeIfAbsent(key,k->new Object());}
+    private Object downloadLock(String key){Object value=downloadLocks.get(key);if(value!=null)return value;Object fresh=new Object(),old=downloadLocks.putIfAbsent(key,fresh);return old==null?fresh:old;}
     private final java.util.concurrent.locks.ReentrantLock jobLock=new java.util.concurrent.locks.ReentrantLock(true);
     private final File jobs,cache;
-    private final Set<String> preparingJobs=ConcurrentHashMap.newKeySet();
+    private final Set<String> preparingJobs=Collections.newSetFromMap(new ConcurrentHashMap<String,Boolean>());
     private String token,pendingLogin;
     private long tokenUntil;
     private final Map<String,JSONObject> stages=new HashMap<>();
