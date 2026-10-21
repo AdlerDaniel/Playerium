@@ -23,4 +23,20 @@ async function audioResponse(file,request) {
   const stream=fs.createReadStream(file,{start,end});
   return new Response(Readable.toWeb(stream),{status,headers});
 }
-module.exports={audioResponse,byteRange};
+async function preserveSources(sources,file,before,directory){
+  if(![...sources.values()].some(source=>source.playable===file))return;
+  await fsp.mkdir(directory,{recursive:true});
+  const snapshot=path.join(directory,'playback-'+require('node:crypto').randomUUID()+path.extname(file));
+  await fsp.copyFile(before,snapshot);let retained=false;
+  for(const source of sources.values())if(source.playable===file){source.playable=snapshot;source.snapshot=snapshot;retained=true;}
+  if(!retained)await fsp.rm(snapshot,{force:true});
+}
+function releaseSource(sources,id){
+  const source=sources.get(id);sources.delete(id);
+  if(source?.snapshot&&![...sources.values()].some(other=>other.snapshot===source.snapshot))fsp.rm(source.snapshot,{force:true}).catch(()=>{});
+}
+async function cleanPlaybackSnapshots(directory){
+  let names;try{names=await fsp.readdir(directory);}catch(error){if(error.code==='ENOENT')return;throw error;}
+  for(const name of names)if(/^playback-[a-f0-9-]{36}\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)$/i.test(name))await fsp.rm(path.join(directory,name),{force:true});
+}
+module.exports={audioResponse,byteRange,preserveSources,releaseSource,cleanPlaybackSnapshots};

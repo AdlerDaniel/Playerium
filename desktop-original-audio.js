@@ -55,7 +55,7 @@ class OriginalAudio {
     if(!verified||(await fs.stat(output)).size<=32)throw Error('Не удалось подтвердить безопасную громкость.');
    }
    const result={audioKey:await hash(changed?output:input),normalization:{profile:PROFILE,targetLUFS:TARGET,gainDb:correction,integrated:Number.isFinite(integrated)?Number(actual.input_i):null,truePeak:Number.isFinite(peak)?Number(actual.input_tp):null,peakLimited:Number.isFinite(integrated)&&correction<TARGET-integrated-.15}};
-   await this.beforeReplace(file);
+   if(changed)await this.beforeReplace(file,input);
    if(stamp!==await this.stamp(file)||before!==await hash(file))throw Error('Песня изменилась во время подготовки.');
    if(changed){
     await atomic(this.transaction(file),{file,input,output,before,after:result.audioKey,result});transaction=true;

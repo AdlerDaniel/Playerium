@@ -142,7 +142,7 @@ app.whenReady().then(async () => {
     if (!AUDIO_EXTS.has(path.extname(real).toLowerCase())) throw new Error('Not an audio file');
     const id = require('node:crypto').randomUUID();
     sources.set(id, {original:real,playable:await preparedAudio.cached(real)||real});
-    if (sources.size > 64) sources.delete(sources.keys().next().value);
+    if(sources.size>64)require('./desktop-audio').releaseSource(sources,sources.keys().next().value);
     return `playerium-audio://${id}/track`;
   });
   handle('file:metadata', async file => {
@@ -166,10 +166,11 @@ app.whenReady().then(async () => {
   const cloud=new (require('./desktop-cloud').DesktopCloud)({app,safeStorage,authorize,openExternal,fetcher:require('./desktop-cloud-http').createCloudFetcher(net),onAudioRevision:(file,track)=>preparedAudio.acceptOriginal(file,track),prepareBackup:(file,expected)=>preparedAudio.prepareBackup(file,expected),
     onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));}});
   handle('cloud:request',async(operation,payload)=>{try{return {ok:true,data:await cloud.request(operation,payload)};}catch(error){return {ok:false,error:error.message||'Не удалось синхронизировать Google Диск.'};}});
+  await require('./desktop-audio').cleanPlaybackSnapshots(path.join(app.getPath('userData'),'normalized-audio'));
   const loudness=new LoudnessAnalyzer(path.join(app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools'),'ffmpeg.exe'),path.join(app.getPath('userData'),'loudness'));
   handle('file:loudness',async file=>loudness.analyze(await authorize(file)));
   handle('file:loudnessCached',async file=>loudness.cached(await authorize(file)));
-  const preparedAudio=new (require('./desktop-original-audio').OriginalAudio)(loudness.executable,path.join(app.getPath('userData'),'normalized-audio'),{beforeReplace:async file=>{if(path.dirname(file)!==cloud.snapshots)await cloud.freezeSource(file);}});
+  const preparedAudio=new (require('./desktop-original-audio').OriginalAudio)(loudness.executable,path.join(app.getPath('userData'),'normalized-audio'),{beforeReplace:async(file,before)=>{if(path.dirname(file)!==cloud.snapshots)await cloud.freezeSource(file);await require('./desktop-audio').preserveSources(sources,file,before,path.join(app.getPath('userData'),'normalized-audio'));}});
   handle('file:prepareAudio',async file=>{await preparedAudio.prepare(await authorize(file));return true;});
   handle('file:preparationStatus',async files=>{
     if(!Array.isArray(files)||files.some(file=>typeof file!=='string'))throw Error('Invalid audio files');

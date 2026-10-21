@@ -12,3 +12,14 @@ test('audio response streams exactly requested bytes, preserves MIME and provide
  r=await audioResponse(file,new Request('https://example.test',{headers:{Range:'bytes=100-'}}));assert.equal(r.status,416);assert.equal(r.headers.get('content-range'),'bytes */100');
  }finally{await fs.rm(dir,{recursive:true,force:true});}
 });
+test('an active playback URL retains its original byte ranges after normalization replaces the path',async()=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'playerium-pinned-range-')),file=path.join(dir,'song.m4a'),replacement=path.join(dir,'replacement.m4a');
+ try{
+  const before=Buffer.from('original recording bytes'),after=Buffer.from('normalized recording with different container offsets');
+  await fs.writeFile(file,before);const sources=new Map([['playing',{original:file,playable:file}]]);
+  await require('../desktop-audio').preserveSources(sources,file,file,dir);await fs.writeFile(replacement,after);await fs.rename(replacement,file);
+  const pinned=await audioResponse(sources.get('playing').playable,new Request('https://example.test',{headers:{Range:'bytes=4-12'}}));
+  assert.equal(pinned.headers.get('content-range'),'bytes 4-12/'+before.length);assert.deepEqual(Buffer.from(await pinned.arrayBuffer()),before.subarray(4,13));
+  const fresh=await audioResponse(file,new Request('https://example.test'));assert.deepEqual(Buffer.from(await fresh.arrayBuffer()),after);
+ }finally{await fs.rm(dir,{recursive:true,force:true});}
+});
