@@ -19,6 +19,7 @@ public final class CloudWorker extends Worker {
     }
     @NonNull @Override public Result doWork(){GoogleCloud cloud=GoogleCloud.get(getApplicationContext());try{
         if(!cloud.isConnected())return Result.success();
+        android.util.Log.i("PlayeriumSync","Native synchronization started");
         cloud.connect.restoreFilePeers();
         Context context=getApplicationContext();NotificationManager manager=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
         if(Build.VERSION.SDK_INT>=26)manager.createNotificationChannel(new NotificationChannel("playerium_cloud","Синхронизация музыки",NotificationManager.IMPORTANCE_LOW));

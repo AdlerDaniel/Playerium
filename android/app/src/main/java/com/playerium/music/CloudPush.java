@@ -48,6 +48,7 @@ final class CloudPush {
                 String user=cloud.realtime.registerPush(session,installation(context),token);
                 if(!cloud.isConnected()||!account.equals(cloud.prefs.getString("account","")))return Result.retry();
                 cloud.prefs.edit().putString("pushAccount",account).putString("pushUser",user).apply();
+                android.util.Log.i("PlayeriumSync","Push registration ready");
                 // The registration catch-up push can arrive before this local mapping is saved.
                 cloud.enqueuePush(false);return Result.success();
             }catch(Exception unavailable){return cloud.isConnected()?Result.retry():Result.success();}
