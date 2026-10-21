@@ -28,24 +28,36 @@ export class RealtimeSync {
    this.channel.subscribe(status=>{if(generation!==this.generation)return;this.state=status==='SUBSCRIBED'?'online':'reconnecting';this.cloud.changed?.();if(status==='SUBSCRIBED')this.wake();});
   })();this.opening={account,promise};try{await promise;}catch(error){if(generation===this.generation){this.session=null;if(!this.channel){this.client?.disconnect();this.client=null;}this.error=error.message;this.state='offline';}throw error;}finally{if(this.opening?.promise===promise)this.opening=null;}
  }
- wake(){if(this.cloud.busy)this.cloud.resync=true;else this.cloud.schedule(100);}
+ wake(){if(this.cloud.busy){this.cloud.resync=true;this.cloud.syncMetadata?.().catch(()=>{});}else this.cloud.schedule(100);}
  async api(path,options={}){const account=this.account;await this.start(account);const session=this.session;if(!session||session.account!==account)throw Error('Синхронизация не подключена.');const response=await this.fetcher(REALTIME_URL+'/rest/v1/'+path,{...options,headers:{apikey:REALTIME_KEY,Authorization:'Bearer '+session.accessToken,'Content-Type':'application/json',...options.headers},signal:AbortSignal.timeout(10000),redirect:'error'});if(this.account!==account||this.session!==session)throw Error('Аккаунт изменился.');if(!response.ok){if(response.status===401)this.session=null;throw Error('Быстрая синхронизация временно недоступна.');}return response;}
  async publish(events){if(!this.session)return;const ready=events.filter(op=>validOperation(op)&&(op.kind!=='track'||op.track.audioId!=='pending'));for(let i=0;i<ready.length;i+=100){const batch=ready.slice(i,i+100);await this.api('playerium_events?on_conflict=user_id,op_id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(batch.map(operation=>({user_id:this.session.userId,op_id:operation.id,operation})))});}}
  async pull(){let seq=0;const events=[];for(;;){const response=await this.api('playerium_events?select=seq,operation&user_id=eq.'+this.session.userId+'&seq=gt.'+seq+'&order=seq.asc&limit=1000'),rows=await response.json();for(const row of rows)if(validOperation(row.operation))events.push(row.operation);if(rows.length<1000)return events;seq=rows[rows.length-1].seq;}}
+ async pullChanges(after=0){
+  let cursor=Number(after)||0;const events=[];
+  if(!Number.isSafeInteger(cursor)||cursor<0)throw Error('Некорректная позиция журнала.');
+  for(;;){
+   const response=await this.api('playerium_events?select=revision,operation&user_id=eq.'+this.session.userId+'&revision=gt.'+cursor+'&order=revision.asc&limit=500'),rows=await response.json();
+   if(!Array.isArray(rows)||rows.length>500)throw Error('Некорректный журнал синхронизации.');
+   for(const row of rows){if(!Number.isSafeInteger(row.revision)||row.revision<=cursor)throw Error('Некорректный порядок журнала.');cursor=row.revision;if(validOperation(row.operation))events.push(row.operation);}
+   if(rows.length<500)return {events,journalCursor:cursor};
+  }
+ }
  async pullLibrary(payload){
+   let nextCursor=Number(payload.journalCursor??this.cloud.journalCursor)||0;
+   const read=async()=>{const result=await this.pullChanges(nextCursor);nextCursor=result.journalCursor;return result.events;};
    // A Drive cursor only tracks future changes. Existing installations must also
    // publish their saved journal, including deletions, before using realtime.
    if(this.cloud.status?.realtimeAvailable&&this.cloud.account===this.cloud.status.account){try{await this.start(this.cloud.account);}catch{}}
    if(this.session){try{
-    if(!this.seeded){await this.publish(this.cloud.events||[]);const events=await this.pull();this.seeded=true;
-     if(events.length){this.lastDrive=Date.now();return {cursor:payload.cursor,events};}
+    if(!this.seeded){await this.publish(this.cloud.events||[]);const events=await read();this.seeded=true;
+     if(events.length){this.lastDrive=Date.now();return {cursor:payload.cursor,journalCursor:nextCursor,events};}
     }
-    if(this.lastDrive&&Date.now()-this.lastDrive<300000)return {cursor:payload.cursor,events:await this.pull()};
+    if(this.lastDrive&&Date.now()-this.lastDrive<300000)return {cursor:payload.cursor,journalCursor:nextCursor,events:await read()};
    }catch(error){this.error=error.message;}}
-   let result;try{result=await this.cloud.nativeRequest('pull',payload);}catch(error){if(!this.session)throw error;const events=await this.pull();this.lastDrive=Date.now();return {cursor:payload.cursor,events};}this.lastDrive=Date.now();
+   let result;try{result=await this.cloud.nativeRequest('pull',payload);}catch(error){if(!this.session)throw error;const events=await read();this.lastDrive=Date.now();return {cursor:payload.cursor,journalCursor:nextCursor,events};}this.lastDrive=Date.now();
   // Drive remains a backup and migrates existing installations into the journal.
-   if(this.session){try{await this.publish(this.seeded?(result.events||[]):[...(this.cloud.events||[]),...(result.events||[])]);result.events=[...(result.events||[]),...await this.pull()];this.seeded=true;}catch{this.lastDrive=0;}}
-  return result;
+   if(this.session){try{await this.publish(this.seeded?(result.events||[]):[...(this.cloud.events||[]),...(result.events||[])]);result.events=[...(result.events||[]),...await read()];this.seeded=true;}catch{this.lastDrive=0;}}
+  result.journalCursor=nextCursor;return result;
  }
  devices(){const now=Date.now();return [...this.peers.values()].filter(peer=>peer.id!==this.cloud.device&&now-peer.receivedAt<15000);}
  receiveState(payload){if(!payload||typeof payload.id!=='string'||payload.id===this.cloud.device||!payload.state||JSON.stringify(payload).length>262144)return;const peer={...payload,name:String(payload.name||'Playerium').slice(0,100),seenAt:Date.now(),receivedAt:Date.now(),realtime:true};this.peers.set(peer.id,peer);for(const id of [payload.ack,...(Array.isArray(payload.ackHistory)?payload.ackHistory:[])]){const task=this.waiters.get(id);if(task&&task.target===peer.id){clearTimeout(task.timer);this.waiters.delete(id);task.resolve(peer);}}this.onDevices?.();}

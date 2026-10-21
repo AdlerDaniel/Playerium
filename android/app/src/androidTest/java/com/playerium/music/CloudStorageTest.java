@@ -16,15 +16,19 @@ import static org.junit.Assert.*;
 public class CloudStorageTest {
     @Test public void queuedAudioRevisionIsPrivateImmutableAndUsesTheContentHash()throws Exception{
         Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);File original=new File(MusicEngine.managedDirectory(context),"snapshot-source.mp3");original.getParentFile().mkdirs();File snapshot=null;
+        String oldAccount=cloud.prefs.getString("account",null);boolean wasEnabled=cloud.isConnected();File jobFile=null;
+        cloud.prefs.edit().putBoolean("enabled",true).putString("account","snapshot-fixture").commit();
         String logical=String.format(java.util.Locale.ROOT,"%064x",1),content=OriginalNormalization.hash(new java.io.ByteArrayInputStream("song".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         try{
             try(java.io.FileOutputStream out=new java.io.FileOutputStream(original)){out.write("song".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
             JSONObject operation=new JSONObject().put("id",java.util.UUID.randomUUID().toString()).put("key",logical).put("track",new JSONObject().put("ext",".mp3").put("audioKey",content));
             Method method=GoogleCloud.class.getDeclaredMethod("snapshot",JSONObject.class,java.io.InputStream.class);method.setAccessible(true);String uri=(String)method.invoke(cloud,operation,new java.io.FileInputStream(original));snapshot=new File(Uri.parse(uri).getPath());
-            assertTrue(snapshot.getCanonicalPath().startsWith(context.getNoBackupFilesDir().getCanonicalPath()+File.separator));assertFalse(MainActivity.hasMusicPermission(context,Uri.parse(uri)));
+            assertTrue(snapshot.getCanonicalPath().startsWith(context.getNoBackupFilesDir().getCanonicalPath()+File.separator));assertFalse(MainActivity.hasMusicPermission(context,Uri.parse(uri)));operation.put("kind","track");jobFile=new File(context.getNoBackupFilesDir(),"cloud-jobs/"+operation.getString("id")+".json");
+            JSONObject job=new JSONObject().put("account","snapshot-fixture").put("source",uri).put("operation",operation);
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(jobFile)){out.write(job.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
             try(java.io.FileOutputStream out=new java.io.FileOutputStream(original)){out.write("changed".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
             JSONObject info=(JSONObject)request("fingerprint",new JSONObject().put("source",uri));assertEquals(content,info.getString("key"));assertEquals(4,info.getInt("size"));assertFalse(logical.equals(info.getString("key")));
-        }finally{original.delete();if(snapshot!=null)snapshot.delete();}
+        }finally{original.delete();if(snapshot!=null)snapshot.delete();if(jobFile!=null)jobFile.delete();cloud.prefs.edit().putBoolean("enabled",wasEnabled).putString("account",oldAccount).commit();}
     }
     private Object request(String operation,JSONObject payload)throws Exception{Method method=GoogleCloud.class.getDeclaredMethod("request",String.class,JSONObject.class);method.setAccessible(true);try{return method.invoke(GoogleCloud.get(ApplicationProvider.getApplicationContext()),operation,payload);}catch(InvocationTargetException e){throw (Exception)e.getCause();}}
     @Test public void stagedMusicIsPrivateBoundedAndFingerprintMatchesAcrossPlatforms()throws Exception{
@@ -123,12 +127,10 @@ public class CloudStorageTest {
             workerThread.start();assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
             outgoingThread.start();assertEquals(Boolean.TRUE,outgoing.get(3,java.util.concurrent.TimeUnit.SECONDS));
             foregroundThread.start();cleanupThread.start();
-            long deadline=System.currentTimeMillis()+3000;while(!lock.hasQueuedThread(foregroundThread)&&System.currentTimeMillis()<deadline)Thread.sleep(10);
-            assertTrue(lock.hasQueuedThread(foregroundThread));
-            deadline=System.currentTimeMillis()+3000;while(!lock.hasQueuedThread(cleanupThread)&&System.currentTimeMillis()<deadline)Thread.sleep(10);
-            assertTrue(lock.hasQueuedThread(cleanupThread));firstRelease.countDown();
-            assertEquals(Uri.fromFile(readyFile).toString(),foreground.get(5,java.util.concurrent.TimeUnit.SECONDS).getString("uri"));
-            assertEquals(Boolean.TRUE,cleanupTask.get(5,java.util.concurrent.TimeUnit.SECONDS));
+            // A ready import and removal of an unrelated recording never wait for network transfers.
+            assertEquals(Uri.fromFile(readyFile).toString(),foreground.get(3,java.util.concurrent.TimeUnit.SECONDS).getString("uri"));
+            assertEquals(Boolean.TRUE,cleanupTask.get(3,java.util.concurrent.TimeUnit.SECONDS));
+            firstRelease.countDown();
             secondRelease.countDown();assertTrue(worker.get(5,java.util.concurrent.TimeUnit.SECONDS));assertEquals(2,transfers.get());
         }finally{
             firstRelease.countDown();secondRelease.countDown();workerThread.join(12000);foregroundThread.join(12000);outgoingThread.join(12000);cleanupThread.join(12000);

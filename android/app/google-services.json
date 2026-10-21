@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "919635824329",
+    "project_id": "playerium-personal",
+    "storage_bucket": "playerium-personal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:919635824329:android:2ae8d3a5939fd467510718",
+        "android_client_info": {
+          "package_name": "com.playerium.music"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXcwVmKbTykrZ90ZLxZ_RJk8Z_iPxw66U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

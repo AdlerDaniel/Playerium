@@ -20,8 +20,8 @@ for(const backup of ['offline','empty'])test('saved-history migration retries an
  const {RealtimeSync}=await import('../js/realtime-sync.js');const rows=new Map();let fail=true;
  const cloud={device:'self',account:'a',status:{account:'a',realtimeAvailable:true},events:Array.from({length:145},(_,i)=>({id:'legacy-'+i,device:'self',version:1,clock:i+1,kind:'playlist',playlist:'p'+i,name:'Legacy'})),schedule(){},nativeRequest:async op=>{if(op==='realtimeSession')return session();if(backup==='empty')return {events:[],cursor:'saved-cursor'};throw Error('Drive offline');}};
  const sync=new RealtimeSync(cloud,{Client:FakeClient,fetcher:async(_url,options)=>{
-  if(options.method==='POST'){const batch=JSON.parse(options.body);if(fail&&batch[0].op_id==='legacy-100')throw Error('Interrupted');for(const row of batch)if(!rows.has(row.op_id))rows.set(row.op_id,{seq:rows.size+1,operation:row.operation});return response(null,201);}
-  return response([...rows.values()]);
+  if(options.method==='POST'){const batch=JSON.parse(options.body);if(fail&&batch[0].op_id==='legacy-100')throw Error('Interrupted');for(const row of batch)if(!rows.has(row.op_id))rows.set(row.op_id,{seq:rows.size+1,revision:rows.size+1,operation:row.operation});return response(null,201);}
+  const after=Number(new URL(_url).searchParams.get('revision')?.slice(3))||0;return response([...rows.values()].filter(row=>row.revision>after).slice(0,500));
  }});
  const partial=await sync.pullLibrary({cursor:'saved-cursor'});assert.equal(partial.cursor,'saved-cursor');assert.equal(rows.size,100);assert.equal(!!sync.seeded,false);
  fail=false;const recovered=await sync.pullLibrary({cursor:'saved-cursor'});assert.equal(recovered.events.length,145);assert.equal(sync.seeded,true);assert.equal(rows.size,145);assert.equal(recovered.cursor,'saved-cursor');
@@ -83,4 +83,20 @@ test('a native retry of a slow realtime command acknowledges completion without 
  Object.assign(controller,{id:'device',info:{realtime:false},cloud:{request:async op=>calls.push(op),realtime:{publishState:async()=>{}}},rtc:{publish(){}},snapshot:()=>({playing:false})});
  controller.receive=async command=>{executions++;await gate;await controller.acknowledge(command);};
  const command={id:'same-command',target:'device',action:'pause',issuedAt:Date.now()};const original=controller.receiveOnce({...command,realtime:true});const retry=controller.receiveOnce(command);release();await Promise.all([original,retry]);assert.equal(executions,1);assert.equal(calls.filter(op=>op==='connectAck').length,1);assert.equal(calls.filter(op=>op==='connectPublish').length,1);
+});
+
+test('incremental journal pages resume at a durable account revision and never advance on a failed page',async()=>{
+ const {RealtimeSync}=await import('../js/realtime-sync.js');const urls=[];
+ const cloud={device:'self',schedule(){},nativeRequest:async()=>session()};
+ const events=Array.from({length:1003},(_,i)=>({revision:i+1,operation:{id:'delta-'+i,device:'self',version:1,clock:i+1,kind:'playlist',playlist:'p'+i,name:'Playlist'}}));
+ let fail=false;
+ const sync=new RealtimeSync(cloud,{Client:FakeClient,fetcher:async url=>{
+  urls.push(url);const after=Number(new URL(url).searchParams.get('revision').slice(3));
+  if(fail&&after>=500)throw Error('connection lost');
+  return response(events.filter(row=>row.revision>after).slice(0,500));
+ }});await sync.start('a');
+ fail=true;await assert.rejects(sync.pullChanges(0),/connection lost/);
+ fail=false;const recovered=await sync.pullChanges(0);assert.equal(recovered.events.length,1003);assert.equal(recovered.journalCursor,1003);
+ assert.deepEqual(await sync.pullChanges(recovered.journalCursor),{events:[],journalCursor:1003});
+ assert.ok(urls.at(-1).includes('revision=gt.1003'));sync.reset();
 });

@@ -16,32 +16,34 @@ export class CloudSync {
  }
  async init(){
   const state=await this.library.getFromStore('settings','cloudSync');this.states=state?.value||{};
-   const previous=this.library.onLibraryChanged;this.library.onLibraryChanged=()=>{this.captureDeletions();previous?.();if(this.busy)this.resync=true;else this.schedule();};
+   const previous=this.library.onLibraryChanged;this.library.onLibraryChanged=()=>{this.captureDeletions();previous?.();if(this.busy){this.resync=true;this.syncMetadata().catch(()=>{});}else this.schedule();};
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)this.schedule(0);});window.addEventListener('online',()=>this.schedule(0));
   if(this.available){this.refreshStatus().catch(error=>{this.error=error.message;this.changed?.();});this.schedule(1000);this.interval=setInterval(()=>this.schedule(0),30000);}
  }
  async refreshStatus(){this.status=await this.request('status');if(this.status.connected&&this.status.realtimeAvailable)this.realtime.start(this.status.account).catch(()=>{});else this.realtime.reset();this.changed?.();return this.status;}
  schedule(delay=800){clearTimeout(this.timer);this.timer=setTimeout(()=>this.sync().catch(error=>{this.error=error.message;this.changed?.();}),delay);}
- async save(){this.states[this.account]={events:this.events,outbox:this.outbox,links:this.links,cursor:this.cursor,shadow:this.shadow};await this.library.putInStore('settings',{key:'cloudSync',value:this.states});}
+ async save(){this.states[this.account]={events:this.events,outbox:this.outbox,links:this.links,cursor:this.cursor,shadow:this.shadow,journalCursor:this.journalCursor||0};await this.library.putInStore('settings',{key:'cloudSync',value:this.states});}
  operation(kind,fields){const clock=[...this.events,...this.outbox].reduce((n,o)=>Math.max(n,o.clock),0)+1;const op={version:1,id:crypto.randomUUID(),device:this.device,clock,kind,...fields};this.outbox.push(op);return op;}
- async connect(){await this.request('connect');await this.refreshStatus();await this.sync();}
+ async connect(){await this.request('connect');await this.refreshStatus();if(this.status.connected)this.schedule(0);}
  async disconnect(){this.realtime.reset();await this.request('disconnect');this.status={connected:false};this.changed?.();}
  async sync(){
-  if(this.busy||!this.available)return;this.busy=true;this.error=null;this.failures=[];this.progress=null;this.stage='Проверка подключения…';this.changed?.();
+  if(this.busy||!this.available)return;this.busy=true;this.error=null;this.failures=[];this.failedFileAttempts=new Set();this.progress=null;this.stage='Проверка подключения…';this.changed?.();
   try{
    await this.refreshStatus();if(!this.status.connected)return;
    this.setStage('Получение списка песен…');
    let initialPull=false;
    const account=this.status.account;if(!account)throw Error('Не удалось определить аккаунт Google.');
-   if(this.account!==account){this.account=account;const state=this.states[account]||{};this.events=state.events||[];this.outbox=state.outbox||[];this.links=state.links||{};this.cursor=state.cursor||null;this.shadow=state.shadow||{};
-    if(!this.cursor){this.setStage('Получение списка песен…');const initial=await this.request('pull',{});this.events=mergeOperations(this.events,initial.events||[]);this.cursor=initial.cursor;initialPull=true;}
+   if(this.account!==account){this.account=account;const state=this.states[account]||{};this.events=state.events||[];this.outbox=state.outbox||[];this.links=state.links||{};this.cursor=state.cursor||null;this.shadow=state.shadow||{};this.journalCursor=state.journalCursor||0;
+    if(!this.cursor){this.setStage('Получение списка песен…');const initial=await this.request('pull',{});this.events=mergeOperations(this.events,initial.events||[]);this.cursor=initial.cursor;this.journalCursor=initial.journalCursor??this.journalCursor;initialPull=true;}
    }
    // Capture edits before applying remote state, so an offline edit is not overwritten.
-   this.setStage('Проверка изменений на устройстве…');await this.capture();
-   if(!initialPull){this.setStage('Получение изменений…');const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;}
+   this.setStage('Проверка изменений на устройстве…');await this.capture();this.registerSources();
+   if(!initialPull){this.setStage('Получение изменений…');const pulled=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,pulled.events||[]);this.cursor=pulled.cursor;this.journalCursor=pulled.journalCursor??this.journalCursor;}
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
+   await this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))),{files:false});
+    this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')))).catch(error=>{this.error=error.message;});
     this.setStage('Сохранение изменений…');let published=false;const outgoingPending=this.status.outgoingPending??this.status.pending;
-    for(const op of [...this.outbox]){
+    for(const op of [...this.outbox].sort((a,b)=>(a.kind==='track')-(b.kind==='track'))){
      try{
     const link=this.links[op.key];
     if(op.kind==='track'){
@@ -55,16 +57,39 @@ export class CloudSync {
     if(this.status.canFlush&&(published||outgoingPending))try{await this.request('flush');}catch(error){this.failures.push(error.message);}
     // Only outgoing work can add journal entries since the pull above.
     // An incoming-only device can start importing immediately.
-    if(published||outgoingPending){this.setStage('Получение изменений…');const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;}
+    if(published||outgoingPending){this.setStage('Получение изменений…');const again=await this.request('pull',{cursor:this.cursor});this.events=mergeOperations(this.events,again.events||[]);this.cursor=again.cursor;this.journalCursor=again.journalCursor??this.journalCursor;}
    this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
    // Preserve edits made while native transfers were running.
-   await this.capture();
+   await this.capture();this.registerSources();
    await this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))));
    this.lastSync=Date.now();await this.save();
     if(this.failures.length)throw Error(`Не завершено операций: ${this.failures.length}. ${this.failures[0]}`);
   }finally{this.busy=false;this.stage=null;globalThis.document?.querySelectorAll('.loading-rows[data-cloud-loading]').forEach(node=>node.remove());this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
  }
  setStage(stage){this.stage=stage;this.changed?.();}
+  registerSources(){
+   if(this.indexingSources)return;
+   const sources=[...new Set(this.library.getTracks().map(track=>track.filePath||track.nativeUri||track.cloudSource).filter(Boolean))];
+   this.indexingSources=this.nativeRequest('registerSources',{sources}).catch(()=>{}).finally(()=>{this.indexingSources=null;});
+  }
+ async syncMetadata(){
+  if(this.metadataTask)return this.metadataTask;
+  if(!this.account||!this.status.connected)return;
+  const account=this.account;
+  const task=(async()=>{
+   await this.capture({files:false});
+   const pulled=await this.request('pull',{cursor:this.cursor});
+   if(this.account!==account||!this.status.connected)return;
+   this.events=mergeOperations(this.events,pulled.events||[]);
+   this.journalCursor=Math.max(this.journalCursor||0,pulled.journalCursor||0);
+   this.outbox=this.outbox.filter(op=>!this.events.some(remote=>remote.id===op.id));await this.save();
+   await this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))),{files:false});
+    this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')))).catch(error=>{this.error=error.message;});
+   const outgoing=this.outbox.filter(op=>op.kind!=='track');
+   if(outgoing.length){await this.realtime.publish(outgoing);for(const operation of outgoing)await this.nativeRequest('publish',{operation});}
+  })();this.metadataTask=task;
+  try{return await task;}finally{if(this.metadataTask===task)this.metadataTask=null;}
+ }
  captureDeletions(){if(!this.account||!this.links||!this.shadow)return;if(!Object.values(this.links).some(link=>link.localId&&!link.removed&&!this.library.getTrackById(link.localId))&&!Object.entries(this.shadow).some(([id,old])=>!old.deleted&&!this.library.getPlaylistById(id)))return;const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));let changed=false;
   for(const [key,link] of Object.entries(this.links))if(link.localId&&!this.library.getTrackById(link.localId)&&!link.removed&&!view.tracks.get(key)?.deleted){this.operation('delete',{key});link.removed=true;changed=true;}
   for(const [id,old] of Object.entries(this.shadow))if(!this.library.getPlaylistById(id)&&!old.deleted&&!view.playlists.get(id)?.deleted){this.operation('playlist-delete',{playlist:id});old.deleted=true;changed=true;}
@@ -84,12 +109,13 @@ export class CloudSync {
   for(let offset=0;offset<blob.size;offset+=512*1024){const data=new Uint8Array(await blob.slice(offset,offset+512*1024).arrayBuffer()),parts=[];for(let i=0;i<data.length;i+=32768)parts.push(String.fromCharCode(...data.subarray(i,i+32768)));await this.request('stageChunk',{id:session.id,offset,base64:btoa(parts.join(''))});}
   const result=await this.request('stageComplete',{id:session.id});track.cloudSource=result.source;await this.library.putInStore('tracks',track);return result.source;
  }
- async capture(){
+ async capture({files=true}={}){
   const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));
   for(const [key,link] of Object.entries(this.links))if(link.localId&&!this.library.getTrackById(link.localId)&&!link.removed){this.operation('delete',{key});link.removed=true;}
   for(const track of this.library.getTracks()){
    try{
    let key=Object.keys(this.links).find(k=>this.links[k].localId===track.id);
+   if(!key&&!files)continue;
    if(!key){
     const fingerprint=await this.request('fingerprint',{source:track.cloudSource||await this.source(track)});key=fingerprint.key;
     if(view.tracks.get(key)?.deleted){this.links[key]={localId:track.id,removed:false};continue;}
@@ -123,18 +149,41 @@ export class CloudSync {
  }
  metadata(track){return {title:track.title||'Без названия',artist:track.artist||'Неизвестный исполнитель',album:track.album||'',duration:track.duration||0,year:track.year||null,genre:track.genre||null,trackNo:track.trackNo||null,isrc:track.isrc||null,...(track.audioKey&&track.normalization?{audioKey:track.audioKey,normalization:track.normalization,size:track.fileSize??track.size}:{})};}
  async coverSignature(track){if(!track.pictureBlob)return '';this.coverSignatures||=new WeakMap();if(this.coverSignatures.has(track.pictureBlob))return this.coverSignatures.get(track.pictureBlob);let hash=2166136261;const bytes=new Uint8Array(await track.pictureBlob.arrayBuffer());for(const byte of bytes)hash=Math.imul(hash^byte,16777619);const signature=track.pictureBlob.type+':'+bytes.length+':'+(hash>>>0);this.coverSignatures.set(track.pictureBlob,signature);return signature;}
- async apply(view){
+ async apply(view,{files=true}={}){
+   if(!files)return this.applyView(view,{files:false});
+   this.nextFileView={view,account:this.account};
+   if(this.fileApplyTask)return this.fileApplyTask;
+   const task=(async()=>{
+    while(this.nextFileView){
+     const next=this.nextFileView;this.nextFileView=null;
+     if(next.account===this.account)await this.applyView(next.view);
+    }
+   })();this.fileApplyTask=task;
+   try{return await task;}finally{if(this.fileApplyTask===task)this.fileApplyTask=null;}
+  }
+  async applyView(view,{files=true}={}){
   this.applying=true;
   try{
-   const downloads=[...view.tracks].filter(([key,remote])=>remote.data&&!remote.deleted&&!this.library.getTrackById(this.links[key]?.localId));
+   const downloads=files?[...view.tracks].filter(([key,remote])=>remote.data&&!remote.deleted&&!this.library.getTrackById(this.links[key]?.localId)):[];
    this.progress={done:0,total:downloads.length};this.changed?.();
    if(window.AndroidBridge&&downloads.length)await this.request('queueDownloads',{tracks:downloads.map(([key,remote])=>({key,track:remote.data}))});
-   for(const [key,remote] of view.tracks){
+   const entries=[...view.tracks],width=files?Math.min(3,entries.length):1;
+   const worker=async offset=>{for(let index=offset;index<entries.length;index+=width){
+    const [key,remote]=entries[index],attempt=key+':'+(remote.data?.audioKey||'')+':'+(remote.data?.audioId||'');
+    if(files&&this.failedFileAttempts?.has(attempt))continue;
     try{
      if(this.outbox.some(op=>op.kind==='delete'&&op.key===key))remote.deleted=true;
     let link=this.links[key],track=link&&this.library.getTrackById(link.localId);
-    if(remote.deleted){if(track){if(this.ui.player.currentTrack?.id===track.id)this.ui.player.stop();await this.library.removeTrack(track.id);this.ui.player.removeTrack?.(track.id);}await this.request('removeLocal',{key});if(link)link.removed=true;await this.save();continue;}
+    if(remote.deleted){if(track){if(this.ui.player.currentTrack?.id===track.id)this.ui.player.stop();await this.library.removeTrack(track.id);this.ui.player.removeTrack?.(track.id);}if(files)await this.request('removeLocal',{key});if(link)link.removed=true;await this.save();continue;}
     if(!remote.data)continue;
+    if(!files){
+     if(!track)continue;
+     const data=this.metadata(this.outbox.filter(op=>op.kind==='track'&&op.key===key).sort((a,b)=>b.clock-a.clock)[0]?.track||remote.data);
+     delete data.audioKey;delete data.normalization;delete data.size;
+     Object.assign(track,data);track.liked=remote.liked;track.cloudKey=key;
+     link.liked=remote.liked;link.removed=false;link.metadata=JSON.stringify(this.metadata(track));await this.library.putInStore('tracks',track);
+     continue;
+    }
     const localPending=this.outbox.some(op=>op.kind==='track'&&op.key===key),content=remote.data.audioKey||key;
     if(track&&!localPending&&content===(track.cloudAudioKey||key)&&remote.data.normalization?.profile==='constant-lufs7-tp1-original-v1'&&track.normalization?.profile!==remote.data.normalization.profile){
      const accepted=await this.request('acceptAudioRevision',{key,track:remote.data,source:track.nativeUri||track.filePath||''});if(!accepted)throw Error('Локальная песня изменилась до подтверждения громкости.');
@@ -144,7 +193,12 @@ export class CloudSync {
      Object.assign(track,{fileSize:file.size,lastModified:file.lastModified,audioKey:content});
     }
     if(!track){
-     const file=await this.request('download',{key,track:remote.data});this.library.blockedSources?.delete(file.folderSource);track=await this.library.addDownloaded(file,null);
+     const file=await this.request('download',{key,track:remote.data});
+     const latest=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))).tracks.get(key);
+     if(latest?.deleted){await this.request('removeLocal',{key});continue;}
+     if(latest?.data&&(latest.data.audioKey||key)!==(remote.data.audioKey||key))throw Error('Версия песни обновилась. Загрузка продолжится автоматически.');
+     if(latest?.data)remote.data=latest.data;
+     this.library.blockedSources?.delete(file.folderSource);track=await this.library.addDownloaded(file,null);
      if(file.coverBase64){const bytes=Uint8Array.from(atob(file.coverBase64),c=>c.charCodeAt(0));track.pictureBlob=new Blob([bytes],{type:file.coverMime||'image/jpeg'});track.pictureUrl=this.library.coverURL(track.id,track.pictureBlob);track.cloudCoverId=remote.data.coverId;}
      this.links[key]=link={localId:track.id,removed:false};
     }
@@ -154,14 +208,18 @@ export class CloudSync {
     link.coverSignature=await this.coverSignature(track);
     await this.save();
     if(downloads.some(([k])=>k===key)){this.progress.done++;if(this.ui.queueLibraryRefresh)this.ui.queueLibraryRefresh({skipSettings:true});else{this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();}this.changed?.();}
-    }catch(error){this.failures?.push(`${remote.data?.title||key}: ${error.message}`);await this.save();}
-   }
+    }catch(error){if(files)this.failedFileAttempts?.add(attempt);this.failures?.push(`${remote.data?.title||key}: ${error.message}`);await this.save();}
+   }};
+   await Promise.all(Array.from({length:width},(_,index)=>worker(index)));
    for(const remote of view.playlists.values()){
     if(this.outbox.some(op=>op.kind==='playlist-delete'&&op.playlist===remote.id))remote.deleted=true;
     if(remote.deleted){if(this.library.getPlaylistById(remote.id))await this.library.deletePlaylist(remote.id);this.shadow[remote.id]={deleted:true};continue;}
     if(!remote.meta)continue;
     const members=[...remote.members].filter(([key,op])=>op.present&&!view.tracks.get(key)?.deleted);if(remote.manualOrder)members.sort(([a,x],[b,y])=>(remote.positions.get(a)?.position??Infinity)-(remote.positions.get(b)?.position??Infinity)||a.localeCompare(b));
     const keys=members.map(([key])=>key),trackIds=keys.map(key=>this.links[key]?.localId).filter(id=>id&&this.library.getTrackById(id));
+    // Do not turn not-yet-downloaded members into an editable empty playlist.
+    // A later capture would otherwise mistake its missing rows for removals.
+    if(!files&&trackIds.length!==keys.length)continue;
     const pl={id:remote.id,name:remote.name,description:remote.description,coverType:remote.coverType,coverUrl:remote.coverUrl,manualOrder:!!remote.manualOrder,trackIds,createdAt:Date.now(),updatedAt:Date.now()};this.library.playlists.set(pl.id,pl);await this.library.putInStore('playlists',pl);this.shadow[pl.id]={name:pl.name,description:pl.description,coverType:pl.coverType,coverUrl:pl.coverUrl,manualOrder:!!pl.manualOrder,keys};
    }
    this.ui.renderSidebar?.();if(this.ui.currentView?.type!=='settings')this.ui.refreshCurrentView?.();this.ui.syncPlayerDisplay?.();

@@ -365,3 +365,39 @@ input:checked + .slider-toggle:before {
 .normalization-settings[data-state="complete"] .normalization-status{color:var(--sp-green)}
 .normalization-settings .settings-desc{margin-top:8px}
 @media(max-width:768px){.normalization-actions button{min-height:48px}}
+
+/* One settings page, with a quiet section index and consistent control rows. */
+.settings-container.settings-redesigned { max-width:1200px; margin-inline:auto; padding:32px clamp(20px,3vw,40px) 72px; }
+.settings-redesigned .settings-header { margin-bottom:32px; }
+.settings-layout { display:grid; grid-template-columns:168px minmax(0,1fr); align-items:start; gap:32px; }
+.settings-navigation { position:sticky; top:20px; display:flex; flex-direction:column; gap:4px; }
+.settings-navigation a { display:flex; align-items:center; min-height:44px; padding:10px 12px; border-radius:8px; color:var(--sp-text-secondary); text-decoration:none; font-size:14px; }
+.settings-navigation a:hover,.settings-navigation a:focus-visible { background:var(--theme-hover); color:var(--sp-text-primary); }
+.settings-content { min-width:0; }
+.settings-redesigned .settings-section { margin:0 0 32px; scroll-margin-top:24px; }
+.settings-redesigned .settings-section-title { font-size:19px; margin-bottom:16px; }
+.settings-redesigned .settings-section-title svg { display:none; }
+.visual-1 .settings-redesigned .settings-card { padding:20px; gap:20px; background:var(--sp-dark-800); border:1px solid var(--theme-border); box-shadow:none; border-radius:14px; }
+.settings-redesigned .settings-desc { font-size:13px; line-height:1.55; }
+.settings-redesigned .settings-row { align-items:center; flex-wrap:wrap; }
+.settings-redesigned .settings-label-wrap { min-width:min(100%,180px); }
+.settings-redesigned button { min-height:44px; justify-content:center; }
+.settings-redesigned .settings-card.account-card { display:flex; flex-direction:row; align-items:center; flex-wrap:wrap; gap:16px; }
+.account-avatar { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; border-radius:50%; background:var(--surface-selected); color:var(--sp-text-primary); font-size:23px; font-weight:700; }
+.account-error { width:100%; color:var(--sp-red); margin:0; }
+.settings-redesigned .is-loading::before { content:''; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
+@media(max-width:900px){
+ .settings-layout { grid-template-columns:minmax(0,1fr); gap:24px; }
+ .settings-navigation { position:static; flex-direction:row; flex-wrap:wrap; gap:4px; padding-bottom:16px; border-bottom:1px solid var(--theme-border); }
+ .settings-navigation a { padding:8px 12px; background:var(--theme-hover); }
+ .settings-container.settings-redesigned { padding-inline:var(--content-gutter,20px); }
+ .settings-redesigned .settings-header h1 { font-size:28px; }
+ .settings-redesigned .theme-picker { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .settings-redesigned .settings-card.account-card .settings-label-wrap { min-width:0; overflow-wrap:anywhere; }
+ .settings-redesigned .account-card button { flex-basis:100%; }
+ .settings-redesigned .account-card button[hidden] { display:none; }
+ .settings-redesigned .eq-faders-container { padding:12px 4px; gap:1px; }
+ .settings-redesigned .eq-fader-col { min-width:0; }
+ .settings-redesigned .eq-fader-val,.settings-redesigned .eq-fader-freq { font-size:10px; }
+}
+@media(prefers-reduced-motion:reduce){.settings-redesigned .is-loading::before{animation:none}}

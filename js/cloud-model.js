@@ -4,16 +4,17 @@ const id=/^[a-zA-Z0-9_-]{1,160}$/;
 const reserved=new Set(['__proto__','constructor','prototype']);
 export function validOperation(op) {
   if(!op||op.version!==1||!id.test(op.id)||!id.test(op.device)||!Number.isSafeInteger(op.clock)||op.clock<1)return false;
-  if(!['track','delete','restore','like','playlist','playlist-delete','member'].includes(op.kind))return false;
+  if(!['track','track-preview','delete','restore','like','playlist','playlist-delete','member'].includes(op.kind))return false;
   if(reserved.has(op.id)||reserved.has(op.device)||reserved.has(op.playlist))return false;
   if(op.kind==='playlist'||op.kind==='playlist-delete'||op.kind==='member') {
     if(!id.test(op.playlist))return false;
     if(op.kind==='playlist'&&(typeof op.name!=='string'||op.name.length>300))return false;
   }
-  if(['track','delete','restore','like','member'].includes(op.kind)&&!hash.test(op.key))return false;
-  if(op.kind==='track'&&(!op.track||!id.test(op.track.audioId)||typeof op.track.title!=='string'||typeof op.track.artist!=='string'||op.track.title.length>1000||op.track.artist.length>1000||!/^\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)$/i.test(op.track.ext)||!Number.isSafeInteger(op.track.size)||op.track.size<1||op.track.size>1073741824))return false;
-  if(op.kind==='track'&&op.track.audioKey!==undefined&&!hash.test(op.track.audioKey))return false;
-  if(op.kind==='track'&&op.track.normalization!==undefined){const n=op.track.normalization;if(!n||typeof n.profile!=='string'||!/^[a-z0-9-]{1,80}$/.test(n.profile)||!Number.isFinite(n.targetLUFS)||!Number.isFinite(n.gainDb)||!(n.integrated===null||Number.isFinite(n.integrated))||!(n.truePeak===null||Number.isFinite(n.truePeak)))return false;}
+  if(['track','track-preview','delete','restore','like','member'].includes(op.kind)&&!hash.test(op.key))return false;
+  if((op.kind==='track'||op.kind==='track-preview')&&(!op.track||!id.test(op.track.audioId)||typeof op.track.title!=='string'||typeof op.track.artist!=='string'||op.track.title.length>1000||op.track.artist.length>1000||!/^\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)$/i.test(op.track.ext)||!Number.isSafeInteger(op.track.size)||op.track.size<1||op.track.size>1073741824))return false;
+  if((op.kind==='track'||op.kind==='track-preview')&&op.track.audioKey!==undefined&&!hash.test(op.track.audioKey))return false;
+  if((op.kind==='track'||op.kind==='track-preview')&&op.track.normalization!==undefined){const n=op.track.normalization;if(!n||typeof n.profile!=='string'||!/^[a-z0-9-]{1,80}$/.test(n.profile)||!Number.isFinite(n.targetLUFS)||!Number.isFinite(n.gainDb)||!(n.integrated===null||Number.isFinite(n.integrated))||!(n.truePeak===null||Number.isFinite(n.truePeak)))return false;}
+  if(op.kind==='track-preview'&&(op.track.audioId!=='peer'||!hash.test(op.track.audioKey)))return false;
   if(op.kind==='restore'&&(!Array.isArray(op.deletes)||op.deletes.some(value=>!id.test(value))))return false;
   if(op.kind==='like'&&typeof op.liked!=='boolean')return false;
   if(op.kind==='member'&&typeof op.present!=='boolean')return false;
@@ -43,7 +44,7 @@ export function cloudView(events) {
     if(!op.key||op.kind==='member')continue;
     if(!tracks.has(op.key))tracks.set(op.key,{key:op.key,deletes:new Set(),restored:new Set(),liked:false});
     const track=tracks.get(op.key);
-    if(op.kind==='track'&&newer(op,track.meta)){track.meta=op;track.data=op.track;}
+    if((op.kind==='track'||op.kind==='track-preview')&&(!track.meta||op.clock>track.meta.clock||op.clock===track.meta.clock&&(op.kind!==track.meta.kind?op.kind==='track':newer(op,track.meta)))){track.meta=op;track.data=op.track;}
     if(op.kind==='delete')track.deletes.add(op.id);
     if(op.kind==='restore')for(const key of op.deletes)track.restored.add(key);
     if(op.kind==='like'&&newer(op,track.like)){track.like=op;track.liked=!!op.liked;}

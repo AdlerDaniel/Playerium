@@ -24,6 +24,9 @@
         android:theme="@style/AppTheme">
         <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" tools:node="merge" />
         <receiver android:name=".UpdateInstallReceiver" android:exported="false" />
+        <service android:name=".CloudMessagingService" android:exported="false">
+            <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
+        </service>
         <receiver android:name="androidx.media3.session.MediaButtonReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
         </receiver>

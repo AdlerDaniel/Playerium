@@ -13,6 +13,23 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class ConnectTest {
+ @Test public void nativePeersTransferEncryptedChunksAndRejectTampering()throws Exception{
+  LocalConnect a=new LocalConnect(()->"fixture",(device,command)->false),b=new LocalConnect(()->"fixture",(device,command)->false),c=new LocalConnect(()->"fixture",(device,command)->false);
+  byte[] bytes=new byte[180123];new java.security.SecureRandom().nextBytes(bytes);String key=GoogleCloud.hex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+  try{
+   a.start();b.start();c.start();a.publish(new JSONObject().put("id","pc"));b.publish(new JSONObject().put("id","phone"));c.publish(new JSONObject().put("id","tablet"));
+   LocalConnect.FileReader reader=request->{int offset=request.getInt("offset");if(!key.equals(request.optString("key")))return null;return new JSONObject().put("key",key).put("offset",offset).put("size",bytes.length).put("base64",android.util.Base64.encodeToString(java.util.Arrays.copyOfRange(bytes,offset,Math.min(bytes.length,offset+65536)),android.util.Base64.NO_WRAP));};
+   a.fileReader=reader;b.fileReader=reader;
+   b.learn(new JSONObject(a.local.toString()).put("lan",a.descriptor().put("addresses",new JSONArray().put("127.0.0.1"))));
+   c.learn(new JSONObject(b.local.toString()).put("lan",b.descriptor().put("addresses",new JSONArray().put("127.0.0.1"))));
+   for(LocalConnect receiver:new LocalConnect[]{b,c}){ByteArrayOutputStream received=new ByteArrayOutputStream();for(int offset=0;offset<bytes.length;){JSONObject chunk=receiver.readFile(key,offset);assertNotNull(chunk);byte[] data=android.util.Base64.decode(chunk.getString("base64"),android.util.Base64.DEFAULT);received.write(data);offset+=data.length;}assertArrayEquals(bytes,received.toByteArray());}
+   assertNull(b.readFile("../private",0));
+   JSONObject request=new JSONObject().put("key",key).put("offset",0),chunk=reader.read(request),sealed=PeerFileCrypto.seal(a.secret,a.session,chunk);
+   assertEquals(chunk.getString("base64"),PeerFileCrypto.open(a.secret,a.session,sealed,request).getString("base64"));
+   try{PeerFileCrypto.open(LocalConnect.randomSecret(),a.session,sealed,request);fail("Wrong key accepted");}catch(java.security.GeneralSecurityException expected){}
+   a.localAccount="different";assertNull(b.readFile(key,0));
+  }finally{a.close();b.close();c.close();}
+ }
  @Test public void nativeLocalChannelControlsBothDirectionsWithoutDriveAndRejectsWrongAccount()throws Exception{
   LocalConnect a=new LocalConnect(()->"fixture",(device,command)->false),b=new LocalConnect(()->"fixture",(device,command)->false);
   try{a.start();b.start();a.publish(new JSONObject().put("id","pc").put("state",new JSONObject().put("position",63)));b.publish(new JSONObject().put("id","phone").put("state",new JSONObject().put("volume",.8)));

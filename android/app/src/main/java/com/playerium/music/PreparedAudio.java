@@ -17,7 +17,7 @@ final class PreparedAudio {
     static SharedPreferences preferences(Context c){return c.getSharedPreferences("playerium_prepared_audio",Context.MODE_PRIVATE);}
     static File directory(Context c){File dir=new File(c.getNoBackupFilesDir(),"normalized-audio");dir.mkdirs();return dir;}
     static String key(Context c,Uri uri)throws Exception{
-        if(!MainActivity.hasMusicPermission(c,uri))throw new SecurityException("Unauthorized URI");
+        if(!MainActivity.hasMusicPermission(c,uri)&&!GoogleCloud.privateSnapshot(c,uri))throw new SecurityException("Unauthorized URI");
         long size,modified;
         if("file".equals(uri.getScheme())){File f=new File(uri.getPath());if(!f.isFile())throw new java.io.FileNotFoundException("Missing recording");size=f.length();modified=f.lastModified();}
         else {DocumentFile f=DocumentFile.fromSingleUri(c,uri);if(f==null||!f.exists())throw new java.io.FileNotFoundException("Missing recording");size=f.length();modified=f.lastModified();}

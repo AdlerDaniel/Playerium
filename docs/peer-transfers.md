@@ -1,0 +1,13 @@
+# Local recording delivery
+
+Playerium exchanges music over the existing account-authenticated LAN channel. The shared secret is delivered only through the user's private device discovery channel. Each request/response is signed; file chunks are additionally encrypted with AES-256-GCM, a random 96-bit nonce and associated data binding the session, SHA-256 content key, offset and total size. HTTP messages include Content-Length for native Android socket compatibility.
+
+Peers can request a content hash and offset only, never a file path. The native source registry records authorized files after fingerprinting, checks account ownership and file stamps again when reading, and serves at most 64 KiB per response. Existing recordings are indexed in background without holding playback startup. Registration is skipped for unchanged file stamps.
+
+Receivers retain an interrupted prefix. A missing peer falls back to a validated Drive audio object and HTTP Range; corrupt peer data is discarded. Full SHA-256 validation precedes installation. Downloads for separate Android recordings use separate locks; immutable uploads do not hold the global queue lock across network work. Cached recordings can be imported during another transfer. Incoming deletion or a changed audio revision invalidates installation and queued downloads are reconciled against the native journal.
+
+`track-preview` announces a prepared, normalized recording before its Drive backup completes. It contains metadata and a verified content key, with `audioId: peer`; no local path is published. New clients can download the bytes directly. The ordinary final `track` operation has priority at an equal logical clock. Older clients ignore the new kind and continue receiving the ordinary backed-up operation. Preview events remain in the authenticated durable journal; deleting or restoring a track uses the same existing operations.
+
+Devices on different networks currently use Drive when direct LAN delivery is unavailable. Immediate delivery cannot be guaranteed while both journal and backup endpoints are blocked. A separately reachable relay/TURN service would be required to extend delivery to those networks; none has been provisioned or paid for.
+
+Validation includes three independent file stores forwarding a recording without Drive, interrupted peer -> Range fallback, corrupted chunks, account switching, unknown paths, changed source files, preview/final convergence, incoming files while an outgoing flush is blocked, and Android socket tests. Physical phone/tablet receipt remains a separate gate from source tests and emulator runs.

@@ -22,8 +22,8 @@ for(const first of ['pc','phone'])test('legacy journals converge from 48 PC / 14
  for(const p of [pc,phone]){
   const sync=p.cloud.realtime;sync.account='account';sync.session={account:'account',userId:'test-user',accessToken:'test-token'};sync.start=async()=>{};
   sync.fetcher=async(_url,options)=>{
-   if(options.method==='POST'){posts++;for(const row of JSON.parse(options.body))if(!rows.has(row.op_id))rows.set(row.op_id,{seq:rows.size+1,operation:row.operation});return new Response(null,{status:201});}
-   return new Response(JSON.stringify([...rows.values()]));
+   if(options.method==='POST'){posts++;for(const row of JSON.parse(options.body))if(!rows.has(row.op_id))rows.set(row.op_id,{seq:rows.size+1,revision:rows.size+1,operation:row.operation});return new Response(null,{status:201});}
+   const after=Number(new URL(_url).searchParams.get('revision')?.slice(3))||0;return new Response(JSON.stringify([...rows.values()].filter(row=>row.revision>after).slice(0,500)));
   };
   const native=p.cloud.transport;p.cloud.transport=async(name,payload)=>{if(name==='status')return {...await native(name,payload),realtimeAvailable:true};if(name==='pull')throw Error('Drive unavailable');return native(name,payload);};
  }
@@ -231,4 +231,49 @@ test('pending background downloads do not trigger outgoing flush or an extra pul
   return base(name,payload);
  };
  await phone.cloud.sync();assert.equal(pulls,1);assert.equal(phone.lib.getTracks().length,1);
+});
+
+test('metadata keeps converging while an unrelated native upload is still blocked',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net),track=add(pc,net,'Song','song');await pc.cloud.sync();await phone.cloud.sync();
+ const base=pc.cloud.transport;let release,entered;const started=new Promise(resolve=>entered=resolve),blocked=new Promise(resolve=>release=resolve);
+ pc.cloud.transport=async(name,payload)=>{
+  if(name==='status')return {...await base(name,payload),canFlush:true,outgoingPending:1};
+  if(name==='flush'){entered();await blocked;return true;}
+  return base(name,payload);
+ };
+ const uploading=pc.cloud.sync();await started;
+ phone.lib.getTracks()[0].liked=true;await phone.cloud.sync();
+ try{await pc.cloud.syncMetadata();assert.equal(pc.cloud.busy,true);assert.equal(pc.lib.getTrackById(track.id).liked,true);}
+ finally{release();await uploading;}
+});
+
+test('a deletion received during an incoming audio transfer cannot resurrect the downloaded song',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net),track=add(pc,net,'Removed while downloading','new song');await pc.cloud.sync();
+ const base=phone.cloud.transport;let release,entered;const started=new Promise(resolve=>entered=resolve),blocked=new Promise(resolve=>release=resolve);
+ phone.cloud.transport=async(name,payload)=>{if(name==='download'){entered();await blocked;}return base(name,payload);};
+ const downloading=phone.cloud.sync();await started;
+ await pc.lib.removeTrack(track.id);await pc.cloud.sync();await phone.cloud.syncMetadata();
+ release();await downloading;assert.equal(phone.lib.getTracks().length,0);
+});
+test('a peer-ready recording is usable before backup, but the final track wins at the same clock',async()=>{
+ const {cloudView,mergeOperations,validOperation}=await import('../js/cloud-model.js');
+ const key='f'.repeat(64),track={audioId:'peer',audioKey:key,title:'Local',artist:'Artist',ext:'.mp3',size:123};
+ const preview={version:1,id:'source-preview',device:'pc',clock:12,kind:'track-preview',key,track};
+ const final={...preview,id:'source',kind:'track',track:{...track,audioId:'drive-final'}};
+ assert.equal(validOperation(preview),true);assert.equal(validOperation({...preview,track:{...track,audioId:'foreign'}}),false);
+ assert.equal(cloudView([preview]).tracks.get(key).data.audioId,'peer');
+ for(const events of [[preview,final],[final,preview]])assert.equal(cloudView(mergeOperations([],events)).tracks.get(key).data.audioId,'drive-final');
+ assert.equal(cloudView([preview,{version:1,id:'removed',device:'phone',clock:13,kind:'delete',key}]).tracks.get(key).deleted,true);
+});
+test('an incoming recording finishes while an unrelated outgoing flush is blocked',async()=>{
+ const net=network(),pc=peer(net),phone=peer(net);await pc.cloud.sync();
+ const original=pc.cloud.transport;let release,entered;const blocked=new Promise(resolve=>release=resolve),started=new Promise(resolve=>entered=resolve);
+ pc.cloud.transport=async(name,payload)=>{
+  if(name==='status')return {...await original(name,payload),canFlush:true,outgoingPending:1};
+  if(name==='flush'){entered();await blocked;return true;}return original(name,payload);
+ };
+ const outgoing=pc.cloud.sync();await started;
+ try{add(phone,net,'Incoming during upload','new incoming bytes');await phone.cloud.sync();await pc.cloud.syncMetadata();await pc.cloud.fileApplyTask;
+  assert.equal(pc.cloud.busy,true);assert.equal(pc.lib.getTracks()[0].title,'Incoming during upload');
+ }finally{release();await outgoing;}
 });

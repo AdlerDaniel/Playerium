@@ -1,3 +1,4 @@
+import {organizeSettings} from './settings-layout.js';
 import {THEMES,applyTheme,currentTheme} from './themes.js';
 import {renderCloudSettings} from './cloud-settings.js';
 import {renderNormalizationSettings} from './normalization-settings.js';
@@ -144,13 +145,6 @@ export function renderSettingsView(container) {
           </div>
           <div class="settings-row">
             <div class="settings-label-wrap">
-              <span class="settings-label">Репозиторий GitHub</span>
-              <span class="settings-desc">Проект для проверки релизов (например, <code>username/Playerium</code>).</span>
-            </div>
-            <input type="text" id="inputSettingsGithubRepo" class="search-input" style="width: 260px; height: 38px; padding: 0 12px;" value="${this.escapeHTML(this.updater.repo)}" placeholder="owner/Playerium" />
-          </div>
-          <div class="settings-row">
-            <div class="settings-label-wrap">
               <span class="settings-label">Автопроверка при входе</span>
               <span class="settings-desc">Автоматически проверять релизы на GitHub при каждом запуске плеера.</span>
             </div>
@@ -167,6 +161,7 @@ export function renderSettingsView(container) {
     container.replaceChildren(settingsDiv);
     renderCloudSettings(this,settingsDiv);
     renderNormalizationSettings(this,settingsDiv);
+    organizeSettings(settingsDiv,{mobile:this.isMobile});
 
     // Bind update settings
     const repoInput = document.getElementById("inputSettingsGithubRepo");

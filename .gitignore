@@ -12,3 +12,5 @@ android/app/src/main/assets/
 android/app/src/main/jniLibs/
 test-results/
 playwright-report/
+supabase/.temp/
+*firebase-adminsdk*.json

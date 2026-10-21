@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
 const {DesktopCloud}=require('../desktop-cloud');
 function fakeDrive(){let count=0,failAfterChunk=false;const files=new Map(),sessions=new Map(),calls=[];const json=(value,status=200,headers={})=>new Response(JSON.stringify(value),{status,headers});return {files,sessions,calls,setFailure:value=>failAfterChunk=value,fetch:async(url,options={})=>{
- calls.push({url,range:options.headers?.['Content-Range']});const u=new URL(url);
+ calls.push({url,range:options.headers?.['Content-Range'],byteRange:options.headers?.Range});const u=new URL(url);
  if(u.pathname.startsWith('/upload/drive/')){
   if(options.method==='POST'){const id='file_'+(++count),session='https://www.googleapis.com/upload/drive/session/'+id;sessions.set(session,{id,meta:JSON.parse(options.body),bytes:Buffer.alloc(0)});return json({},200,{Location:session});}
   const session=sessions.get(url);assert.ok(session);const range=options.headers['Content-Range'];if(range.startsWith('bytes */'))return session.complete?json({id:session.id}):new Response(null,{status:308,headers:session.bytes.length?{Range:'bytes=0-'+(session.bytes.length-1)}:{}});
@@ -65,5 +65,68 @@ test('an audio revision atomically replaces the existing original and bypasses t
   const result=await f.cloud.download({key,track,destination:source,expectedCurrentHash:key});assert.equal(result.fullPath,source);assert.deepEqual(await fs.readFile(source),after);assert.equal(await prepared.prepare(source),source);
   await assert.rejects(fs.stat(path.join(f.cloud.cache,key+'.mp3')),error=>error.code==='ENOENT');
   const edited=Buffer.from('user edited original');await fs.writeFile(source,edited);await assert.rejects(f.cloud.download({key,track,destination:source,expectedCurrentHash:key}),/изменилась/);assert.deepEqual(await fs.readFile(source),edited);
+ }finally{await f.cleanup();}
+});
+
+test('three native file stores redistribute verified local recordings without Drive requests',async()=>{
+ const peers=await Promise.all([fixture(),fixture(),fixture()]);
+ try{
+  for(let i=0;i<peers.length;i++){await peers[i].cloud.live.start();peers[i].cloud.live.publish({id:'device_'+i});}
+  const learn=(to,from)=>to.live.learn({...from.live.local,lan:{...from.live.descriptor(),addresses:['127.0.0.1']}});
+  const bytes=crypto.randomBytes(220123),source=path.join(peers[0].root,'Local.mp3');await fs.writeFile(source,bytes);
+  const fingerprint=await peers[0].cloud.fingerprint(source),key=fingerprint.key,track={ext:'.mp3',size:bytes.length,audioId:'backup-not-reachable',title:'Local'};
+  learn(peers[1].cloud,peers[0].cloud);const phone=await peers[1].cloud.download({key,track});
+  assert.deepEqual(await fs.readFile(phone.fullPath),bytes);assert.equal(peers[1].net.calls.length,0);
+  learn(peers[2].cloud,peers[1].cloud);const tablet=await peers[2].cloud.download({key,track});
+  assert.deepEqual(await fs.readFile(tablet.fullPath),bytes);assert.equal(peers[2].net.calls.length,0);
+  await peers[2].cloud.download({key,track});assert.equal(peers[2].net.calls.length,0);
+ }finally{for(const peer of peers){peer.cloud.live.close();await peer.cleanup();}}
+});
+
+test('an interrupted peer prefix resumes from Drive, and corrupt peer bytes are discarded',async()=>{
+ const f=await fixture();try{
+  const bytes=crypto.randomBytes(190123),key=crypto.createHash('sha256').update(bytes).digest('hex'),track={ext:'.mp3',size:bytes.length,audioId:'audio_peer'};
+  f.net.files.set('audio_peer',{id:'audio_peer',size:String(bytes.length),appProperties:{playeriumCloud:'1',kind:'audio',key:'audio:'+key},bytes});
+  f.cloud.live.readFile=async(_key,offset)=>offset===0?{key,offset,size:bytes.length,base64:bytes.subarray(0,65536).toString('base64')}:null;
+  const downloaded=await f.cloud.download({key,track});assert.deepEqual(await fs.readFile(downloaded.fullPath),bytes);
+  assert.equal(f.net.calls.find(c=>c.url.includes('alt=media')).byteRange,'bytes=65536-');
+  await fs.unlink(downloaded.fullPath);f.net.calls.length=0;
+  f.cloud.live.readFile=async(_key,offset)=>({key,offset,size:bytes.length,base64:Buffer.alloc(Math.min(65536,bytes.length-offset),1).toString('base64')});
+  assert.deepEqual(await fs.readFile((await f.cloud.download({key,track})).fullPath),bytes);
+  assert.equal(f.net.calls.find(c=>c.url.includes('alt=media')).byteRange,undefined);
+ }finally{await f.cleanup();}
+});
+
+test('switching accounts during peer receipt cannot import the old recording',async()=>{
+ const f=await fixture();try{
+  const bytes=Buffer.from('private recording'),key=crypto.createHash('sha256').update(bytes).digest('hex');
+  f.cloud.live.readFile=async()=>{f.cloud.auth.account='different';return {key,offset:0,size:bytes.length,base64:bytes.toString('base64')};};
+  await assert.rejects(f.cloud.download({key,track:{ext:'.mp3',size:bytes.length,audioId:'old'}}),/Аккаунт/);
+  await assert.rejects(fs.stat(path.join(f.cloud.cache,key+'.mp3')),error=>error.code==='ENOENT');
+  assert.equal(f.net.calls.length,0);
+ }finally{await f.cleanup();}
+});
+
+test('peer source registry rejects paths, edited files, revoked access and other accounts',async()=>{
+ const f=await fixture();try{
+  const source=path.join(f.root,'Local.mp3');await fs.writeFile(source,'recording');const info=await f.cloud.fingerprint(source);
+  assert.equal((await f.cloud.peerFiles.read({key:info.key,offset:0})).size,9);
+  assert.equal(await f.cloud.peerFiles.read({key:source,offset:0}),null);
+  f.cloud.auth.account='other';assert.equal(await f.cloud.peerFiles.read({key:info.key,offset:0}),null);f.cloud.auth.account='account';
+  await fs.writeFile(source,'user edit changes size');assert.equal(await f.cloud.peerFiles.read({key:info.key,offset:0}),null);
+ }finally{await f.cleanup();}
+});
+test('a prepared new recording is advertised before any Drive lookup can block it',async()=>{
+ const f=await fixture();try{
+  const bytes=Buffer.from('ready local recording'),source=path.join(f.root,'Ready.mp3');await fs.writeFile(source,bytes);
+  const info=await f.cloud.fingerprint(source),published=[];f.cloud.realtime.enqueue=async op=>published.push(structuredClone(op));
+  let release,entered;const blocked=new Promise(resolve=>release=resolve),started=new Promise(resolve=>entered=resolve),find=f.cloud.find.bind(f.cloud);
+  f.cloud.find=async(...args)=>{entered();await blocked;return find(...args);};
+  const operation={version:1,id:crypto.randomUUID(),device:'pc',clock:1,kind:'track',key:info.key,track:{title:'Ready',artist:'Artist',ext:'.mp3',size:bytes.length,audioId:'pending',audioKey:info.key,normalization:{profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:0,integrated:-7,truePeak:-1}}};
+  await f.cloud.publish({operation,source});await started;
+  try{assert.equal(published[0].kind,'track-preview');assert.equal(published[0].track.audioId,'peer');assert.equal(JSON.stringify(published[0]).includes(source),false);
+   assert.equal((await f.cloud.peerFiles.read({key:info.key,offset:0})).base64,bytes.toString('base64'));
+  }finally{release();await settle(f.cloud);}
+  assert.equal(published.at(-1).kind,'track');assert.notEqual(published.at(-1).track.audioId,'pending');
  }finally{await f.cleanup();}
 });

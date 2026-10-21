@@ -163,13 +163,13 @@ app.whenReady().then(async () => {
     catch(error){return {ok:false,error:downloadError(error)};}
   });
   handle('music:cancel',id=>music.cancel(id));
-  const cloud=new (require('./desktop-cloud').DesktopCloud)({app,safeStorage,authorize,openExternal,fetcher:require('./desktop-cloud-http').createCloudFetcher(net),onAudioRevision:(file,track)=>preparedAudio.acceptOriginal(file,track),
+  const cloud=new (require('./desktop-cloud').DesktopCloud)({app,safeStorage,authorize,openExternal,fetcher:require('./desktop-cloud-http').createCloudFetcher(net),onAudioRevision:(file,track)=>preparedAudio.acceptOriginal(file,track),prepareBackup:(file,expected)=>preparedAudio.prepareBackup(file,expected),
     onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));}});
   handle('cloud:request',async(operation,payload)=>{try{return {ok:true,data:await cloud.request(operation,payload)};}catch(error){return {ok:false,error:error.message||'Не удалось синхронизировать Google Диск.'};}});
   const loudness=new LoudnessAnalyzer(path.join(app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools'),'ffmpeg.exe'),path.join(app.getPath('userData'),'loudness'));
   handle('file:loudness',async file=>loudness.analyze(await authorize(file)));
   handle('file:loudnessCached',async file=>loudness.cached(await authorize(file)));
-  const preparedAudio=new (require('./desktop-normalization').PreparedAudio)(loudness.executable,path.join(app.getPath('userData'),'normalized-audio'));
+  const preparedAudio=new (require('./desktop-original-audio').OriginalAudio)(loudness.executable,path.join(app.getPath('userData'),'normalized-audio'),{beforeReplace:async file=>{if(path.dirname(file)!==cloud.snapshots)await cloud.freezeSource(file);}});
   handle('file:prepareAudio',async file=>{await preparedAudio.prepare(await authorize(file));return true;});
   handle('file:preparationStatus',async files=>{
     if(!Array.isArray(files)||files.some(file=>typeof file!=='string'))throw Error('Invalid audio files');

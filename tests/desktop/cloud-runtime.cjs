@@ -6,7 +6,7 @@ const {_electron:electron}=require('playwright'),fs=require('node:fs/promises'),
  assert.equal(await win.evaluate(()=>window.electronAPI.cloudRequest('configure')),true);
  const status=await win.evaluate(()=>window.electronAPI.cloudRequest('status'));assert.equal(status.configured,true);assert.equal(status.connected,false);assert.equal(status.clientSecret,undefined);
  const encrypted=await fs.readFile(path.join(root,'profile','google-drive','account.bin'));assert.equal(encrypted.includes(Buffer.from('fixture-secret')),false);
- await win.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings'}));await win.locator('[data-setup] summary').click();assert.equal(await win.locator('[data-configure]').isVisible(),true);
+ await win.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings'}));assert.equal(await win.locator('[data-connect]').isVisible(),true);assert.equal(await win.locator('[data-setup],[data-configure],[data-sync]').count(),0);
  const session=await win.evaluate(()=>window.electronAPI.cloudRequest('stage',{ext:'.mp3',size:4}));await win.evaluate(session=>window.electronAPI.cloudRequest('stageChunk',{id:session.id,offset:0,base64:btoa('song')}),session);const staged=await win.evaluate(session=>window.electronAPI.cloudRequest('stageComplete',{id:session.id}),session);const info=await win.evaluate(source=>window.electronAPI.cloudRequest('fingerprint',{source}),staged.source);assert.equal(info.size,4);
  const denied=await win.evaluate(async()=>{try{await window.electronAPI.cloudRequest('fingerprint',{source:'C:\\Windows\\win.ini'});return false;}catch{return true;}});assert.equal(denied,true);
   const server=http.createServer((req,res)=>{res.writeHead(308,{Location:'/checkpoint',Range:'bytes=0-4194303'});res.end();});

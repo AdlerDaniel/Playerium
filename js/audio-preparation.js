@@ -10,8 +10,8 @@ export function installAudioPreparation(app){
    let result;if(window.AndroidBridge?.musicRequest)result=await app.music.request('normalizationStatus',{uris:[...new Set(tracks().map(t=>t.nativeUri).filter(Boolean))]});
    else if(window.electronAPI?.audioPreparationStatus)result=await window.electronAPI.audioPreparationStatus([...new Set(tracks().map(t=>t.filePath).filter(Boolean))]);
    let changed=false;
-   if(window.AndroidBridge&&result?.records){const byUri=new Map(tracks().map(t=>[t.nativeUri,t]));for(const record of result.records){
-    const track=byUri.get(record.uri);if(!track||!record.audioKey||!record.normalization?.profile)continue;
+   if(result?.records){const byUri=new Map(tracks().map(t=>[t.nativeUri||t.filePath,t]));for(const record of result.records){
+    const track=byUri.get(record.uri||record.filePath);if(!track||!record.audioKey||!record.normalization?.profile)continue;
     const signature=JSON.stringify([record.audioKey,record.normalization,record.size,record.lastModified]);if(track.normalizationStamp===signature&&track.fileSize===record.size&&track.lastModified===record.lastModified&&track.audioKey===record.audioKey)continue;
     Object.assign(track,{audioKey:record.audioKey,normalization:record.normalization,fileSize:record.size,lastModified:record.lastModified,normalizationStamp:signature});delete track.normalizationGain;delete track.normalizationKey;
     await library.putInStore('tracks',track);changed=true;

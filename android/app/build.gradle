@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.google.gms.google-services'
 
 android {
     namespace "com.playerium.music"
@@ -93,6 +94,8 @@ dependencies {
     implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation 'com.google.android.gms:play-services-auth:21.2.0'
     implementation 'androidx.work:work-runtime:2.9.1'
+    // Keep API22 compatibility; Messaging 26 raises the minimum Android version.
+    implementation 'com.google.firebase:firebase-messaging:24.1.2'
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
 }

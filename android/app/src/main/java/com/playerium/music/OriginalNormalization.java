@@ -27,7 +27,7 @@ final class OriginalNormalization {
         try(InputStream in=source){MessageDigest digest=MessageDigest.getInstance("SHA-256");byte[] bytes=new byte[65536];int n;while((n=in.read(bytes))!=-1)digest.update(bytes,0,n);
             StringBuilder out=new StringBuilder();for(byte b:digest.digest())out.append(String.format(Locale.ROOT,"%02x",b&255));return out.toString();}
     }
-    static String hash(Context c,Uri uri)throws Exception{if(!MainActivity.hasMusicPermission(c,uri))throw new SecurityException("Unauthorized URI");return hash(c.getContentResolver().openInputStream(uri));}
+    static String hash(Context c,Uri uri)throws Exception{if(!MainActivity.hasMusicPermission(c,uri)&&!GoogleCloud.privateSnapshot(c,uri))throw new SecurityException("Unauthorized URI");return hash(c.getContentResolver().openInputStream(uri));}
     private static void copy(InputStream in,OutputStream out)throws Exception{byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}
     private static JSONObject stats(String log)throws Exception{
         java.util.regex.Matcher match=java.util.regex.Pattern.compile("\\{\\s*\"input_i\"[\\s\\S]*?\\}").matcher(log);JSONObject result=null;
@@ -102,7 +102,7 @@ final class OriginalNormalization {
         File f=new File(path);if(!f.getCanonicalPath().startsWith(jobs(c).getCanonicalPath()+File.separator))throw new SecurityException("Invalid normalization transaction");return f;
     }
     static Uri prepare(Context c,Uri uri,Command command)throws Exception{
-        if(!MainActivity.hasMusicPermission(c,uri))throw new SecurityException("Нет доступа к песне");
+        if(!MainActivity.hasMusicPermission(c,uri)&&!GoogleCloud.privateSnapshot(c,uri))throw new SecurityException("Нет доступа к песне");
         recover(c,uri);if(PreparedAudio.ready(c,uri)!=null)return uri;
         synchronized(lock(uri)){if(readers.containsKey(uri.toString()))throw new Busy();}
         if(!"file".equals(uri.getScheme())&&!DocumentFile.fromSingleUri(c,uri).canWrite())throw new SecurityException("Выберите папку музыки ещё раз и разрешите запись");

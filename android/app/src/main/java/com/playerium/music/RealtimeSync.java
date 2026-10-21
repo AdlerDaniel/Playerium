@@ -40,5 +40,27 @@ final class RealtimeSync {
         }
     }
     int pending(){String account=cloud.prefs.getString("account","");if(!account.matches("[0-9]{1,100}"))return 0;File[] files=new File(root,account).listFiles((dir,name)->name.matches("[A-Za-z0-9_-]{1,160}\\.json"));return files==null?0:files.length;}
+    JSONObject changes(long after)throws Exception{
+        if(after<0)throw new IOException("Некорректная позиция журнала.");
+        JSONObject session=session();String account=session.getString("account");
+        HttpURLConnection c=cloud.connections.open(URL+"/rest/v1/playerium_events?select=revision,operation&user_id=eq."+session.getString("userId")+"&revision=gt."+after+"&order=revision.asc&limit=100");
+        c.setInstanceFollowRedirects(false);c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setRequestMethod("GET");
+        c.setRequestProperty("apikey",KEY);c.setRequestProperty("Authorization","Bearer "+session.getString("accessToken"));
+        try{
+            int status=c.getResponseCode();if(status<200||status>=300){if(status==401)reset();throw new IOException("Не удалось получить изменения медиатеки.");}
+            JSONArray rows=new JSONArray(new String(GoogleCloud.read(c.getInputStream(),32*1024*1024),"UTF-8")),events=new JSONArray();long revision=after;
+            for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);long next=row.getLong("revision");if(next<=revision)throw new IOException("Некорректный порядок журнала.");revision=next;events.put(row.getJSONObject("operation"));}
+            if(!account.equals(cloud.prefs.getString("account",""))||!cloud.prefs.getBoolean("enabled",false))throw new IOException("Аккаунт изменился.");
+            return new JSONObject().put("events",events).put("revision",revision).put("more",rows.length()==100);
+        }finally{c.disconnect();}
+    }
     synchronized void reset(){current=null;}
+    String registerPush(JSONObject session,String installation,String token)throws Exception{
+        String account=session.getString("account");
+        if(!cloud.isConnected()||!account.equals(cloud.prefs.getString("account","")))throw new IOException("Аккаунт изменился.");
+        JSONObject result=http("/functions/v1/playerium-push",session.getString("accessToken"),
+            new JSONObject().put("action","register").put("installation",installation).put("token",token),false);
+        if(!session.getString("userId").equals(result.optString("userId")))throw new IOException("Не удалось зарегистрировать устройство.");
+        return result.getString("userId");
+    }
 }
