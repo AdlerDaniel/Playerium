@@ -41,17 +41,26 @@ final class CloudPush {
         @NonNull @Override public Result doWork(){
             Context context=getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);
             if(!cloud.isConnected())return Result.success();String account=cloud.prefs.getString("account","");
+            String phase="firebase-token";
             try{
+                android.util.Log.i("PlayeriumSync","Push registration started");
                 String token=Tasks.await(FirebaseMessaging.getInstance().getToken(),30,TimeUnit.SECONDS);
+                phase="account-session";
                 JSONObject session=cloud.realtime.session();
                 if(!account.equals(session.getString("account"))||!cloud.isConnected())return Result.retry();
+                phase="push-register";
                 String user=cloud.realtime.registerPush(session,installation(context),token);
                 if(!cloud.isConnected()||!account.equals(cloud.prefs.getString("account","")))return Result.retry();
                 cloud.prefs.edit().putString("pushAccount",account).putString("pushUser",user).apply();
                 android.util.Log.i("PlayeriumSync","Push registration ready");
                 // The registration catch-up push can arrive before this local mapping is saved.
                 cloud.enqueuePush(false);return Result.success();
-            }catch(Exception unavailable){return cloud.isConnected()?Result.retry():Result.success();}
+            }catch(Exception unavailable){
+                // Log only stage and exception type; never tokens, account IDs or provider responses.
+                Throwable cause=unavailable;while(cause.getCause()!=null&&cause.getCause()!=cause)cause=cause.getCause();
+                android.util.Log.w("PlayeriumSync","Push registration deferred: "+phase+" ("+cause.getClass().getSimpleName()+")");
+                return cloud.isConnected()?Result.retry():Result.success();
+            }
         }
     }
 }

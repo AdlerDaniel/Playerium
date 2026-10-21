@@ -14,6 +14,39 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class CloudStorageTest {
+    @Test public void incomingRecordingPrecedesAnUnavailableOutgoingBackup()throws Exception{
+        Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);
+        String account=cloud.prefs.getString("account",null);boolean enabled=cloud.isConnected();
+        java.lang.reflect.Field token=GoogleCloud.class.getDeclaredField("token"),until=GoogleCloud.class.getDeclaredField("tokenUntil");token.setAccessible(true);until.setAccessible(true);
+        Object oldToken=token.get(cloud);long oldUntil=until.getLong(cloud);GoogleCloud.Connections oldConnections=cloud.connections;
+        File jobs=new File(context.getNoBackupFilesDir(),"cloud-jobs");jobs.mkdirs();
+        String key=String.format(java.util.Locale.ROOT,"%064x",854967),hash=OriginalNormalization.hash(new java.io.ByteArrayInputStream("song".getBytes("UTF-8")));
+        File incoming=new File(jobs,"download-"+key+".json"),outgoing=new File(jobs,"priority-outgoing.json"),copy=new File(new File(MusicEngine.managedDirectory(context),"Cloud"),key+".mp3");
+        java.util.List<String> requests=new java.util.ArrayList<>();
+        try{
+            cloud.prefs.edit().putBoolean("enabled",true).putString("account","priority-fixture").commit();token.set(cloud,"test-only");until.setLong(cloud,System.currentTimeMillis()+60000);
+            JSONObject track=new JSONObject().put("audioId","priority_audio").put("audioKey",hash).put("size",4).put("ext",".mp3");
+            JSONObject download=new JSONObject().put("account","priority-fixture").put("download",new JSONObject().put("key",key).put("track",track));
+            JSONObject backup=new JSONObject().put("account","priority-fixture").put("operation",new JSONObject().put("id","priority-outgoing").put("version",1).put("kind","like").put("key",key));
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(incoming)){out.write(download.toString().getBytes("UTF-8"));}
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(outgoing)){out.write(backup.toString().getBytes("UTF-8"));}
+            cloud.connections=address->new java.net.HttpURLConnection(new java.net.URL(address)){
+                public void connect(){}public void disconnect(){}public boolean usingProxy(){return false;}
+                public int getResponseCode()throws java.io.IOException{
+                    requests.add(address);if(address.contains("files?q="))throw new java.io.IOException("Offline backup fixture");return 200;
+                }
+                public java.io.InputStream getInputStream()throws java.io.IOException{
+                    try{return new java.io.ByteArrayInputStream((address.contains("alt=media")?"song":new JSONObject().put("size",4).put("appProperties",new JSONObject().put("playeriumCloud","1").put("kind","audio").put("key","audio:"+hash)).toString()).getBytes("UTF-8"));}catch(Exception e){throw new java.io.IOException(e);}
+                }
+            };
+            try{cloud.runJobs();fail("Unavailable backup must remain retryable");}catch(java.io.IOException expected){}
+            assertTrue("The incoming track is available despite a failed backup",copy.isFile());assertFalse(incoming.exists());assertTrue(outgoing.isFile());
+            assertTrue(requests.get(0).contains("priority_audio"));assertTrue(requests.get(requests.size()-1).contains("files?q="));
+        }finally{
+            cloud.connections=oldConnections;token.set(cloud,oldToken);until.setLong(cloud,oldUntil);cloud.prefs.edit().putBoolean("enabled",enabled).putString("account",account).commit();
+            incoming.delete();outgoing.delete();copy.delete();new File(copy.getPath()+".verified").delete();
+        }
+    }
     @Test public void queuedAudioRevisionIsPrivateImmutableAndUsesTheContentHash()throws Exception{
         Context context=ApplicationProvider.getApplicationContext();GoogleCloud cloud=GoogleCloud.get(context);File original=new File(MusicEngine.managedDirectory(context),"snapshot-source.mp3");original.getParentFile().mkdirs();File snapshot=null;
         String oldAccount=cloud.prefs.getString("account",null);boolean wasEnabled=cloud.isConnected();File jobFile=null;

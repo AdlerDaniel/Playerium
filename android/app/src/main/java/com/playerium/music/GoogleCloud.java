@@ -32,6 +32,7 @@ final class GoogleCloud {
     private final java.util.concurrent.locks.ReentrantLock jobLock=new java.util.concurrent.locks.ReentrantLock(true);
     private final File jobs,cache;
     private final Set<String> preparingJobs=Collections.newSetFromMap(new ConcurrentHashMap<String,Boolean>());
+    private final Object fileWakeLock=new Object();
     private String token,pendingLogin;
     private long tokenUntil;
     private final Map<String,JSONObject> stages=new HashMap<>();
@@ -200,12 +201,32 @@ final class GoogleCloud {
     void enqueuePush(boolean expedited){
         if(!isConnected())return;
         OneTimeWorkRequest.Builder builder=new OneTimeWorkRequest.Builder(CloudWorker.class)
+            .setInputData(new Data.Builder().putBoolean("metadataOnly",true).build())
             .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,TimeUnit.SECONDS);
         if(expedited)builder.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST);
-        WorkManager.getInstance(context).enqueueUniqueWork("playerium-drive-push",ExistingWorkPolicy.APPEND_OR_REPLACE,builder.build());
+        // A new revision must bypass a previous transfer's long retry/backoff.
+        // This lane only receives the journal; file transfers retain their own durable work.
+        WorkManager.getInstance(context).enqueueUniqueWork("playerium-library-push",ExistingWorkPolicy.REPLACE,builder.build());
     }
     void refreshIncoming()throws Exception{journal.refresh();}
+    void wakeFileTransfers(){
+        controlExecutor.execute(()->{synchronized(fileWakeLock){
+            if(!isConnected()||!hasPendingJobs())return;
+            WorkManager manager=WorkManager.getInstance(context);
+            try{
+                // Keep a running transfer intact, but a fresh library revision must
+                // not wait behind an older failed transfer's exponential backoff.
+                for(WorkInfo info:manager.getWorkInfosForUniqueWork("playerium-live-files").get(3,TimeUnit.SECONDS))
+                    if(info.getState()==WorkInfo.State.RUNNING)return;
+                OneTimeWorkRequest work=new OneTimeWorkRequest.Builder(CloudWorker.class)
+                    .setInputData(new Data.Builder().putBoolean("filesOnly",true).build())
+                    .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,TimeUnit.SECONDS).build();
+                manager.enqueueUniqueWork("playerium-live-files",ExistingWorkPolicy.REPLACE,work).getResult().get(3,TimeUnit.SECONDS);
+            }catch(Exception unavailable){/* The durable normal/periodic file queue remains scheduled. */}
+        }});
+    }
     void reconcileDownloads(String account,Map<String,JSONObject> active,Set<String> deleted)throws Exception{
         jobLock.lock();try{
             peerFiles.check(account);File[] files=jobs.listFiles();
@@ -260,6 +281,8 @@ MusicEngine.get(context).prepareAudio(Uri.parse(job.getString("source")));
     boolean runJobs()throws Exception{return runJobs(true);}
     private boolean runJobs(boolean includeDownloads)throws Exception{
         if(!prefs.getBoolean("enabled",false))return true;File[] files=jobs.listFiles();if(files==null)files=new File[0];Exception failure=null;
+        // Incoming local copies are ready for playback before slow backup uploads.
+        Arrays.sort(files,(a,b)->Boolean.compare(!a.getName().startsWith("download-"),!b.getName().startsWith("download-")));
         for(File file:files){
             if(!file.getName().matches("[A-Za-z0-9_-]+\\.json"))continue;
             // Do not wait for a transfer just to skip its download job.
