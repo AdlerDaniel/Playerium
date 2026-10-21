@@ -34,6 +34,12 @@ input,textarea,select { color: var(--sp-text-primary); caret-color: var(--sp-tex
 .collection-section-heading,.artist-discography h2,.settings-section-title { color: var(--sp-text-primary); }
 .mobile-mini-player { background: var(--sp-dark-600); }
 .mobile-mini-player.hidden { visibility: hidden; }
+/* White slider tracks and hover fills disappear on a cream surface. */
+:root[data-theme="light"] .progress-slider-bg,
+:root[data-theme="light"] .volume-slider-bg { background-color: var(--sp-text-secondary); }
+@media (hover: hover) and (pointer: fine) {
+  :root[data-theme="light"] .btn-play-pause:hover { background-color: var(--sp-green-hover); color: var(--sp-on-accent); }
+}
 .mobile-fullscreen-player { background: linear-gradient(180deg,var(--theme-hero),var(--sp-dark-900) 85%); }
 .mobile-nav-bar { background: linear-gradient(transparent,var(--sp-dark-900) 45%); }
 @media(max-width:600px){.theme-picker{grid-template-columns:repeat(2,minmax(0,1fr));}}

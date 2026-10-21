@@ -103,7 +103,7 @@ export function renderSettingsView(container) {
               <span class="settings-desc">Цвета фонов, панелей, карточек, меню и элементов управления.</span>
             </div>
           </div>
-          <div class="theme-picker" aria-label="Цветовая тема">${THEMES.map(t=>`<button class="theme-choice" data-theme-id="${t.id}" aria-pressed="${currentTheme().id===t.id}" style="--preview-bg:${t.colors[0]};--preview-panel:${t.colors[1]};--preview-raised:${t.colors[3]};--preview-accent:${t.colors[9]}"><span class="theme-preview" aria-hidden="true"><span class="theme-preview-sidebar"></span><span class="theme-preview-main"><span></span><span></span></span><span class="theme-preview-player"></span></span><span class="theme-choice-name">${t.name}</span></button>`).join('')}</div>
+          <div class="theme-picker" aria-label="Цветовая тема">${THEMES.map(t=>`<button class="theme-choice" data-theme-id="${t.id}" aria-pressed="${currentTheme().id===t.id}" style="--preview-bg:${t.colors[0]};--preview-panel:${t.colors[1]};--preview-raised:${t.colors[3]};--preview-accent:${t.colors[9]};--preview-text:${t.colors[7]};--preview-on-accent:${t.colors[11]}"><span class="theme-preview" aria-hidden="true"><span class="theme-preview-sidebar"></span><span class="theme-preview-main"><span></span><span></span></span><span class="theme-preview-player"></span></span><span class="theme-choice-name">${t.name}</span></button>`).join('')}</div>
         </div>
       </div>
 

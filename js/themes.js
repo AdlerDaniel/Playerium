@@ -5,7 +5,9 @@ export const THEMES=[
  {id:'burgundy',name:'Бургунди',scheme:'dark',colors:['#160a0f','#28131c','#331924','#40202d','#4c2636','#603146','#78455a','#fcebf1','#d3aebd','#f093b5','#ffb2cf','#35111e','#85334f']},
  {id:'green',name:'Зелёная',scheme:'dark',colors:['#08130e','#11251b','#172f22','#1e3a2b','#264635','#325741','#426f55','#eaf8ee','#afc9b8','#68de94','#91efb1','#082414','#347752']},
  {id:'blue',name:'Синяя',scheme:'dark',colors:['#09111e','#122238','#182c46','#203652','#294363','#355477','#48688a','#edf4ff','#adc1db','#85b9ff','#acd0ff','#102c50','#365f96']},
- {id:'yellow',name:'Жёлтая',scheme:'dark',colors:['#181507','#282311','#342d17','#40371d','#4c4224','#61532d','#796b3b','#fff8dc','#d4c797','#f4d45c','#ffe789','#322809','#8a742a']}
+ {id:'yellow',name:'Жёлтая',scheme:'dark',colors:['#181507','#282311','#342d17','#40371d','#4c4224','#61532d','#796b3b','#fff8dc','#d4c797','#f4d45c','#ffe789','#322809','#8a742a']},
+ {id:'dark',name:'Тёмная',scheme:'dark',preserveSurfaceColors:true,colors:['#161312','#1e1a18','#292320','#342c28','#40352f','#4c3e36','#5b4b41','#F5EBDA','#d3c5b2','#F5EBDA','#ffffff','#161312','#4a3c31']},
+ {id:'light',name:'Светлая',scheme:'light',preserveSurfaceColors:true,colors:['#F5EBDA','#fbf6ee','#f0e4d2','#e9dac4','#e1d0b7','#d8c4a7','#cfbb9b','#161312','#594d3f','#161312','#352c27','#F5EBDA','#dbc5a5']}
 ];
 export function currentTheme(){try{return THEMES.find(t=>t.id===localStorage.getItem('playerium_theme'))||THEMES[3];}catch{return THEMES[3];}}
 export function applyTheme(id,persist=true){
@@ -13,11 +15,11 @@ export function applyTheme(id,persist=true){
  const keys=['--sp-black','--sp-dark-900','--sp-dark-800','--sp-dark-700','--sp-dark-600','--sp-dark-500','--sp-dark-400','--sp-text-primary','--sp-text-secondary','--sp-green','--sp-green-hover','--sp-on-accent','--theme-hero'];
  keys.forEach((key,i)=>root.style.setProperty(key,c[i]));
   const mix = (a,b,weight) => '#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*weight+parseInt(b.slice(i,i+2),16)*(1-weight)).toString(16).padStart(2,'0')).join('');
-   if(enabled(1)){for(let i=0;i<7;i++)root.style.setProperty(keys[i],mix(c[i],theme.scheme==='light'?'#faf7f2':'#101011',.78));}
+   if(enabled(1)&&!theme.preserveSurfaceColors){for(let i=0;i<7;i++)root.style.setProperty(keys[i],mix(c[i],theme.scheme==='light'?'#faf7f2':'#101011',.78));}
    root.style.setProperty('--theme-home-top',mix(c[12],getComputedStyle(root).getPropertyValue('--sp-dark-900').trim()||c[1],enabled(1)?.32:.22));
  root.style.setProperty('--sp-text-subdued',c[8]);root.style.setProperty('--sp-green-active',c[9]);root.style.setProperty('--sp-theme-color',c[9]);
-  root.style.setProperty('--theme-border',theme.scheme==='light'?'#392b2038':'#ffffff30');root.style.setProperty('--theme-accent-soft',c[9]+(theme.scheme==='light'?'24':'26'));
-  root.style.setProperty('--theme-hover',theme.scheme==='light'?'#392b201a':'#ffffff18');root.style.setProperty('--theme-selection',theme.scheme==='light'?'#79533330':c[9]+'38');
+  root.style.setProperty('--theme-border',theme.scheme==='light'?c[7]+'38':'#ffffff30');root.style.setProperty('--theme-accent-soft',c[9]+(theme.scheme==='light'?'24':'26'));
+  root.style.setProperty('--theme-hover',theme.scheme==='light'?c[7]+'1a':'#ffffff18');root.style.setProperty('--theme-selection',c[9]+(theme.scheme==='light'?'30':'38'));
  root.style.setProperty('--surface-control',mix(c[3],'#ffffff',theme.scheme==='light'?.5:.88));
  root.style.setProperty('--surface-overlay',mix(c[2],'#ffffff',theme.scheme==='light'?.35:.92));
  root.style.setProperty('--surface-selected',mix(c[9],c[1],theme.scheme==='light'?.16:.25));

@@ -19,7 +19,7 @@ test('mobile home and search have continuous themed surfaces and aligned history
   localStorage.setItem('playerium_search_history',JSON.stringify(['Anna asti','Nirvana','Kler','Дорофеева']));
   const a=window.playerApp;for(let i=0;i<4;i++)a.library.tracks.set('fixture'+i,{id:'fixture'+i,title:['Повело','Ночью на кухне','Топит','Сонце Сідає'][i],artist:['ANNA ASTI','ANNA ASTI','ANNA ASTI','Океан Ельзи'][i],duration:180,dateAdded:Date.now()-i});a.ui.refreshCurrentView();
  });
- for(const id of ['light-brown','dark-brown','burgundy','green','blue','yellow']){
+ for(const id of ['light-brown','dark-brown','burgundy','green','blue','yellow','dark','light']){
   await page.evaluate(async id=>{(await import('/js/themes.js')).applyTheme(id);window.playerApp.ui.navigateTo({type:'home'});},id);
   const home=await page.evaluate(()=>({child:getComputedStyle(document.querySelector('.home-dashboard')).backgroundImage,parent:getComputedStyle(document.querySelector('.main-view-container')).backgroundImage,top:getComputedStyle(document.querySelector('.topbar')).backgroundColor}));
   expect(home.child).toBe('none');await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.main-view-container')).backgroundImage.includes(getComputedStyle(document.querySelector('.topbar')).backgroundColor))).toBe(true);
@@ -65,14 +65,19 @@ test('desktop long context menus, nested credits and forms stay inside a short r
  expect(await page.locator('#appContextMenu').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);await page.keyboard.press('Escape');await page.keyboard.press('Escape');await expect(page.locator('#appContextMenu')).toBeHidden();
   await page.evaluate(()=>{window.playerApp.ui.showCreatePlaylistModal();});await expect(page.locator('.form-dialog')).toBeVisible();await within(page,'.form-dialog .modal-card');await page.getByLabel('Название',{exact:true}).fill('Текст'.repeat(100));await expect(page.locator('.form-dialog').getByRole('button',{name:'Сохранить',exact:true})).toBeInViewport();await page.keyboard.press('Escape');
 });
-for(const mobile of [false,true])test(`six complete themes cover surfaces, retain contrast and persist (${mobile?'phone':'desktop'})`,async({page},info)=>{
- await page.setViewportSize(mobile?{width:390,height:844}:{width:1280,height:800});await boot(page);await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('.theme-choice')).toHaveCount(6);
+for(const mobile of [false,true])test(`eight complete themes cover surfaces, retain contrast and persist (${mobile?'phone':'desktop'})`,async({page},info)=>{
+ await page.setViewportSize(mobile?{width:390,height:844}:{width:1280,height:800});await boot(page);await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('.theme-choice')).toHaveCount(8);
  const backgrounds=[];
- for(const id of ['light-brown','dark-brown','burgundy','green','blue','yellow']){
+ for(const id of ['light-brown','dark-brown','burgundy','green','blue','yellow','dark','light']){
   await page.locator(`[data-theme-id="${id}"]`).click();await expect(page.locator('html')).toHaveAttribute('data-theme',id);await expect(page.locator(`[data-theme-id="${id}"]`)).toHaveAttribute('aria-pressed','true');
   const colors=await page.evaluate(()=>{const r=getComputedStyle(document.documentElement),lum=hex=>{const rgb=hex.trim().slice(1).match(/.{2}/g).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;},contrast=(a,b)=>{const x=lum(r.getPropertyValue(a)),y=lum(r.getPropertyValue(b));return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};return {background:getComputedStyle(document.querySelector('.main-view-container')).backgroundColor,primary:contrast('--sp-text-primary','--sp-dark-900'),secondary:contrast('--sp-text-secondary','--sp-dark-900'),button:contrast('--sp-on-accent','--sp-green')};});
   backgrounds.push(colors.background);expect(colors.primary).toBeGreaterThanOrEqual(4.5);expect(colors.secondary).toBeGreaterThanOrEqual(4.5);expect(colors.button).toBeGreaterThanOrEqual(4.5);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  if(id==='dark'||id==='light'){
+   const palette=await page.evaluate(id=>{const r=getComputedStyle(document.documentElement),preview=document.querySelector('[data-theme-id="'+id+'"]');return {base:r.getPropertyValue('--sp-black').trim().toLowerCase(),text:r.getPropertyValue('--sp-text-primary').trim().toLowerCase(),previewText:preview.style.getPropertyValue('--preview-text').toLowerCase(),previewButton:preview.style.getPropertyValue('--preview-on-accent').toLowerCase(),scheme:document.documentElement.style.colorScheme,meta:document.querySelector('meta[name="theme-color"]').content.toLowerCase()};},id);
+   const base=id==='dark'?'#161312':'#f5ebda',text=id==='dark'?'#f5ebda':'#161312';
+   expect(palette).toEqual({base,text,previewText:text,previewButton:base,scheme:id,meta:base});
+  }
   await page.screenshot({path:info.outputPath(id+'.png')});
  }
- expect(new Set(backgrounds).size).toBe(6);await page.reload();await page.waitForFunction(()=>window.playerApp?.ui.history.length);await expect(page.locator('html')).toHaveAttribute('data-theme','yellow');await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('[data-theme-id="yellow"]')).toHaveAttribute('aria-pressed','true');
+ expect(new Set(backgrounds).size).toBe(8);await page.reload();await page.waitForFunction(()=>window.playerApp?.ui.history.length);await expect(page.locator('html')).toHaveAttribute('data-theme','light');await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('[data-theme-id="light"]')).toHaveAttribute('aria-pressed','true');
 });
