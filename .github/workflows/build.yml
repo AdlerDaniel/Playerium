@@ -47,6 +47,8 @@ jobs:
       - run: npm ci
       - run: python scripts/prepare_music_runtime.py --windows
       - run: node --test tests/prepared-audio.test.cjs
+      - name: Verify native Windows audio and local synchronization
+        run: node --test tests/live.test.cjs tests/desktop-cloud.test.cjs tests/audio-range.test.cjs tests/original-audio.test.cjs
       - run: npm run test:desktop
       - run: node tests/desktop/cloud-runtime.cjs
       - run: node tests/desktop/background.cjs
