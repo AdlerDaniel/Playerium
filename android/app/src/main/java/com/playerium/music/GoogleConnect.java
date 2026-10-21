@@ -37,8 +37,16 @@ final class GoogleConnect {
   if(operation.equals("connectPublish")){identifier(device);prefs.edit().putString("local",data.toString()).putString("localAccount",account()).apply();live.start();live.publish(new JSONObject(data.toString()).put("ack",ack(device)).put("ackHistory",ackHistory(device)));return write("device",device,new JSONObject(data.toString()).put("lan",live.descriptor()).put("seenAt",System.currentTimeMillis()).put("ack",ack(device)).put("ackHistory",ackHistory(device)));}
   if(operation.equals("connectSend")){JSONObject cmd=data.getJSONObject("command");identifier(cmd.getString("id"));if(!device.equals(cmd.optString("target")))throw new IOException("Некорректное устройство.");return write("command",device,cmd);}
   if(operation.equals("connectAck")){acknowledge(device,data.getString("commandId"));return true;}
-  if(operation.equals("connectScan")){identifier(device);JSONArray files=cloud.list("appProperties has { key='kind' and value='device' }"),devices=new JSONArray();for(int i=0;i<Math.min(20,files.length());i++)try{JSONObject peer=new JSONObject(new String(cloud.media(files.getJSONObject(i).getString("id"),262144),StandardCharsets.UTF_8));live.learn(peer);peer.remove("lan");devices.put(peer);}catch(Exception ignored){}return new JSONObject().put("devices",devices).put("command",command(device));}
+  if(operation.equals("connectScan")){identifier(device);JSONArray files=cloud.list("appProperties has { key='kind' and value='device' }"),devices=new JSONArray(),filePeers=new JSONArray();for(int i=0;i<Math.min(20,files.length());i++)try{JSONObject peer=new JSONObject(new String(cloud.media(files.getJSONObject(i).getString("id"),262144),StandardCharsets.UTF_8));live.learn(peer);filePeers.put(new JSONObject(peer.toString()));peer.remove("lan");devices.put(peer);}catch(Exception ignored){}prefs.edit().putString(account()+":filePeers",filePeers.toString()).apply();return new JSONObject().put("devices",devices).put("command",command(device));}
   throw new IOException("Неизвестная команда устройства.");
  }
  JSONObject local(){try{if(!account().equals(prefs.getString("localAccount","")))return null;return new JSONObject(prefs.getString("local","{}"));}catch(Exception e){return null;}}
+  void restoreFilePeers(){try{
+    if(!cloud.isConnected())return;
+    if(live.local==null){JSONObject saved=local();if(saved==null||saved.optString("id").isEmpty())return;
+      saved.put("state",new JSONObject().put("playing",false));live.start();live.publish(saved);
+    }
+    JSONArray saved=new JSONArray(prefs.getString(account()+":filePeers","[]"));
+    for(int i=0;i<Math.min(20,saved.length());i++)live.learn(saved.getJSONObject(i));
+  }catch(Exception unavailable){/* LAN discovery is optional; verified Drive fallback stays available. */}}
 }

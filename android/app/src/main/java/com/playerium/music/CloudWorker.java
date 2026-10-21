@@ -19,6 +19,7 @@ public final class CloudWorker extends Worker {
     }
     @NonNull @Override public Result doWork(){GoogleCloud cloud=GoogleCloud.get(getApplicationContext());try{
         if(!cloud.isConnected())return Result.success();
+        cloud.connect.restoreFilePeers();
         Context context=getApplicationContext();NotificationManager manager=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
         if(Build.VERSION.SDK_INT>=26)manager.createNotificationChannel(new NotificationChannel("playerium_cloud","Синхронизация музыки",NotificationManager.IMPORTANCE_LOW));
         android.app.Notification notification=new NotificationCompat.Builder(context,"playerium_cloud").setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle(context.getString(R.string.app_name)).setContentText("Синхронизация музыки · осталось: "+cloud.pendingCount()).setProgress(0,0,true).setOngoing(true).setSilent(true).build();
