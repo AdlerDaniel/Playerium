@@ -17,6 +17,14 @@ function fakeDrive(){let count=0,failAfterChunk=false;const files=new Map(),sess
  }};}
 async function fixture(){const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'playerium-cloud-')));const net=fakeDrive(),allowed=new Set([root]);const cloud=new DesktopCloud({app:{getPath:name=>name==='userData'?path.join(root,'profile'):path.join(root,'music')},safeStorage:{isEncryptionAvailable:()=>true,encryptString:s=>Buffer.from(s),decryptString:b=>b.toString()},authorize:async source=>{const value=await fs.realpath(source);assert.ok([...allowed].some(p=>isInside(p,value)));return value;},onRoot:async root=>allowed.add(await fs.realpath(root)),openExternal:()=>{},fetcher:net.fetch});cloud.auth={enabled:true,account:'account',refreshToken:'test-refresh',accessToken:'test-token',expires:Date.now()+3600000};return {root,net,cloud,cleanup:async()=>{cloud.auth.enabled=false;clearTimeout(cloud.retry);while(cloud.running)await new Promise(r=>setTimeout(r,5));await fs.rm(root,{recursive:true,force:true});}};}
 const settle=async cloud=>{while(cloud.running)await new Promise(r=>setTimeout(r,5));};
+test('Windows advertises and routes its native journal reader through the cloud IPC contract',async()=>{
+ const f=await fixture();try{
+  f.cloud.runJobs=async()=>{};f.cloud.realtime.session=async()=>({account:'account',userId:'owner',accessToken:'scoped'});
+  f.cloud.realtime.journalFetcher=async()=>new Response(JSON.stringify([{revision:7,operation:{id:'incoming'}}]));
+  assert.equal((await f.cloud.request('status')).nativeJournal,true);
+  assert.deepEqual(await f.cloud.request('realtimeChanges',{after:3}),{events:[{id:'incoming'}],journalCursor:7});
+ }finally{await f.cleanup();}
+});
 test('revoked Google access exposes reconnect state without discarding the account or pending library changes',async()=>{
  const f=await fixture();try{
   f.cloud.auth.expires=0;f.cloud.fetcher=async()=>new Response(JSON.stringify({error:'invalid_grant'}),{status:400});

@@ -1,7 +1,30 @@
 const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
 const URL='https://cjmdgrstuaxaimpgxsmv.supabase.co',KEY='sb_publishable_5CrRGQG0f-UJ1pOsDoKLNQ_qAHEhAua';
 class DesktopRealtime {
- constructor(cloud){this.cloud=cloud;}
+ constructor(cloud,{journalFetcher=fetch}={}){this.cloud=cloud;this.journalFetcher=journalFetcher;}
+ async pullChanges(after=0){
+  let cursor=Number(after);if(!Number.isSafeInteger(cursor)||cursor<0)throw Error('Invalid journal cursor');
+  const session=await this.session(),events=[];
+  const check=()=>{if(!this.cloud.auth.enabled||this.cloud.auth.account!==session.account)throw Error('Аккаунт синхронизации изменился.');};
+  for(;;){
+   check();let rows;
+   for(let attempt=0;attempt<3;attempt++){
+    check();let response;
+    try{
+     // Small responses and fresh HTTP/1 connections avoid stalled long-lived
+     // Chromium transfers on networks which interrupt larger journal reads.
+     response=await this.journalFetcher(URL+'/rest/v1/playerium_events?select=revision,operation&user_id=eq.'+session.userId+'&revision=gt.'+cursor+'&order=revision.asc&limit=20',{headers:{apikey:KEY,Authorization:'Bearer '+session.accessToken,Connection:'close'},redirect:'error',signal:AbortSignal.timeout(10000)});
+     if(response.ok){rows=await response.json();break;}
+    }catch{response=null;if(attempt===2)throw Error('Не удалось прочитать журнал. Синхронизация продолжится автоматически.');}
+    check();if(response&&response.status<500&&response.status!==429){if(response.status===401)this.current=null;throw Error('Быстрая синхронизация временно недоступна.');}
+    if(attempt===2)throw Error('Не удалось прочитать журнал. Синхронизация продолжится автоматически.');
+    await new Promise(resolve=>setTimeout(resolve,200*(attempt+1)));
+   }
+   check();if(!Array.isArray(rows)||rows.length>20)throw Error('Invalid journal response');
+   for(const row of rows){if(!Number.isSafeInteger(row.revision)||row.revision<=cursor)throw Error('Invalid journal order');cursor=row.revision;events.push(row.operation);}
+   if(rows.length<20)return {events,journalCursor:cursor};
+  }
+ }
  async session(){
   const cloud=this.cloud;await cloud.load();const account=cloud.auth.account;if(!account||!cloud.auth.enabled)throw Error('Подключите Google Диск.');
   if(this.current?.account===account&&this.current.expiresAt>Date.now()+60000)return this.current;

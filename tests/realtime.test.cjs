@@ -1,4 +1,10 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
+test('Windows uses the native journal reader rather than a stalled renderer response',async()=>{
+ const {RealtimeSync}=await import('../js/realtime-sync.js');let called;
+ const cloud={status:{nativeJournal:true},nativeRequest:async(op,payload)=>{called={op,payload};return {events:[],journalCursor:91};}};
+ const sync=new RealtimeSync(cloud,{fetcher:async()=>{throw Error('Renderer network must not be used');}});
+ assert.deepEqual(await sync.pullChanges(91),{events:[],journalCursor:91});assert.deepEqual(called,{op:'realtimeChanges',payload:{after:91}});
+});
 const response=(data,status=200)=>new Response(data===null?null:JSON.stringify(data),{status});
 
 test('realtime login verifies Google before provisioning and never returns provider/server credentials',async()=>{

@@ -70,6 +70,25 @@ function network(){const events=[],files=new Map(),requests=[];let offline=false
  }};}
 function peer(net){const lib=new Library(),cloud=new CloudSync(lib,{player:{stop(){},removeTrack(){}}},net.transport);cloud.states={};return {lib,cloud};}
 function add(peer,net,name,bytes){const track={id:crypto.randomUUID(),title:name,artist:'Artist',filePath:'/music/'+crypto.randomUUID()+'.mp3',liked:false};peer.lib.tracks.set(track.id,track);net.files.set(track.filePath,Buffer.from(bytes));return track;}
+test('a reimported normalized file adopts its original recording identity without duplication, uploads or lost pending likes and playlist members',async()=>{
+ const net=network(),pc=peer(net),track=add(pc,net,'Normalized','normalized bytes'),revision=crypto.createHash('sha256').update('normalized bytes').digest('hex');
+ const remote=operation('track',{track:{title:track.title,artist:track.artist,ext:'.mp3',size:16,audioId:'backup',audioKey:revision}},1);
+ net.events.push(remote,operation('playlist',{playlist:'mix',name:'Mix'},2));net.files.set('backup',Buffer.from('normalized bytes'));
+ Object.assign(pc.cloud,{account:'account',events:structuredClone(net.events),links:{[revision]:{localId:track.id,liked:true}},shadow:{mix:{name:'Mix',description:'',coverType:'mosaic',coverUrl:null,manualOrder:false,keys:[revision]}}});
+ track.liked=true;pc.lib.playlists.set('mix',{id:'mix',name:'Mix',trackIds:[track.id]});
+ pc.cloud.outbox=[operation('track',{key:revision,track:{...remote.track,audioId:'pending'}},3),operation('like',{key:revision,liked:true},4),operation('member',{key:revision,playlist:'mix',present:true},5)];
+ const oldIds=pc.cloud.outbox.map(op=>op.id);await pc.cloud.sync();
+ assert.equal(pc.lib.getTracks().length,1);assert.equal(pc.lib.getTracks()[0].id,track.id);assert.equal(track.cloudKey,key);assert.equal(track.liked,true);
+ assert.deepEqual(pc.lib.getPlaylistById('mix').trackIds,[track.id]);assert.equal(pc.cloud.links[revision],undefined);assert.equal(pc.cloud.links[key].localId,track.id);
+ assert.equal(net.requests.includes('download'),false);assert.equal(net.events.some(op=>op.kind==='track'&&op.key===revision),false);
+ const view=model.cloudView(net.events);assert.equal(view.tracks.get(key).liked,true);assert.equal(view.playlists.get('mix').members.get(key).present,true);assert.equal(net.events.some(op=>oldIds.includes(op.id)),false);
+});
+test('a normalized reimport cannot resurrect an intentionally deleted recording',async()=>{
+ const net=network(),pc=peer(net),track=add(pc,net,'Removed','normalized bytes'),revision=crypto.createHash('sha256').update('normalized bytes').digest('hex');
+ net.events.push(operation('track',{track:{title:track.title,artist:track.artist,ext:'.mp3',size:16,audioId:'backup',audioKey:revision}}),operation('delete',{},2));
+ Object.assign(pc.cloud,{account:'account',events:structuredClone(net.events),links:{[revision]:{localId:track.id}},shadow:{}});
+ await pc.cloud.sync();assert.equal(pc.lib.getTracks().length,0);assert.equal(model.cloudView(net.events).tracks.get(key).deleted,true);assert.equal(net.events.some(op=>op.kind==='track'&&op.key===revision),false);
+});
 
 test('an empty device reports synchronization stages and clears stale download progress on retry',async()=>{
  const net=network(),pc=peer(net),phone=peer(net);add(pc,net,'First','first');await pc.cloud.sync();

@@ -33,6 +33,7 @@ export class RealtimeSync {
  async publish(events){if(!this.session)return;const ready=events.filter(op=>validOperation(op)&&(op.kind!=='track'||op.track.audioId!=='pending'));for(let i=0;i<ready.length;i+=100){const batch=ready.slice(i,i+100);await this.api('playerium_events?on_conflict=user_id,op_id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(batch.map(operation=>({user_id:this.session.userId,op_id:operation.id,operation})))});}}
  async pull(){let seq=0;const events=[];for(;;){const response=await this.api('playerium_events?select=seq,operation&user_id=eq.'+this.session.userId+'&seq=gt.'+seq+'&order=seq.asc&limit=1000'),rows=await response.json();for(const row of rows)if(validOperation(row.operation))events.push(row.operation);if(rows.length<1000)return events;seq=rows[rows.length-1].seq;}}
  async pullChanges(after=0){
+  if(this.cloud.status?.nativeJournal)return this.cloud.nativeRequest('realtimeChanges',{after});
   let cursor=Number(after)||0;const events=[];
   if(!Number.isSafeInteger(cursor)||cursor<0)throw Error('Некорректная позиция журнала.');
   for(;;){

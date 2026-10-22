@@ -111,6 +111,7 @@ export class CloudSync {
  }
  async capture({files=true}={}){
   const view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));
+  await this.reconcileIdentities(view);
   for(const [key,link] of Object.entries(this.links))if(link.localId&&!this.library.getTrackById(link.localId)&&!link.removed){this.operation('delete',{key});link.removed=true;}
   for(const track of this.library.getTracks()){
    try{
@@ -148,6 +149,27 @@ export class CloudSync {
   await this.save();
  }
  metadata(track){return {title:track.title||'Без названия',artist:track.artist||'Неизвестный исполнитель',album:track.album||'',duration:track.duration||0,year:track.year||null,genre:track.genre||null,trackNo:track.trackNo||null,isrc:track.isrc||null,...(track.audioKey&&track.normalization?{audioKey:track.audioKey,normalization:track.normalization,size:track.fileSize??track.size}:{})};}
+ async reconcileIdentities(view){
+  let changed=false;
+  const revisions=new Map();for(const [key,remote] of view.tracks)if(remote.data){const hash=remote.data.audioKey||key,old=revisions.get(hash);if(!old||view.tracks.get(old)?.deleted&&!remote.deleted)revisions.set(hash,key);}
+  for(const track of this.library.getTracks()){
+   const old=Object.keys(this.links).find(key=>this.links[key].localId===track.id);
+   if(!old||view.tracks.get(old)?.data||view.tracks.get(old)?.deleted)continue;
+   const key=track.cloudKey&&view.tracks.get(track.cloudKey)?.data?track.cloudKey:revisions.get(old);
+   if(!key||key===old||this.library.getTrackById(this.links[key]?.localId))continue;
+   this.links[key]=this.links[old];delete this.links[old];
+   changed=true;
+   // A normalized file has a new byte hash, but retains its recording identity.
+   // Pending operations get new IDs; already-published operations stay immutable.
+   const pending=this.outbox.filter(op=>op.key===old);this.outbox=this.outbox.filter(op=>op.key!==old);
+   for(const op of pending)if(op.kind!=='track'){const {id,clock,device,version,...fields}=op;this.operation(op.kind,{...fields,key});}
+   for(const shadow of Object.values(this.shadow||{}))if(shadow.keys)shadow.keys=[...new Set(shadow.keys.map(value=>value===old?key:value))];
+   track.cloudKey=key;
+   const content=view.tracks.get(key).data.audioKey||key;if(content===old){track.cloudAudioKey=content;track.audioKey=content;}
+   await this.library.putInStore('tracks',track);
+  }
+  return changed;
+ }
  async coverSignature(track){if(!track.pictureBlob)return '';this.coverSignatures||=new WeakMap();if(this.coverSignatures.has(track.pictureBlob))return this.coverSignatures.get(track.pictureBlob);let hash=2166136261;const bytes=new Uint8Array(await track.pictureBlob.arrayBuffer());for(const byte of bytes)hash=Math.imul(hash^byte,16777619);const signature=track.pictureBlob.type+':'+bytes.length+':'+(hash>>>0);this.coverSignatures.set(track.pictureBlob,signature);return signature;}
  async apply(view,{files=true}={}){
    if(!files)return this.applyView(view,{files:false});
@@ -164,6 +186,7 @@ export class CloudSync {
   async applyView(view,{files=true}={}){
   this.applying=true;
   try{
+   if(await this.reconcileIdentities(view))view=cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track')));
    const downloads=files?[...view.tracks].filter(([key,remote])=>remote.data&&!remote.deleted&&!this.library.getTrackById(this.links[key]?.localId)):[];
    this.progress={done:0,total:downloads.length};this.changed?.();
    if(window.AndroidBridge&&downloads.length)await this.request('queueDownloads',{tracks:downloads.map(([key,remote])=>({key,track:remote.data}))});
