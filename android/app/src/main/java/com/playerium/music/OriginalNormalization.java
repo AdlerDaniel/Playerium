@@ -13,7 +13,7 @@ import java.util.*;
 
 /** One constant multiplier, verified before a transactional replacement of the original. */
 final class OriginalNormalization {
-    static final double TARGET=-18, CEILING=-1;
+    static final double TARGET=-7, CEILING=-1;
     private static final java.util.concurrent.ConcurrentHashMap<String,Object> locks=new java.util.concurrent.ConcurrentHashMap<>();
     private static Object lock(Uri uri){Object added=new Object(),existing=locks.putIfAbsent(uri.toString(),added);return existing==null?added:existing;}
     private static final Map<String,Integer> readers=new java.util.concurrent.ConcurrentHashMap<>();
@@ -22,7 +22,7 @@ final class OriginalNormalization {
     static void opened(Uri uri){synchronized(lock(uri)){String key=uri.toString();readers.put(key,(readers.containsKey(key)?readers.get(key):0)+1);}}
     static void closed(Uri uri){synchronized(lock(uri)){String key=uri.toString();int count=(readers.containsKey(key)?readers.get(key):0)-1;if(count<=0)readers.remove(key);else readers.put(key,count);}}
     private static boolean finite(double n){return !Double.isNaN(n)&&!Double.isInfinite(n);}
-    static double gain(double integrated,double peak){double requested=TARGET-integrated,headroom=CEILING-peak;return Math.min(requested,headroom);}
+    static double gain(double integrated,double peak){double requested=TARGET-integrated,headroom=CEILING-peak;return requested>0?Math.max(0,Math.min(requested,headroom)):Math.min(requested,headroom);}
     static String hash(InputStream source)throws Exception{
         try(InputStream in=source){MessageDigest digest=MessageDigest.getInstance("SHA-256");byte[] bytes=new byte[65536];int n;while((n=in.read(bytes))!=-1)digest.update(bytes,0,n);
             StringBuilder out=new StringBuilder();for(byte b:digest.digest())out.append(String.format(Locale.ROOT,"%02x",b&255));return out.toString();}
@@ -35,7 +35,7 @@ final class OriginalNormalization {
     }
     private static double number(JSONObject stats,String field)throws Exception{return Double.parseDouble(stats.getString(field).replace("inf","Infinity"));}
     private static JSONObject measure(Command command,File input)throws Exception{
-        return stats(command.run(Arrays.asList("-xerror","-i",input.getAbsolutePath(),"-map","0:a:0","-vn","-af","loudnorm=I=-18:TP=-1:LRA=50:print_format=json","-f","null","-")));
+        return stats(command.run(Arrays.asList("-xerror","-i",input.getAbsolutePath(),"-map","0:a:0","-vn","-af","loudnorm=I=-7:TP=-1:LRA=50:print_format=json","-f","null","-")));
     }
     private static String extension(Context c,Uri uri)throws Exception{
         String name="file".equals(uri.getScheme())?new File(uri.getPath()).getName():DocumentFile.fromSingleUri(c,uri).getName();

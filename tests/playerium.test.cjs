@@ -31,6 +31,29 @@ async function library() {
 function descriptor(name, filePath, title = name) {
   return { name, fullPath: filePath, size: 100, lastModified: 1, metadata: { title, artist: 'Artist', duration: 42 } };
 }
+
+test('transactional normalization files never enter native scans or folder imports',async()=>{
+ const lib=await library(),root=await fs.mkdtemp(path.join(os.tmpdir(),'playerium-scan-'));
+ try{const stage='.playerium-1592235e-2da7-40a1-b214-5fe3c11a3c73.mp3';await fs.writeFile(path.join(root,stage),'temporary');await fs.writeFile(path.join(root,'real.mp3'),'real');
+  assert.deepEqual((await scanDirectory(root)).map(f=>f.name),['real.mp3']);
+  await lib.syncFolderToPlaylist('Music',root,[descriptor(stage,path.join(root,stage)),descriptor('real.mp3',path.join(root,'real.mp3'))]);
+  assert.equal(lib.getTracks().length,1);assert.equal(lib.getTracks()[0].fileName,'real.mp3');
+  await assert.rejects(lib.addDownloaded(descriptor(stage,path.join(root,stage))),/Временный/);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+});
+test('startup repairs a renamed normalization temp row, retaining likes, playlist order and a backup',async()=>{
+ const lib=await library(),root='C:/Music/Cloud',base={title:'Дим',artist:'Время и Стекло',fileSize:6461785,lastModified:1792678242388.0957,duration:198.42612244897958};
+ const keep={...base,id:'real',fileName:'recording.mp3',filePath:root+'/recording.mp3',sourceKey:root+'/recording.mp3',liked:false,cloudKey:'a'.repeat(64)},drop={...base,id:'temp',fileName:'.playerium-1592235e-2da7-40a1-b214-5fe3c11a3c73.mp3',filePath:root+'/.playerium-1592235e-2da7-40a1-b214-5fe3c11a3c73.mp3',liked:true,unavailable:true};
+ await lib.putInStore('tracks',keep);await lib.putInStore('tracks',drop);await lib.putInStore('playlists',{id:'mix',name:'Mix',trackIds:['other','temp','real']});
+ await lib.loadAll();assert.equal(lib.tracks.size,1);assert.equal(lib.getTracks()[0].id,'real');assert.equal(lib.getTracks()[0].liked,true);assert.deepEqual(lib.getPlaylistById('mix').trackIds,['other','real']);
+ assert.equal((await lib.getFromStore('settings','internal-import-repair:temp')).value.drop.title,'Дим');
+ assert.equal((await lib.getAllFromStore('tracks')).length,1);
+});
+test('file refresh preserves cloud recording identity while invalidating measurements of old bytes',async()=>{
+ const lib=await library(),file=descriptor('Song.mp3','C:/Music/Song.mp3');await lib.syncFolderToPlaylist('Music','C:/Music',[file]);const t=lib.getTracks()[0];
+ Object.assign(t,{cloudKey:'a'.repeat(64),audioKey:'b'.repeat(64),normalization:{profile:'constant-lufs7-tp1-original-v1'},liked:true});await lib.putInStore('tracks',t);
+ await lib.syncFolderToPlaylist('Music','C:/Music',[{...file,size:120,lastModified:2}]);const actual=lib.getTrackById(t.id);assert.equal(actual.cloudKey,t.cloudKey);assert.equal(actual.audioKey,undefined);assert.equal(actual.normalization,undefined);assert.equal(actual.liked,true);
+});
 test('native restoration retains queue indices and metadata when library records are unavailable', async () => {
   const {AudioPlayer}=await modules(),writes=[];
   window.AndroidBridge={setPlaybackQueue:data=>writes.push(data)};

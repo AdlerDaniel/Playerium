@@ -1,5 +1,6 @@
 import {normalizeSearch} from './music-match.js';
 import { normalizeTrackTitle } from "./track-title.js";
+import {isInternalAudioFile} from './internal-audio-files.js';
 /**
  * Spotify Local Player - Library & Database Layer
  * IndexedDB persistence for tracks, playlists, folders, and likes.
@@ -119,6 +120,7 @@ export class Library {
     playlists.forEach((p) => this.playlists.set(p.id, p));
 
     this.folders = await this.getAllFromStore("folders");
+    await this.repairInternalImports();
   }
 
   ensureDefaultPlaylists() {
@@ -187,14 +189,47 @@ export class Library {
   // --- Track Management ---
 
   getTracks() {
-    return Array.from(this.tracks.values());
+    return Array.from(this.tracks.values()).filter(t=>!isInternalAudioFile(t.fileName||t.sourceKey||t.filePath||t.nativeUri));
   }
 
   getTrackById(id) {
     return this.tracks.get(id);
   }
 
+  async mergeDuplicateTracks(keepId,dropId) {
+    const keep=this.tracks.get(keepId),drop=this.tracks.get(dropId);if(!keep||!drop||keepId===dropId)return keep;
+    const aliases=[...new Set([...(keep.sourceAliases||[]),...(drop.sourceAliases||[]),drop.sourceKey,drop.filePath,drop.nativeUri].filter(Boolean))];
+    const merged={...drop,...keep,id:keepId,liked:!!(keep.liked||drop.liked),dateAdded:Math.min(keep.dateAdded||Infinity,drop.dateAdded||Infinity),sourceAliases:aliases};
+    if(!Number.isFinite(merged.dateAdded))delete merged.dateAdded;
+    if(!keep.pictureBlob&&drop.pictureBlob){merged.pictureBlob=drop.pictureBlob;merged.pictureUrl=this.coverURL(keepId,drop.pictureBlob);}
+    const keepFile=await this.getFromStore('files',keepId),dropFile=!keepFile&&await this.getFromStore('files',dropId);
+    const playlists=this.getPlaylists().map(p=>({...p,trackIds:[...new Set(p.trackIds.map(id=>id===dropId?keepId:id))]}));
+    const tx=this.db.transaction(['tracks','files','playlists','settings'],'readwrite'),done=new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error);});
+    tx.objectStore('settings').put({key:'internal-import-repair:'+dropId,value:{at:Date.now(),keep:{...keep,pictureUrl:null},drop:{...drop,pictureUrl:null},dropFile:dropFile||null,playlists:this.getPlaylists().filter(p=>p.trackIds.includes(dropId))}});
+    tx.objectStore('tracks').put({...merged,pictureUrl:null});tx.objectStore('tracks').delete(dropId);
+    if(dropFile)tx.objectStore('files').put({...dropFile,id:keepId});tx.objectStore('files').delete(dropId);
+    for(const p of playlists)tx.objectStore('playlists').put(p);await done;
+    Object.assign(keep,merged);this.tracks.delete(dropId);for(const p of playlists)this.playlists.set(p.id,p);
+    if(!this.audioBlobs.has(keepId)&&this.audioBlobs.has(dropId))this.audioBlobs.set(keepId,this.audioBlobs.get(dropId));
+    if(!this.fileHandles.has(keepId)&&this.fileHandles.has(dropId))this.fileHandles.set(keepId,this.fileHandles.get(dropId));
+    this.audioBlobs.delete(dropId);this.fileHandles.delete(dropId);
+    return keep;
+  }
+
+  async repairInternalImports(){
+    const sync=await this.getFromStore('settings','cloudSync');
+    const linked=new Set(Object.values(sync?.value||{}).flatMap(state=>Object.values(state.links||{}).map(link=>link.localId)));
+    const directory=t=>String(t.sourceKey||t.filePath||'').replace(/\\/g,'/').split('/').slice(0,-1).join('/').toLocaleLowerCase();
+    const text=value=>String(value||'').normalize('NFKC').toLocaleLowerCase().trim();
+    for(const temp of [...this.tracks.values()]){
+      if(!isInternalAudioFile(temp.fileName||temp.sourceKey)||linked.has(temp.id)||temp.cloudKey)continue;
+      const matches=this.getTracks().filter(t=>directory(t)===directory(temp)&&t.fileSize>0&&t.fileSize===temp.fileSize&&Number.isFinite(t.lastModified)&&Math.abs(t.lastModified-temp.lastModified)<2&&text(t.title)===text(temp.title)&&text(t.artist)===text(temp.artist)&&Math.abs((t.duration||0)-(temp.duration||0))<.1);
+      if(matches.length===1)await this.mergeDuplicateTracks(matches[0].id,temp.id);
+    }
+  }
+
   async addDownloaded(file, expected) {
+    if(isInternalAudioFile(file.name||file.fullPath||file.uri))throw Error('Временный аудиофайл не добавляется в медиатеку.');
     const sourceKey=file.fullPath||file.uri;
     if(this.removedSources.delete(sourceKey))await this.putInStore('settings',{key:'removedTracks',value:[...this.removedSources]});
     await this.importChain.catch(()=>{});
@@ -495,7 +530,7 @@ export class Library {
 
   async importFolder(folderName, folderSource, files, isAndroid = false, progressCallback = null, replaceContents = true) {
     if (this.blockedSources.has(folderSource)) return { ignored: true };
-    const audio = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(f.name));
+    const audio = files.filter(f => !isInternalAudioFile(f.name||f.fullPath||f.uri)&&/\.(mp3|flac|wav|ogg|m4a|aac|opus)$/i.test(f.name));
     const identity = f => f.fullPath || f.uri || `${folderSource}/${f.relativePath || f.name}`;
     let playlist = this.findPlaylistByFolderSource(folderSource);
     const isNewPlaylist = !playlist;
@@ -503,7 +538,7 @@ export class Library {
       playlist = { id: `pl_fld_${crypto.randomUUID()}`, name: folderName, description: `Авто-плейлист папки: ${folderName}`,
         trackIds: [], createdAt: Date.now(), updatedAt: Date.now(), coverUrl: null, isFolderPlaylist: true, folderSource, isAndroid };
     }
-    const index = new Map(this.getTracks().map(t => [t.sourceKey || t.filePath || t.nativeUri, t]));
+    const index = new Map();for(const t of this.getTracks())for(const key of [t.sourceKey,t.filePath,t.nativeUri,...(t.sourceAliases||[])].filter(Boolean))index.set(key,t);
     const legacyIndex = new Map();
     for (const t of this.getTracks()) if (!t.sourceKey && !t.filePath && !t.nativeUri) {
       const legacyKey = `${t.folderName}/${t.fileName}/${t.fileSize}`;
@@ -552,9 +587,14 @@ export class Library {
         } catch (error) { parsed = false; failedCount++; console.warn("Metadata import failed:", f.name, error); }
         const id = track?.id || `trk_${crypto.randomUUID()}`;
         const previous = track;
-        track = { ...metadata, id, downloadId:f.downloadId || previous?.downloadId || null, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
+        track = { ...previous, ...metadata, id, downloadId:f.downloadId || previous?.downloadId || null, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
           sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
           liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, metadataVersion: 3, unavailable: false };
+        if(previous&&(previous.fileSize!==track.fileSize||previous.lastModified!==track.lastModified)){
+          // Keep the logical recording ID, but never certify edited bytes using an old measurement.
+          for(const key of ['audioKey','normalization','normalizationStamp','normalizationGain','normalizationKey'])if(metadata[key]===undefined)delete track[key];
+          delete track.cloudSource;
+        }
         track.title = normalizeTrackTitle(track.title);
      delete track.lyrics; delete track.lyricsModified;
         delete track.picture; delete track.pictureBase64;

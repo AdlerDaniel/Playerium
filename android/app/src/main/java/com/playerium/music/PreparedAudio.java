@@ -13,7 +13,7 @@ import java.util.*;
 
 /** Persistent verification of the original recording after constant-gain processing. */
 final class PreparedAudio {
-    static final String PROFILE="constant-lufs18-tp1-original-v2";
+    static final String PROFILE="constant-lufs7-tp1-original-v1";
     static SharedPreferences preferences(Context c){return c.getSharedPreferences("playerium_prepared_audio",Context.MODE_PRIVATE);}
     static File directory(Context c){File dir=new File(c.getNoBackupFilesDir(),"normalized-audio");dir.mkdirs();return dir;}
     static String key(Context c,Uri uri)throws Exception{

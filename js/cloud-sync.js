@@ -209,7 +209,7 @@ export class CloudSync {
      continue;
     }
     const localPending=this.outbox.some(op=>op.kind==='track'&&op.key===key),content=remote.data.audioKey||key;
-    if(track&&!localPending&&content===(track.cloudAudioKey||key)&&remote.data.normalization?.profile==='constant-lufs18-tp1-original-v2'&&track.normalization?.profile!==remote.data.normalization.profile){
+    if(track&&!localPending&&content===(track.cloudAudioKey||key)&&remote.data.normalization?.profile==='constant-lufs7-tp1-original-v1'&&track.normalization?.profile!==remote.data.normalization.profile){
      const accepted=await this.request('acceptAudioRevision',{key,track:remote.data,source:track.nativeUri||track.filePath||''});if(!accepted)throw Error('Локальная песня изменилась до подтверждения громкости.');
     }
     if(track&&!localPending&&content!==(track.cloudAudioKey||key)&&content!==track.audioKey){

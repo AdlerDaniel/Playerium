@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const AUDIO_EXTS = new Set(['.mp3', '.flac', '.wav', '.ogg', '.m4a', '.aac', '.opus']);
+const internalAudio = name => /^\.playerium-(?:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|normalize-).*/i.test(name);
 
 function isInside(root, candidate) {
   const relative = path.relative(root, candidate);
@@ -14,7 +15,7 @@ async function scanDirectory(root) {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) await visit(fullPath);
-      else if (entry.isFile() && (AUDIO_EXTS.has(path.extname(entry.name).toLowerCase()))) {
+      else if (entry.isFile() && !internalAudio(entry.name) && (AUDIO_EXTS.has(path.extname(entry.name).toLowerCase()))) {
         const stat = await fs.stat(fullPath);
         files.push({ name: entry.name, fullPath, relativePath: path.relative(root, fullPath).replaceAll('\\', '/'), size: stat.size, lastModified: stat.mtimeMs });
       }

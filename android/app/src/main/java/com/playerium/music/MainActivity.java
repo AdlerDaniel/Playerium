@@ -420,6 +420,7 @@ public class MainActivity extends AppCompatActivity {
                 String name = file.getName();
                 if (name != null) {
                     String lower = name.toLowerCase(java.util.Locale.ROOT);
+                    if(lower.matches("\\.playerium-[a-f0-9-]{36}\\..*")||lower.startsWith(".playerium-normalize-"))continue;
                     if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
                         lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac") || lower.endsWith(".opus")) {
                         results.add(file);

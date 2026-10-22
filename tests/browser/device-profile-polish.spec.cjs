@@ -22,5 +22,5 @@ test('AI artwork resumes its saved job, persists the image and respects a custom
  await page.reload();await page.waitForFunction(()=>window.playerApp?.albumArt);await page.evaluate(async()=>{window.playerApp.albumArt.stop();await window.playerApp.albumArt.step();});
  const cover=await page.evaluate(id=>window.playerApp.library.getPlaylistById(id).coverUrl,id);expect(cover).toMatch(/^data:image\/jpeg/);expect(prompts).toHaveLength(1);
  await page.evaluate(async id=>{const a=window.playerApp,p=a.library.getPlaylistById(id);const {setPlaylistArt}=await import('/js/visual-art.js');const canvas=document.createElement('canvas');canvas.width=canvas.height=128;canvas.getContext('2d').fillStyle='red';canvas.getContext('2d').fillRect(0,0,128,128);const blob=await new Promise(r=>canvas.toBlob(r));await setPlaylistArt(a.ui,p,'custom',blob);await a.albumArt.step();},id);
- expect(await page.evaluate(id=>window.playerApp.library.getPlaylistById(id).coverType,id)).toBe('custom');expect(prompts).toHaveLength(1);
+ expect(await page.evaluate(id=>window.playerApp.library.getPlaylistById(id).coverType,id)).toBe('custom');expect(prompts.filter(p=>p.includes('Night songs.'))).toHaveLength(1);expect(prompts.filter(p=>p.includes('Добавленные.'))).toHaveLength(1);
 });

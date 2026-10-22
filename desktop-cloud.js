@@ -67,7 +67,7 @@ class DesktopCloud {
  async prepareQueuedTrack(job,file){const op=job.operation;
        if(job.source!==path.join(this.snapshots,'queued-'+op.id+op.track.ext)){job.source=await this.snapshot(op,await this.authorize(job.source));await atomic(file,job);}
        const source=await this.audioSource(job.source);
-       if(op.track.normalization?.profile!=='constant-lufs18-tp1-original-v2'){
+       if(op.track.normalization?.profile!=='constant-lufs7-tp1-original-v1'){
         const ready=await this.prepareBackup(source,contentHash(op.track,op.key));
         if(ready){Object.assign(op.track,{audioKey:ready.audioKey,normalization:ready.normalization,size:ready.size});await atomic(file,job);}
        }

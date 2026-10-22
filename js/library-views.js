@@ -7,7 +7,7 @@ import { bindCollectionPlay } from './playback-controls.js';
 import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
 import { viewFingerprint } from './view-stability.js';
-import {likedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
+import {likedArtwork,addedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 import {changeTrackSort} from './track-sort.js';
 export function renderSidebar() {
     const list = document.getElementById("sidebarList");
@@ -44,6 +44,7 @@ export function renderSidebar() {
       added.className = 'sidebar-item' + (this.currentView.type === 'allTracks' ? ' active' : '');
       added.innerHTML = `<div class="item-thumb local-art">${icons.music}</div><div class="item-info"><span class="item-title">Добавленные</span><span class="item-subtitle">${this.library.getTracks().length} треков</span></div>`;
       added.addEventListener('click', () => this.navigateTo({ type: 'allTracks', title: 'Добавленные' }));
+      mountPlaylistArt(added.querySelector('.item-thumb'),addedArtwork(this.library),this.library.getTracks());
       list.append(added);
     }
 
@@ -146,6 +147,8 @@ export function renderAllTracksView(container) {
       </div>
     `;
 
+    const art=addedArtwork(this.library),cover=header.querySelector('.view-header-cover');
+    mountPlaylistArt(cover,art,this.library.getTracks());bindPlaylistCover(this,cover,art);
     container.appendChild(header);
     container.appendChild(this.createActionBar(tracks));
     container.appendChild(this.createTrackTable(tracks));
