@@ -17,7 +17,15 @@ Result: **53 local rows → 56 rows matching all 56 active cloud recording ident
 
 Local verification: 166 unit tests, 104 browser tests, syntax/version checks and the Electron cloud-runtime check passed. Added regressions cover the production endpoint allowlist, native journal IPC, interrupted response bodies, revision gaps, account switching, expired Google authorization, normalized identity recovery, pending likes/playlists and intentional deletions.
 
-The unpublished 1.7.46 verification run found a separate late-artwork failure on Android 16 after all Android 10 checks passed. The recorded System UI logs contained `EACCES` when loading private `file://` artwork paths. Playback metadata now contains image bytes instead of those paths. The image is read on the artwork worker; a revision check rejects stale completions. Existing artwork tests now also reject private file URIs in system metadata and check immutable cache-version reads. Final package and emulator verification is recorded after the 1.7.47 build completes.
+The unpublished 1.7.46 verification run found a separate late-artwork failure on Android 16 after all Android 10 checks passed. The recorded System UI logs contained `EACCES` when loading private `file://` artwork paths. Playback metadata now contains image bytes instead of those paths. The image is read on the artwork worker; a revision check rejects stale completions. Existing artwork tests now also reject private file URIs in system metadata and check immutable cache-version reads. Final package and emulator verification is recorded below.
+
+## Final verification and live journal repair
+
+[Run 39740211010](https://github.com/AdlerDaniel/Playerium/actions/runs/39740211010) passed verification, Windows, both Android runtime gates (API 29 and API 36 / 16 KiB), and release packaging. The final native XML report contains 54 cases with zero errors/failures, including the late-cover transition and the new private-URI assertions.
+
+Both final Windows packages matched all 112 packaged source files from the tag and passed actual streamed-audio / mini-player transport checks. All four release assets matched GitHub SHA-256 digests and SHA256SUMS; the APK retained the existing signing certificate, version 1.7.47 / code 61, expected compiled JavaScript and the new native artwork installer.
+
+While the old installed desktop version continued synchronizing after reauthentication, it committed four duplicate recording identities, bringing its local count to 60. The duplicates were identified by exact normalized-byte revision chains, with matching title, artist and format. Four reversible `delete` operations were published using the existing account to both the durable journal and the Drive event backup. There were no likes or active playlist memberships requiring migration for these four pairs. The original audio files and all audio backups were retained. The desktop still needs the updated application to avoid the old transport/coordinator behavior; a copied local snapshot taken before installing the update still reported 60 rows.
 
 ## Google sign-in
 
