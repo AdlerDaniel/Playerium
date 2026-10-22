@@ -64,7 +64,7 @@ export class CloudSync {
    await this.apply(cloudView(mergeOperations(this.events,this.outbox.filter(op=>op.kind!=='track'))));
    this.lastSync=Date.now();await this.save();
     if(this.failures.length)throw Error(`Не завершено операций: ${this.failures.length}. ${this.failures[0]}`);
-  }finally{this.busy=false;this.stage=null;globalThis.document?.querySelectorAll('.loading-rows[data-cloud-loading]').forEach(node=>node.remove());this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
+  }catch(error){if(error.message?.includes('Войдите в Google Диск повторно.'))this.status.authRequired=true;throw error;}finally{this.busy=false;this.stage=null;globalThis.document?.querySelectorAll('.loading-rows[data-cloud-loading]').forEach(node=>node.remove());this.changed?.();if(this.resync){this.resync=false;this.schedule(1000);}}
  }
  setStage(stage){this.stage=stage;this.changed?.();}
   registerSources(){

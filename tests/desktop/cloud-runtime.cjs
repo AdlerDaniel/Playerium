@@ -5,6 +5,13 @@ const {_electron:electron}=require('playwright'),fs=require('node:fs/promises'),
  await app.evaluate(({dialog},config)=>dialog.showOpenDialog=async()=>({canceled:false,filePaths:[config]}),config);
  assert.equal(await win.evaluate(()=>window.electronAPI.cloudRequest('configure')),true);
  const status=await win.evaluate(()=>window.electronAPI.cloudRequest('status'));assert.equal(status.configured,true);assert.equal(status.connected,false);assert.equal(status.clientSecret,undefined);
+ const journal=await app.evaluate(async()=>{
+  const {createRequire}=process.getBuiltinModule('module'),require=createRequire(process.cwd()+'/.cloud-http-test.cjs');
+  const {createCloudFetcher}=require('./desktop-cloud-http'),{DesktopRealtime}=require('./desktop-realtime');let destination;
+  const fetcher=createCloudFetcher({fetch:async url=>{destination=url;return new Response(JSON.stringify({account:'runtime',userId:'runtime-user',accessToken:'scoped-fixture-token',expiresAt:Date.now()+3600000}));}});
+  const realtime=new DesktopRealtime({load:async()=>{},auth:{account:'runtime',enabled:true},token:async()=> 'fixture-google-token',fetcher});
+  const session=await realtime.session();return {destination,account:session.account,user:session.userId};
+ });assert.equal(journal.destination,'https://cjmdgrstuaxaimpgxsmv.supabase.co/functions/v1/playerium-session');assert.equal(journal.account,'runtime');assert.equal(journal.user,'runtime-user');
  const encrypted=await fs.readFile(path.join(root,'profile','google-drive','account.bin'));assert.equal(encrypted.includes(Buffer.from('fixture-secret')),false);
  await win.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings'}));assert.equal(await win.locator('[data-connect]').isVisible(),true);assert.equal(await win.locator('[data-setup],[data-configure],[data-sync]').count(),0);
  const session=await win.evaluate(()=>window.electronAPI.cloudRequest('stage',{ext:'.mp3',size:4}));await win.evaluate(session=>window.electronAPI.cloudRequest('stageChunk',{id:session.id,offset:0,base64:btoa('song')}),session);const staged=await win.evaluate(session=>window.electronAPI.cloudRequest('stageComplete',{id:session.id}),session);const info=await win.evaluate(source=>window.electronAPI.cloudRequest('fingerprint',{source}),staged.source);assert.equal(info.size,4);

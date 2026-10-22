@@ -9,9 +9,10 @@ export function renderCloudSettings(ui,container){
   const connected=!!cloud.status.connected;
   section.querySelector('[data-account-name]').textContent=connected?'Вы вошли в Google':'Ваш аккаунт Google';
   section.querySelector('[data-account-email]').textContent=connected?(cloud.status.email||'Аккаунт подключён'):'Войдите в свой аккаунт на каждом устройстве.';
-  login.hidden=connected;logout.hidden=!connected;login.disabled=working||!cloud.available;logout.disabled=working;
-  login.textContent=working?'Выполняется вход…':'Войти через Google';login.classList.toggle('is-loading',working);login.setAttribute('aria-busy',String(working));
-  error.textContent=authError;error.hidden=!authError;
+  const reconnect=connected&&cloud.status.authRequired;
+  login.hidden=connected&&!reconnect;logout.hidden=!connected;login.disabled=working||!cloud.available;logout.disabled=working;
+  login.textContent=working?'Выполняется вход…':reconnect?'Войти повторно':'Войти через Google';login.classList.toggle('is-loading',working);login.setAttribute('aria-busy',String(working));
+  error.textContent=authError||(reconnect?'Google отклонил сохранённый вход. Войдите повторно, чтобы продолжить.':'');error.hidden=!error.textContent;
  }
  async function run(action){if(working)return;working=true;authError='';update();try{await action();}catch(e){authError=e.message;}finally{working=false;update();}}
  login.onclick=()=>run(()=>cloud.connect());logout.onclick=()=>run(()=>cloud.disconnect());

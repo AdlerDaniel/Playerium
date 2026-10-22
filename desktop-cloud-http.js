@@ -2,7 +2,7 @@
 // which net.fetch otherwise treats as a cancelled redirect.
 function createCloudFetcher(net){return (url,options={})=>{
  const parsed=new URL(url);
- if(parsed.protocol!=='https:'||!['www.googleapis.com','oauth2.googleapis.com'].includes(parsed.hostname)||parsed.port)throw Error('Invalid Google address');
+ if(parsed.protocol!=='https:'||!['www.googleapis.com','oauth2.googleapis.com','cjmdgrstuaxaimpgxsmv.supabase.co'].includes(parsed.hostname)||parsed.port||parsed.username||parsed.password)throw Error('Invalid cloud address');
  if(options.redirect!=='manual')return net.fetch(url,options);
  return new Promise((resolve,reject)=>{
   const request=net.request({url,method:options.method||'GET',redirect:'manual'});

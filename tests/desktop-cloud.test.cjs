@@ -17,6 +17,22 @@ function fakeDrive(){let count=0,failAfterChunk=false;const files=new Map(),sess
  }};}
 async function fixture(){const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'playerium-cloud-')));const net=fakeDrive(),allowed=new Set([root]);const cloud=new DesktopCloud({app:{getPath:name=>name==='userData'?path.join(root,'profile'):path.join(root,'music')},safeStorage:{isEncryptionAvailable:()=>true,encryptString:s=>Buffer.from(s),decryptString:b=>b.toString()},authorize:async source=>{const value=await fs.realpath(source);assert.ok([...allowed].some(p=>isInside(p,value)));return value;},onRoot:async root=>allowed.add(await fs.realpath(root)),openExternal:()=>{},fetcher:net.fetch});cloud.auth={enabled:true,account:'account',refreshToken:'test-refresh',accessToken:'test-token',expires:Date.now()+3600000};return {root,net,cloud,cleanup:async()=>{cloud.auth.enabled=false;clearTimeout(cloud.retry);while(cloud.running)await new Promise(r=>setTimeout(r,5));await fs.rm(root,{recursive:true,force:true});}};}
 const settle=async cloud=>{while(cloud.running)await new Promise(r=>setTimeout(r,5));};
+test('revoked Google access exposes reconnect state without discarding the account or pending library changes',async()=>{
+ const f=await fixture();try{
+  f.cloud.auth.expires=0;f.cloud.fetcher=async()=>new Response(JSON.stringify({error:'invalid_grant'}),{status:400});
+  await assert.rejects(f.cloud.token(),/Войдите в Google Диск повторно/);
+  f.cloud.runJobs=async()=>{};
+  const status=await f.cloud.request('status');assert.equal(status.authRequired,true);assert.equal(status.connected,true);assert.equal(f.cloud.auth.account,'account');assert.equal(f.cloud.auth.refreshToken,'test-refresh');
+  f.cloud.fetcher=async()=>new Response(JSON.stringify({access_token:'renewed',expires_in:3600}));
+  assert.equal(await f.cloud.token(),'renewed');assert.equal((await f.cloud.request('status')).authRequired,false);
+ }finally{await f.cleanup();}
+});
+test('temporary Google server errors do not incorrectly require another sign-in',async()=>{
+ const f=await fixture();try{
+  f.cloud.auth.expires=0;f.cloud.fetcher=async()=>new Response('{}',{status:503});
+  await assert.rejects(f.cloud.token(),/Попробуйте позже/);assert.notEqual(f.cloud.authRequired,true);
+ }finally{await f.cleanup();}
+});
 test('native upload resumes a durable session and commits its journal only after the complete audio',async()=>{
  const f=await fixture();try{
   const source=path.join(f.root,'Song.mp3'),bytes=Buffer.alloc(4*1024*1024+1234,7);await fs.writeFile(source,bytes);const fingerprint=await f.cloud.fingerprint(source);

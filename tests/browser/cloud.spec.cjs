@@ -10,6 +10,9 @@ for(const mobile of [false,true])test(`cloud settings connection progress, error
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('account-settings.png')});
  await page.evaluate(()=>{window.playerApp.cloud.busy=true;window.playerApp.cloud.error='Background transfer failed';window.playerApp.cloud.changed();});
  await expect(page.locator('[data-disconnect]')).toBeEnabled();await expect(page.locator('[data-account-error]')).toBeHidden();
+ await page.evaluate(()=>{window.playerApp.cloud.status.authRequired=true;window.playerApp.cloud.changed();});
+ await expect(page.locator('[data-connect]')).toHaveText('Войти повторно');await expect(page.locator('[data-account-error]')).toContainText('Google отклонил');
+ await page.locator('[data-connect]').click();await expect(page.locator('[data-connect]')).toBeHidden();await expect(page.locator('[data-account-error]')).toBeHidden();
  await page.locator('[data-disconnect]').click();await expect(page.locator('[data-connect]')).toBeVisible();
  await page.evaluate(()=>{window.electronAPI.cloudRequest=async name=>{if(name==='connect')throw Error('Не удалось войти в Google');return {connected:false};};});
  await page.locator('[data-connect]').click();await expect(page.locator('[data-account-error]')).toHaveText('Не удалось войти в Google');await expect(page.locator('[data-connect]')).toBeEnabled();
