@@ -12,9 +12,10 @@ import {CloudSync} from './cloud-sync.js';
 import {initWindowFrame} from './window-frame.js';
 import {ConnectController} from './connect-controller.js';
 import {installVisualExperience} from './visual-experience.js';
-import {hydratePortraits} from './visual-art.js';
+import {hydratePortraits,hydrateCollectionArtwork} from './visual-art.js';
 import {installAudioPreparation} from './audio-preparation.js';
 import {installInterfaceV2} from './interface-v2.js';
+import {installAlbumArtGenerator} from './album-art-generator.js';
 
 class App {
   constructor() {
@@ -37,6 +38,7 @@ class App {
 
       await this.library.init();
       await hydratePortraits(this.library);
+      await hydrateCollectionArtwork(this.library);
       const previousNativeUris = new Map(this.library.getTracks().map(track => [track.id,track.nativeUri]));
       // Android can relocate old downloads before exposing playable library rows.
       const restoreTask=window.AndroidBridge?this.music.restore():null;
@@ -47,6 +49,7 @@ class App {
       this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);
       installVisualExperience(this.ui);
       installInterfaceV2(this.ui);
+      this.albumArt=installAlbumArtGenerator(this.ui);
       // A slow cloud connection must never delay restoring local playback.
       this.cloud.init().catch(error=>{this.cloud.error=error.message;this.cloud.changed?.();});
       if(!window.AndroidBridge)this.music.restore();

@@ -87,7 +87,7 @@ public class LoudnessTest {
     for(File input:new File[]{quiet,loud}){
      byte[] before=java.nio.file.Files.readAllBytes(input.toPath());android.net.Uri original=android.net.Uri.fromFile(input),ready=engine.prepareAudio(original);File file=new File(ready.getPath());outputs.add(file);
      assertEquals(original,ready);assertFalse(java.util.Arrays.equals(before,java.nio.file.Files.readAllBytes(input.toPath())));
-     org.json.JSONObject measurement=engine.analyzeLoudness(original);levels[i++]=measurement.getDouble("integrated");assertEquals(-7,levels[i-1],.5);assertTrue(measurement.getDouble("peak")<=-.5);
+     org.json.JSONObject measurement=engine.analyzeLoudness(original);levels[i++]=measurement.getDouble("integrated");assertEquals(-18,levels[i-1],.5);assertTrue(measurement.getDouble("peak")<=-.5);
      assertNotNull(PreparedAudio.ready(c,original));byte[] normalized=java.nio.file.Files.readAllBytes(input.toPath());long modified=input.lastModified();
      long start=android.os.SystemClock.elapsedRealtime();assertEquals(ready,engine.prepareAudio(original));assertEquals(ready,PreparedAudio.playable(c,original));assertTrue(android.os.SystemClock.elapsedRealtime()-start<500);
      assertEquals(modified,input.lastModified());assertArrayEquals(normalized,java.nio.file.Files.readAllBytes(input.toPath()));
@@ -103,7 +103,7 @@ public class LoudnessTest {
     android.net.Uri uri=android.net.Uri.fromFile(file);org.json.JSONArray before=engine.analyzeWaveform(uri).getJSONArray("peaks");double ratio=before.getDouble(30)/before.getDouble(150);
     engine.prepareAudio(uri);org.json.JSONArray after=engine.analyzeWaveform(uri).getJSONArray("peaks");assertEquals(ratio,after.getDouble(30)/after.getDouble(150),.004);
     assertEquals(8,after.getDouble(150)/after.getDouble(30),.2);
-    assertEquals(-7,engine.analyzeLoudness(uri).getDouble("integrated"),.5);
+    assertEquals(-18,engine.analyzeLoudness(uri).getDouble("integrated"),.5);
     assertEquals(9,OriginalNormalization.gain(-20,-10),.0001);assertEquals(0,OriginalNormalization.gain(-20,-.2),.0001);assertEquals(-2,OriginalNormalization.gain(-5,-2),.0001);
    }finally{file.delete();}
   }
@@ -117,7 +117,7 @@ public class LoudnessTest {
     android.net.Uri uri=android.net.Uri.fromFile(mp3);assertEquals(uri,engine.prepareAudio(uri));
     android.media.MediaMetadataRetriever after=new android.media.MediaMetadataRetriever();after.setDataSource(mp3.getPath());
     try{assertEquals("Original title",after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE));assertEquals("Original artist",after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST));assertEquals("Original collection",after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM));assertArrayEquals(artwork,after.getEmbeddedPicture());assertTrue(Math.abs(duration-Long.parseLong(after.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)))<150);}finally{after.release();}
-    assertNotNull(PreparedAudio.ready(c,uri));assertEquals(-7,engine.analyzeLoudness(uri).getDouble("integrated"),.6);
+    assertNotNull(PreparedAudio.ready(c,uri));assertEquals(-18,engine.analyzeLoudness(uri).getDouble("integrated"),.6);
    }finally{bitmap.recycle();source.delete();mp3.delete();cover.delete();}
   }
   @Test public void failedEncodingLeavesTheOriginalBytesUntouched()throws Exception{

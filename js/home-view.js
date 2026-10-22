@@ -1,7 +1,7 @@
 import { bindCollectionPlay, playRow } from './playback-controls.js';
 import { icons } from './design-icons.js';
 import {mountCover} from './artwork.js';
-import {mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
+import {likedArtwork,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 
 function artwork(ui, item) {
   return item.pictureUrl || item.playlist || item.round || item.tracks?.[0] ? '<span class="card-cover"></span>' : icons[item.icon || 'music'];
@@ -35,10 +35,10 @@ export function renderHomeDashboard(container) {
   if (this.isMobile) document.getElementById('mainTopbar').append(filters);
   else home.append(filters);
   const quick=document.createElement('div');quick.className='home-quick-grid';
-  const liked={title:'Любимые треки',icon:'heart',className:'liked-art',view:{type:'liked',title:'Любимые треки'},tracks:this.library.getLikedTracks()};
+  const liked={playlist:likedArtwork(this.library),title:'Любимые треки',icon:'heart',className:'liked-art',view:{type:'liked',title:'Любимые треки'},tracks:this.library.getLikedTracks()};
   const all={title:'Добавленные',icon:'music',className:'local-art',view:{type:'allTracks',title:'Добавленные'},tracks};
   const quickItems=filter==='all'?[liked,all,...playlists]:filter==='playlists'?[liked,...playlists]:artists;
-  for (const item of quickItems.slice(0,8)) {
+  for (const item of quickItems.filter(item=>item.view?.type!=='liked'||item.tracks.length>0).slice(0,8)) {
     const card=document.createElement('div');card.className='home-quick-card';
     card.innerHTML=`<div class="home-quick-art ${item.className||''}">${artwork(ui,item)}</div><span>${this.escapeHTML(item.title)}</span>`;
     const cover=card.querySelector('.card-cover');if(cover){if(item.playlist)mountPlaylistArt(cover,item.playlist,item.tracks);else if(item.round)mountArtistPortrait(ui,cover,{name:item.title,pictureUrl:item.pictureUrl});else mountCover(cover,item.tracks?.[0]||item,true);}

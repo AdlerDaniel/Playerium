@@ -85,7 +85,7 @@ test('an audio revision atomically replaces the existing original and bypasses t
  const f=await fixture();try{
   const source=path.join(f.root,'Song.mp3'),before=Buffer.from('original'),after=Buffer.from('normalized original'),key=crypto.createHash('sha256').update(before).digest('hex'),audioKey=crypto.createHash('sha256').update(after).digest('hex');await fs.writeFile(source,before);
   f.net.files.set('normalized',{id:'normalized',size:String(after.length),appProperties:{playeriumCloud:'1',kind:'audio',key:'audio:'+audioKey},bytes:after});
-  const normalized={profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:7,integrated:-7,truePeak:-2,peakLimited:false},track={ext:'.mp3',size:after.length,audioId:'normalized',audioKey,normalization:normalized};
+  const normalized={profile:'constant-lufs18-tp1-original-v2',targetLUFS:-7,gainDb:7,integrated:-7,truePeak:-2,peakLimited:false},track={ext:'.mp3',size:after.length,audioId:'normalized',audioKey,normalization:normalized};
   const prepared=new (require('../desktop-normalization').PreparedAudio)('missing-ffmpeg',path.join(f.root,'prepared'));f.cloud.onAudioRevision=(file,metadata)=>prepared.acceptOriginal(file,metadata);
   const result=await f.cloud.download({key,track,destination:source,expectedCurrentHash:key});assert.equal(result.fullPath,source);assert.deepEqual(await fs.readFile(source),after);assert.equal(await prepared.prepare(source),source);
   await assert.rejects(fs.stat(path.join(f.cloud.cache,key+'.mp3')),error=>error.code==='ENOENT');
@@ -147,7 +147,7 @@ test('a prepared new recording is advertised before any Drive lookup can block i
   const info=await f.cloud.fingerprint(source),published=[];f.cloud.realtime.enqueue=async op=>published.push(structuredClone(op));
   let release,entered;const blocked=new Promise(resolve=>release=resolve),started=new Promise(resolve=>entered=resolve),find=f.cloud.find.bind(f.cloud);
   f.cloud.find=async(...args)=>{entered();await blocked;return find(...args);};
-  const operation={version:1,id:crypto.randomUUID(),device:'pc',clock:1,kind:'track',key:info.key,track:{title:'Ready',artist:'Artist',ext:'.mp3',size:bytes.length,audioId:'pending',audioKey:info.key,normalization:{profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:0,integrated:-7,truePeak:-1}}};
+  const operation={version:1,id:crypto.randomUUID(),device:'pc',clock:1,kind:'track',key:info.key,track:{title:'Ready',artist:'Artist',ext:'.mp3',size:bytes.length,audioId:'pending',audioKey:info.key,normalization:{profile:'constant-lufs18-tp1-original-v2',targetLUFS:-7,gainDb:0,integrated:-7,truePeak:-1}}};
   await f.cloud.publish({operation,source});await started;
   try{assert.equal(published[0].kind,'track-preview');assert.equal(published[0].track.audioId,'peer');assert.equal(JSON.stringify(published[0]).includes(source),false);
    assert.equal((await f.cloud.peerFiles.read({key:info.key,offset:0})).base64,bytes.toString('base64'));

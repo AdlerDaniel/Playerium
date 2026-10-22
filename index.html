@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; media-src 'self' blob: playerium-audio:; connect-src 'self' https://api.github.com https://cjmdgrstuaxaimpgxsmv.supabase.co wss://cjmdgrstuaxaimpgxsmv.supabase.co; object-src 'none'; base-uri 'none'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; media-src 'self' blob: playerium-audio:; connect-src 'self' https://aihorde.net https://api.github.com https://cjmdgrstuaxaimpgxsmv.supabase.co wss://cjmdgrstuaxaimpgxsmv.supabase.co; object-src 'none'; base-uri 'none'; frame-src 'none'">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121212">
@@ -41,7 +41,6 @@
   <div id="app">
         <header class="topbar" id="mainTopbar">
           <div class="topbar-left">
-<button class="app-brand" id="btnBrandHome" data-app-home aria-label="Playerium — главная"><img src="assets/icon.png" alt=""></button>
 <button class="global-home-btn" id="btnGlobalHome" aria-label="Главная"><svg viewBox="0 0 24 24"><path d="m12 2-10 8v12h7v-8h6v8h7V10z"/></svg></button>
 
 
@@ -59,7 +58,7 @@
 
           <div class="topbar-right">
             <button class="topbar-btn" id="btnOpenSettings" data-tooltip="Настройки" aria-label="Настройки">
-<span class="profile-avatar">P</span>
+<span class="profile-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg></span>
             </button>
           </div>
         </header>

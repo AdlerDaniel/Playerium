@@ -84,7 +84,7 @@ export class UIController {
   // --- DOM Binding ---
 
   bindDOM() {
-    for (const id of ["btnBrandHome", "btnGlobalHome"]) document.getElementById(id).addEventListener("click", () => {
+    for (const id of ["btnGlobalHome"]) document.getElementById(id).addEventListener("click", () => {
       this.searchQuery = ""; document.getElementById("mainSearchInput").value = "";
       document.getElementById("searchClearBtn").classList.remove("visible");
       this.navigateTo({type:"home",title:"Главная"});

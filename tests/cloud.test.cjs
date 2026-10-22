@@ -149,7 +149,7 @@ test('foreground sync waits for durable native uploads before its final pull so 
  await pc.cloud.sync();assert.equal(pc.lib.getTracks()[0].title,'New phone recording');
 });
 
-const normalization=()=>({profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:6,integrated:-7,truePeak:-2,peakLimited:false});
+const normalization=()=>({profile:'constant-lufs18-tp1-original-v2',targetLUFS:-7,gainDb:6,integrated:-7,truePeak:-2,peakLimited:false});
 
 test('manual playlist order converges from PC to phone and back without losing membership or likes',async()=>{
  const net=network(),pc=peer(net),phone=peer(net),songs=['One','Two','Three'].map(name=>add(pc,net,name,name));songs[1].liked=true;
@@ -190,7 +190,7 @@ test('a verified unchanged original disables legacy attenuation on the receiving
  const net=network(),phone=peer(net),pc=peer(net),track=add(phone,net,'Peak constrained','unchanged-original');
  await phone.cloud.sync();await pc.cloud.sync();const local=pc.lib.getTracks()[0],id=local.id,source=local.filePath;
  track.audioKey=crypto.createHash('sha256').update(net.files.get(track.filePath)).digest('hex');
- track.normalization={profile:'constant-lufs7-tp1-original-v1',targetLUFS:-7,gainDb:0,integrated:-12,truePeak:0,peakLimited:true};
+ track.normalization={profile:'constant-lufs18-tp1-original-v2',targetLUFS:-7,gainDb:0,integrated:-12,truePeak:0,peakLimited:true};
  track.fileSize=net.files.get(track.filePath).length;await phone.cloud.sync();net.requests.length=0;await pc.cloud.sync();
  assert.ok(net.requests.includes('acceptAudioRevision'));assert.equal(net.requests.includes('download'),false);
  assert.equal(pc.lib.getTracks().length,1);assert.equal(local.id,id);assert.equal(local.filePath,source);assert.equal(local.normalization.profile,track.normalization.profile);

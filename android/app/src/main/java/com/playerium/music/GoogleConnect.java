@@ -8,8 +8,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 final class GoogleConnect {
- final GoogleCloud cloud;final android.content.SharedPreferences prefs;final LocalConnect live;final ConcurrentHashMap<String,String> ids=new ConcurrentHashMap<>();
- GoogleConnect(GoogleCloud cloud,Context context){this.cloud=cloud;prefs=context.getSharedPreferences("playerium_connect",Context.MODE_PRIVATE);live=new LocalConnect(()->cloud.prefs.getBoolean("enabled",false)?account():null,this::wasAcknowledged);}
+ final Context context;final GoogleCloud cloud;final android.content.SharedPreferences prefs;final LocalConnect live;final ConcurrentHashMap<String,String> ids=new ConcurrentHashMap<>();
+ GoogleConnect(GoogleCloud cloud,Context context){this.cloud=cloud;this.context=context.getApplicationContext();prefs=context.getSharedPreferences("playerium_connect",Context.MODE_PRIVATE);live=new LocalConnect(()->cloud.prefs.getBoolean("enabled",false)?account():null,this::wasAcknowledged);}
  static void identifier(String value)throws IOException{if(value==null||!value.matches("[A-Za-z0-9_-]{1,100}"))throw new IOException("Некорректное устройство.");}
  String account(){return cloud.prefs.getString("account","");}
  JSONArray ackHistory(String device){try{return new JSONArray(prefs.getString(account()+":history:"+device,"[]"));}catch(Exception ignored){return new JSONArray();}}
@@ -29,7 +29,7 @@ final class GoogleConnect {
  JSONObject command(String device)throws Exception{JSONObject command=read("command",device);if(command==null)return null;long age=System.currentTimeMillis()-command.optLong("issuedAt");if(!device.equals(command.optString("target"))||wasAcknowledged(device,command.optString("id"))||age>90000||age< -30000)return null;identifier(command.optString("id"));return command;}
  Object request(String operation,JSONObject data)throws Exception{
   String device=data.optString("id");
-  if(operation.equals("connectInfo")){JSONObject info=new JSONObject().put("name",android.os.Build.MODEL).put("type","phone").put("realtime",true);if(cloud.prefs.getBoolean("enabled",false)&&!device.isEmpty()){identifier(device);JSONObject local=new JSONObject(info.toString()).put("id",device).put("state",new JSONObject().put("playing",false));prefs.edit().putString("local",local.toString()).putString("localAccount",account()).apply();live.start();live.publish(local);}return info;}
+  if(operation.equals("connectInfo")){JSONObject info=new JSONObject().put("name",android.os.Build.MODEL).put("type",context.getResources().getConfiguration().smallestScreenWidthDp>=600?"tablet":"phone").put("realtime",true);if(cloud.prefs.getBoolean("enabled",false)&&!device.isEmpty()){identifier(device);JSONObject local=new JSONObject(info.toString()).put("id",device).put("state",new JSONObject().put("playing",false));prefs.edit().putString("local",local.toString()).putString("localAccount",account()).apply();live.start();live.publish(local);}return info;}
   if(operation.equals("connectLive")){identifier(device);live.start();live.publish(new JSONObject(data.toString()).put("ack",ack(device)).put("ackHistory",ackHistory(device)));return live.scan(device);}
   if(operation.equals("connectAck")){acknowledge(device,data.getString("commandId"));return true;}
   if(operation.equals("connectSend")){JSONObject cmd=data.getJSONObject("command");identifier(device);identifier(cmd.getString("id"));if(!device.equals(cmd.optString("target")))throw new IOException("Некорректное устройство.");if(live.send(cmd))return new JSONObject().put("live",true);}

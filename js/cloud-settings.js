@@ -1,3 +1,4 @@
+import {updateProfileAvatar} from './profile-avatar.js';
 export function renderCloudSettings(ui,container){
  const cloud=ui.cloud;if(!cloud)return;
  const section=document.createElement('section');section.className='settings-section account-settings';section.id='settings-account';
@@ -6,8 +7,8 @@ export function renderCloudSettings(ui,container){
  const login=section.querySelector('[data-connect]'),logout=section.querySelector('[data-disconnect]'),error=section.querySelector('[data-account-error]');let working=false,authError='';
  function update(){
   if(!section.isConnected)return;
-  const connected=!!cloud.status.connected;
-  section.querySelector('[data-account-name]').textContent=connected?'Вы вошли в Google':'Ваш аккаунт Google';
+  const connected=!!cloud.status.connected;updateProfileAvatar(cloud.status);
+  section.querySelector('[data-account-name]').textContent=connected?(cloud.status.displayName||'Вы вошли в Google'):'Ваш аккаунт Google';
   section.querySelector('[data-account-email]').textContent=connected?(cloud.status.email||'Аккаунт подключён'):'Войдите в свой аккаунт на каждом устройстве.';
   const reconnect=connected&&cloud.status.authRequired;
   login.hidden=connected&&!reconnect;logout.hidden=!connected;login.disabled=working||!cloud.available;logout.disabled=working;

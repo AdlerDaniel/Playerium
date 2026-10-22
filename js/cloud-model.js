@@ -36,7 +36,7 @@ export function cloudView(events) {
     if(op.playlist){
       if(!playlists.has(op.playlist))playlists.set(op.playlist,{id:op.playlist,members:new Map(),positions:new Map(),deleted:false});
       const pl=playlists.get(op.playlist);
-      if(op.kind==='playlist'&&newer(op,pl.meta)){pl.meta=op;pl.name=op.name;pl.manualOrder=op.manualOrder===true;pl.description=String(op.description||'').slice(0,3000);pl.coverType=['custom','text','mosaic'].includes(op.coverType)?op.coverType:'mosaic';pl.coverUrl=typeof op.coverUrl==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(op.coverUrl)&&op.coverUrl.length<=200000?op.coverUrl:null;}
+      if(op.kind==='playlist'&&newer(op,pl.meta)){pl.meta=op;pl.name=op.name;pl.manualOrder=op.manualOrder===true;pl.description=String(op.description||'').slice(0,3000);pl.coverType=['custom','generated','text','mosaic'].includes(op.coverType)?op.coverType:'mosaic';pl.coverUrl=typeof op.coverUrl==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(op.coverUrl)&&op.coverUrl.length<=200000?op.coverUrl:null;}
       if(op.kind==='playlist-delete')pl.deleted=true;
       if(op.kind==='member'&&!op.orderOnly&&newer(op,pl.members.get(op.key)))pl.members.set(op.key,op);
       if(op.kind==='member'&&op.position!==undefined&&newer(op,pl.positions.get(op.key)))pl.positions.set(op.key,op);

@@ -1,4 +1,5 @@
 import {RealtimeSync} from './realtime-sync.js';
+import {updateProfileAvatar} from './profile-avatar.js';
 import {cloudView,mergeOperations} from './cloud-model.js';
 export class CloudSync {
  constructor(library,ui,transport=null){
@@ -20,12 +21,12 @@ export class CloudSync {
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)this.schedule(0);});window.addEventListener('online',()=>this.schedule(0));
   if(this.available){this.refreshStatus().catch(error=>{this.error=error.message;this.changed?.();});this.schedule(1000);this.interval=setInterval(()=>this.schedule(0),30000);}
  }
- async refreshStatus(){this.status=await this.request('status');if(this.status.connected&&this.status.realtimeAvailable)this.realtime.start(this.status.account).catch(()=>{});else this.realtime.reset();this.changed?.();return this.status;}
+ async refreshStatus(){this.status=await this.request('status');if(this.status.connected&&this.status.realtimeAvailable)this.realtime.start(this.status.account).catch(()=>{});else this.realtime.reset();updateProfileAvatar(this.status);this.changed?.();return this.status;}
  schedule(delay=800){clearTimeout(this.timer);this.timer=setTimeout(()=>this.sync().catch(error=>{this.error=error.message;this.changed?.();}),delay);}
  async save(){this.states[this.account]={events:this.events,outbox:this.outbox,links:this.links,cursor:this.cursor,shadow:this.shadow,journalCursor:this.journalCursor||0};await this.library.putInStore('settings',{key:'cloudSync',value:this.states});}
  operation(kind,fields){const clock=[...this.events,...this.outbox].reduce((n,o)=>Math.max(n,o.clock),0)+1;const op={version:1,id:crypto.randomUUID(),device:this.device,clock,kind,...fields};this.outbox.push(op);return op;}
  async connect(){await this.request('connect');await this.refreshStatus();if(this.status.connected)this.schedule(0);}
- async disconnect(){this.realtime.reset();await this.request('disconnect');this.status={connected:false};this.changed?.();}
+ async disconnect(){this.realtime.reset();await this.request('disconnect');this.status={connected:false};updateProfileAvatar(this.status);this.changed?.();}
  async sync(){
   if(this.busy||!this.available)return;this.busy=true;this.error=null;this.failures=[];this.failedFileAttempts=new Set();this.progress=null;this.stage='Проверка подключения…';this.changed?.();
   try{
@@ -208,7 +209,7 @@ export class CloudSync {
      continue;
     }
     const localPending=this.outbox.some(op=>op.kind==='track'&&op.key===key),content=remote.data.audioKey||key;
-    if(track&&!localPending&&content===(track.cloudAudioKey||key)&&remote.data.normalization?.profile==='constant-lufs7-tp1-original-v1'&&track.normalization?.profile!==remote.data.normalization.profile){
+    if(track&&!localPending&&content===(track.cloudAudioKey||key)&&remote.data.normalization?.profile==='constant-lufs18-tp1-original-v2'&&track.normalization?.profile!==remote.data.normalization.profile){
      const accepted=await this.request('acceptAudioRevision',{key,track:remote.data,source:track.nativeUri||track.filePath||''});if(!accepted)throw Error('Локальная песня изменилась до подтверждения громкости.');
     }
     if(track&&!localPending&&content!==(track.cloudAudioKey||key)&&content!==track.audioKey){

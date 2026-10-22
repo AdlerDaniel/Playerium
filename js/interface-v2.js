@@ -56,7 +56,7 @@ export class InterfaceV2{
     window.addEventListener('resize',()=>{if(!this.ui.isMobile)apply(this.sidebar.width||320);});apply(this.sidebar.width||320);
   }
   miniPlayer(){
-    const api=window.electronAPI;if(!api?.openMiniPlayer)return;const button=makeButton('Открыть мини-плеер',icons.grid,async()=>{try{await api.openMiniPlayer();this.miniActive=true;await this.publishMini(true);}catch(error){this.ui.showToast(error.message,'error');}});button.id='btnMiniWindow';document.querySelector('.player-right').append(button);
+    const api=window.electronAPI;if(!api?.openMiniPlayer)return;const button=makeButton('Открыть мини-плеер',icons.miniPlayer,async()=>{try{await api.openMiniPlayer();this.miniActive=true;await this.publishMini(true);}catch(error){this.ui.showToast(error.message,'error');}});button.id='btnMiniWindow';document.querySelector('.player-right').append(button);
     api.onMiniClosed?.(()=>{this.miniActive=false;});
     api.onMiniCommand?.(async({command,value})=>{try{const p=this.ui.player;if(command==='toggle')p.togglePlay();else if(command==='next')p.next();else if(command==='previous')p.prev();else if(command==='seek')p.seekToTime(value);else if(command==='volume')p.setVolume(value);else if(command==='like')await this.ui.toggleCurrentLike();else if(command==='queue')this.ui.openRightPanel('queue');this.publishMini(true);}catch(error){this.ui.showToast(error.message,'error');}});
     new MutationObserver(()=>{this.miniTheme=null;this.publishMini(true);}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});

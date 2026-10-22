@@ -7,7 +7,7 @@ import { bindCollectionPlay } from './playback-controls.js';
 import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
 import { viewFingerprint } from './view-stability.js';
-import {mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
+import {likedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 import {changeTrackSort} from './track-sort.js';
 export function renderSidebar() {
     const list = document.getElementById("sidebarList");
@@ -20,7 +20,7 @@ export function renderSidebar() {
     const likedTracks = this.library.getLikedTracks();
 
     // 1. Liked Songs Item (always first unless filtered out)
-    if (this.sidebarFilter === "all" || this.sidebarFilter === "playlists") {
+    if (likedTracks.length && (this.sidebarFilter === "all" || this.sidebarFilter === "playlists")) {
       const likedItem = document.createElement("div");
       likedItem.className = "sidebar-item" + (this.currentView.type === "liked" ? " active" : "");
       likedItem.innerHTML = `
@@ -35,6 +35,7 @@ export function renderSidebar() {
       likedItem.addEventListener("click", () => {
         this.navigateTo({ type: "liked", title: "Любимые треки" });
       });
+      const art=likedArtwork(this.library);if(art.coverUrl)mountPlaylistArt(likedItem.querySelector('.item-thumb'),art,likedTracks);
       list.appendChild(likedItem);
     }
 
@@ -183,6 +184,7 @@ export function renderLikedView(container) {
       </div>
     `;
 
+    const art=likedArtwork(this.library),cover=header.querySelector('.view-header-cover');if(art.coverUrl)mountPlaylistArt(cover,art,tracks);bindPlaylistCover(this,cover,art);
     container.appendChild(header);
     container.appendChild(this.createActionBar(tracks));
     container.appendChild(this.createTrackTable(tracks));
@@ -228,6 +230,7 @@ export function renderPlaylistView(container, playlistId) {
     `;
 
     mountPlaylistArt(header.querySelector('.view-header-cover'),pl,tracks);
+    bindPlaylistCover(this,header.querySelector('.view-header-cover'),pl);
     container.appendChild(header);
     container.appendChild(this.createActionBar(tracks, pl));
     container.appendChild(this.createTrackTable(tracks, pl));

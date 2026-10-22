@@ -1,4 +1,8 @@
 export const icons = {
+  miniPlayer:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="11" width="7" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  desktop:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v12H3zm9 12v4m-5 0h10" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  phone:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 18h4" stroke="currentColor" stroke-width="1.8"/></svg>',
+  tablet:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 18h4" stroke="currentColor" stroke-width="1.8"/></svg>',
   expand:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   close:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 14 14M19 5 5 19" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   previous:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h3v14H5zm14 0v14L9 12z"/></svg>',
