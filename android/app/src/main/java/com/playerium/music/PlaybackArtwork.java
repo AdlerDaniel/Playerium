@@ -28,9 +28,18 @@ final class PlaybackArtwork {
         }
     }
     static androidx.media3.common.MediaMetadata.Builder metadata(Context context,String id,androidx.media3.common.MediaMetadata.Builder builder,boolean loadCached){
-        Uri cached=loadCached?find(context,id):null;
-        return cached!=null?builder.setArtworkData(null,androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER).setArtworkUri(cached)
-            :builder.setArtworkUri(null).setArtworkData(Placeholder.PNG,androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER);
+        // System UI cannot read file:// URIs in our private no-backup directory.
+        // The service loads cached image bytes off the playback thread instead.
+        return builder.setArtworkUri(null).setArtworkData(Placeholder.PNG,androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER);
+    }
+    static byte[] read(Context context,String id,Uri expected){
+        if(expected==null||!expected.equals(find(context,id)))return null;
+        File photo=new File(expected.getPath());long size=photo.length();if(size<1||size>4*1024*1024)return null;
+        try(java.io.FileInputStream input=new java.io.FileInputStream(photo);ByteArrayOutputStream output=new ByteArrayOutputStream()){
+            byte[] chunk=new byte[8192];int read,total=0;
+            while((read=input.read(chunk))!=-1){total+=read;if(total>4*1024*1024)return null;output.write(chunk,0,read);}
+            return output.toByteArray();
+        }catch(Exception ignored){return null;}
     }
     static void storeAsync(Context context,String id,String encoded){
         if(id==null||encoded==null||id.isEmpty()||id.length()>512||encoded.length()>6*1024*1024)return;

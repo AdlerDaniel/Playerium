@@ -58,6 +58,7 @@ public class MediaNotificationService extends MediaSessionService {
     private MediaSession session;
     private Equalizer equalizer;
     private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.Set<String> artworkLoading=new java.util.HashSet<>();
     private final java.util.concurrent.ExecutorService connectWorker=java.util.concurrent.Executors.newSingleThreadExecutor(),connectCloudWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean connecting;
     static void artworkChanged(String id){
@@ -255,10 +256,21 @@ public class MediaNotificationService extends MediaSessionService {
     private void applyArtwork(String id){
         if(instance!=this||player==null)return;
         Uri artwork=PlaybackArtwork.find(this,id);if(artwork==null)return;
+        String request=id+"\n"+artwork;if(!artworkLoading.add(request))return;
+        artworkWorker.submit(()->{
+            byte[] bytes=PlaybackArtwork.read(this,id,artwork);
+            handler.post(()->{
+                artworkLoading.remove(request);
+                if(instance!=this||player==null||bytes==null||!artwork.equals(PlaybackArtwork.find(this,id)))return;
+                installArtwork(id,bytes);
+            });
+        });
+    }
+    private void installArtwork(String id,byte[] bytes){
         for(int index=0;index<player.getMediaItemCount();index++){
             MediaItem item=player.getMediaItemAt(index);
-            if(item.mediaId.equals(id)&&!artwork.equals(item.mediaMetadata.artworkUri))
-                player.replaceMediaItem(index,item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkData(null,MediaMetadata.PICTURE_TYPE_FRONT_COVER).setArtworkUri(artwork).build()).build());
+            if(item.mediaId.equals(id)&&(item.mediaMetadata.artworkUri!=null||!java.util.Arrays.equals(bytes,item.mediaMetadata.artworkData)))
+                player.replaceMediaItem(index,item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkUri(null).setArtworkData(bytes,MediaMetadata.PICTURE_TYPE_FRONT_COVER).build()).build());
         }
     }
 

@@ -90,6 +90,11 @@ public class MediaCardTest {
             android.net.Uri saved=PlaybackArtwork.save(context,"../cache-version-fixture",bytes.toByteArray());assertNotNull(saved);
             assertTrue(new File(saved.getPath()).getCanonicalPath().startsWith(context.getNoBackupFilesDir().getCanonicalPath()+File.separator));
             if(previous!=null)assertNotEquals(previous,saved);
+            if(previous!=null)assertNull(PlaybackArtwork.read(context,"../cache-version-fixture",previous));
+            byte[] cachedBytes=PlaybackArtwork.read(context,"../cache-version-fixture",saved);assertNotNull(cachedBytes);
+            Bitmap exported=android.graphics.BitmapFactory.decodeByteArray(cachedBytes,0,cachedBytes.length);assertTrue(matchesColor(exported.getPixel(0,0),color));exported.recycle();
+            androidx.media3.common.MediaMetadata initial=PlaybackArtwork.metadata(context,"../cache-version-fixture",new androidx.media3.common.MediaMetadata.Builder(),true).build();
+            assertNull(initial.artworkUri);assertNotNull(initial.artworkData);
             Bitmap decoded=android.graphics.BitmapFactory.decodeFile(saved.getPath());assertTrue(decoded.getWidth()<=512);decoded.recycle();previous=saved;
         }
         assertNull(PlaybackArtwork.save(context,"../cache-version-fixture",new byte[]{1,2,3}));
@@ -102,6 +107,9 @@ public class MediaCardTest {
             if(metadata!=null&&title.equals(metadata.getString(MediaMetadata.METADATA_KEY_TITLE))&&bitmap!=null){
                 int actual=bitmap.getPixel(0,0);
                 if(matchesColor(actual,color)){
+                    for(String key:new String[]{MediaMetadata.METADATA_KEY_ART_URI,MediaMetadata.METADATA_KEY_ALBUM_ART_URI,MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI}){
+                        String uri=metadata.getString(key);assertTrue("System artwork must not advertise an unreadable private file",uri==null||!uri.startsWith("file:"));
+                    }
                     NotificationManager manager=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
                     for(StatusBarNotification posted:manager.getActiveNotifications()){
                         Notification notification=posted.getNotification();
