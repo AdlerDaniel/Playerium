@@ -15,7 +15,6 @@ export function renderArtistProfile(container,name) {
     header.innerHTML=`<div class="view-header-cover artist-hero-art">${icons.artist}</div><div class="view-header-details"><span class="view-type-badge">Исполнитель</span><h1 class="view-title">${ui.escapeHTML(artist.name)}</h1><div class="view-metadata">${tracks.length?`${tracks.length} треков`:''}</div></div>`;
     mountArtistPortrait(ui,header.firstElementChild,artist);
     root.append(header);if(tracks.length)root.append(ui.createActionBar(tracks));
-    if(busy&&!tracks.length)root.append(loadingRows(6));
     root.setAttribute('aria-busy',String(busy));
     const status=busy?loadingIndicator('Загрузка песен…'):document.createElement('p');status.classList.add('artist-profile-status');status.setAttribute('role','status');if(!busy)status.textContent=profile.offline?'Не удалось загрузить каталог. Показаны доступные треки.':'';root.append(status);
     const features=tracks.filter(t=>artistKey(t.artist)!==artistKey(artist.name)||artistCredits(t).length>1);

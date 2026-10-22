@@ -13,11 +13,12 @@ export async function persistCollectionArtwork(library,playlist){
 export function mountPlaylistArt(host,playlist,tracks=[]){
  if(!host)return;host.classList.add('playlist-art');
  host.classList.toggle('art-generating',playlist?.generating===true);host.setAttribute('aria-busy',String(playlist?.generating===true));
+ host.dataset.generationNote=playlist?.generationNote||'Обложка генерируется…';
  if(['custom','generated'].includes(playlist?.coverType)&&playlist.coverUrl){delete host.dataset.playlistArt;mountCover(host,{pictureUrl:playlist.coverUrl},true);return;}
  const covers=[...new Map(tracks.filter(t=>t.pictureUrl).map(t=>[t.pictureUrl,t])).values()].slice(0,4);
  const signature=JSON.stringify([playlist?.coverType,playlist?.name,covers.map(t=>t.pictureUrl)]);if(host.dataset.playlistArt===signature&&host.childElementCount)return;host.dataset.playlistArt=signature;
  host.replaceChildren();host.classList.remove('cover-loading','cover-placeholder');host.dataset.coverIdentity='';host.coverGeneration=(host.coverGeneration||0)+1;
- if(playlist?.coverType==='text'||covers.length<2){const tile=document.createElement('span');tile.className='playlist-letter-art';tile.textContent=(playlist?.name||'Музыка').slice(0,32);host.append(tile);return;}
+ if(playlist?.coverType==='text'||covers.length<2){const tile=document.createElement('span');tile.className='playlist-letter-art';tile.textContent=(playlist?.name||'Музыка').slice(0,32);tile.dataset.monogram=(playlist?.name||'Музыка').split(/\s+/).slice(0,2).map(s=>s[0]).join('').toLocaleUpperCase();host.append(tile);return;}
  const grid=document.createElement('span');grid.className='playlist-mosaic';for(let i=0;i<4;i++){const cell=document.createElement('span');mountCover(cell,covers[i%covers.length],true);grid.append(cell);}host.append(grid);
 }
 export async function setPlaylistArt(ui,playlist,type,file){
@@ -26,7 +27,7 @@ export async function setPlaylistArt(ui,playlist,type,file){
   if(!file||!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>12*1024*1024)throw Error('Выберите изображение PNG, JPEG или WebP до 12 МБ.');
   const blob=await resizeArtwork(file),bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas');canvas.width=canvas.height=384;const ctx=canvas.getContext('2d'),side=Math.min(bitmap.width,bitmap.height);ctx.drawImage(bitmap,(bitmap.width-side)/2,(bitmap.height-side)/2,side,side,0,0,384,384);bitmap.close();url=canvas.toDataURL('image/jpeg',.8);
  }
- playlist.coverType=type;playlist.coverUrl=url;playlist.updatedAt=Date.now();await persistCollectionArtwork(ui.library,playlist);ui.library.onLibraryChanged?.();ui.refreshCurrentView();ui.renderSidebar();
+ playlist.coverType=type;playlist.coverUrl=url;playlist.updatedAt=Date.now();playlist.generating=false;playlist.generationNote='';await ui.library.putInStore('settings',{key:'album-generation:'+playlist.id});await persistCollectionArtwork(ui.library,playlist);ui.library.onLibraryChanged?.();ui.refreshCurrentView();ui.renderSidebar();
 }
 export function choosePlaylistFile(ui,playlist){const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg,image/webp';input.hidden=true;document.body.append(input);input.onchange=async()=>{try{if(input.files[0])await setPlaylistArt(ui,playlist,'custom',input.files[0]);}catch(e){ui.showToast(e.message,'error');}finally{input.remove();}};input.addEventListener('cancel',()=>input.remove());input.click();}
 export function bindPlaylistCover(ui,host,playlist){

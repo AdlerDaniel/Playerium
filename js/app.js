@@ -16,6 +16,7 @@ import {hydratePortraits,hydrateCollectionArtwork} from './visual-art.js';
 import {installAudioPreparation} from './audio-preparation.js';
 import {installInterfaceV2} from './interface-v2.js';
 import {installAlbumArtGenerator} from './album-art-generator.js';
+import {installInterfaceRefresh} from './interface-refresh.js';
 
 class App {
   constructor() {
@@ -49,6 +50,7 @@ class App {
       this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);
       installVisualExperience(this.ui);
       installInterfaceV2(this.ui);
+      installInterfaceRefresh(this.ui);
       this.albumArt=installAlbumArtGenerator(this.ui);
       // A slow cloud connection must never delay restoring local playback.
       this.cloud.init().catch(error=>{this.cloud.error=error.message;this.cloud.changed?.();});

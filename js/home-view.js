@@ -6,6 +6,7 @@ import {likedArtwork,addedArtwork,mountPlaylistArt,mountArtistPortrait} from './
 function artwork(ui, item) {
   return item.pictureUrl || item.playlist || item.round || item.tracks?.[0] ? '<span class="card-cover"></span>' : icons[item.icon || 'music'];
 }
+function plural(count,one,few,many){const n=Math.abs(count)%100;return n>=11&&n<=14?many:n%10===1?one:n%10>=2&&n%10<=4?few:many;}
 function activate(element, action) {
   element.tabIndex = 0;
   element.setAttribute('role', 'button');
@@ -26,6 +27,9 @@ export function renderHomeDashboard(container) {
     view:{type:'artist',id:a.name,title:a.name},tracks:a.tracks}));
   const filter = this.homeFilter || 'all';
   const home = document.createElement('div'); home.className='home-dashboard';
+  const heading=document.createElement('header');heading.className='home-heading';
+  heading.innerHTML=`<div><span class="section-eyebrow">PLAYERIUM</span><h1>Главная</h1></div><button class="home-add-music">${icons.plus}<span>Добавить музыку</span></button>`;
+  heading.querySelector('button').onclick=()=>this.isMobile?this.showMobileAddSheet():this.triggerFolderPicker();home.append(heading);
   const filters = document.createElement('div'); filters.className='home-filters';
   for (const [value,label] of [['all','Все'],['playlists','Плейлисты'],['artists','Исполнители']]) {
     const button=document.createElement('button'); button.className='pill-btn'+(filter===value?' active':'');
@@ -37,6 +41,14 @@ export function renderHomeDashboard(container) {
   const quick=document.createElement('div');quick.className='home-quick-grid';
   const liked={playlist:likedArtwork(this.library),title:'Любимые треки',icon:'heart',className:'liked-art',view:{type:'liked',title:'Любимые треки'},tracks:this.library.getLikedTracks()};
   const all={playlist:addedArtwork(this.library),title:'Добавленные',icon:'music',className:'local-art',view:{type:'allTracks',title:'Добавленные'},tracks};
+  if(filter==='all'&&tracks.length){
+    const feature=document.createElement('section');feature.className='home-feature';feature.setAttribute('aria-label','Ваша коллекция');
+    feature.innerHTML=`<div class="home-feature-info"><span class="section-eyebrow">ВАША КОЛЛЕКЦИЯ</span><h2>Ваша музыка.<br>В одном месте.</h2><p>${tracks.length.toLocaleString('ru-RU')} ${plural(tracks.length,'трек','трека','треков')} · ${artists.length.toLocaleString('ru-RU')} ${plural(artists.length,'исполнитель','исполнителя','исполнителей')}</p><div class="home-feature-actions"><button class="home-feature-play" aria-label="Воспроизвести коллекцию">${icons.play}<span>Слушать</span></button><button class="home-feature-open">Открыть коллекцию ${icons.arrowRight}</button></div></div><button class="home-feature-art" aria-label="Открыть Добавленные"><span class="home-feature-cover"></span><span class="home-feature-caption">Добавленные ${icons.arrowRight}</span></button>`;
+    mountPlaylistArt(feature.querySelector('.home-feature-cover'),all.playlist,tracks);
+    bindCollectionPlay(this,feature.querySelector('.home-feature-play'),tracks,all.view);
+    feature.querySelector('.home-feature-open').onclick=feature.querySelector('.home-feature-art').onclick=()=>this.navigateTo(all.view);
+    home.append(feature);
+  }
   const quickItems=filter==='all'?[liked,all,...playlists]:filter==='playlists'?[liked,...playlists]:artists;
   for (const item of quickItems.filter(item=>item.view?.type!=='liked'||item.tracks.length>0).slice(0,8)) {
     const card=document.createElement('div');card.className='home-quick-card';
@@ -44,7 +56,7 @@ export function renderHomeDashboard(container) {
     const cover=card.querySelector('.card-cover');if(cover){if(item.playlist)mountPlaylistArt(cover,item.playlist,item.tracks);else if(item.round)mountArtistPortrait(ui,cover,{name:item.title,pictureUrl:item.pictureUrl});else mountCover(cover,item.tracks?.[0]||item,true);}
     activate(card,()=>this.navigateTo(item.view));quick.append(card);
   }
-  home.append(quick);
+  if(quick.childElementCount){const section=document.createElement('section');section.className='home-quick-section';const label=document.createElement('h2');label.className='quick-heading';label.textContent='Быстрый доступ';section.append(label,quick);home.append(section);}
   const shelf=(title,items,view)=>{
     if(!items.length) return;
     const section=document.createElement('section');section.className='home-shelf';

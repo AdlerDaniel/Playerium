@@ -3,7 +3,7 @@ import {icons} from './design-icons.js';
 import {mountCover,retainArtwork} from './artwork.js';
 import {playRow} from './playback-controls.js';
 import {normalize} from './music-match.js';
-import {loadingRows,loadingIndicator} from './loading.js';
+import {loadingRows,loadingIndicator,loadingCards,loadingFeature} from './loading.js';
 import {enabled} from './visual-features.js';
 import {highlightText} from './visual-experience.js';
 import {mountArtistPortrait,mountPlaylistArt,portraitFor} from './visual-art.js';
@@ -54,7 +54,7 @@ export function renderSearchView(container) {
       const card=document.createElement('div');card.className='search-top-card';
       if(tracks.length){card.innerHTML=`<div class="search-top-cover"></div><h3>${ui.escapeHTML(tracks[0].title)}</h3><p>Песня <span>•</span> ${ui.escapeHTML(tracks[0].artist)}</p><button class="search-top-play" aria-label="Воспроизвести ${ui.escapeHTML(tracks[0].title)}">${icons.play}</button>`;
         mountCover(card.firstElementChild,tracks[0],true);card.querySelector('button').onclick=()=>{remember(query);playRow(ui,tracks[0],tracks,{...ui.currentView},true);};
-      }else if(loading){card.classList.add('search-top-loading');card.setAttribute('aria-label','Поиск лучшего совпадения');card.append(loadingRows(1));}top.append(card);
+      }else if(loading){card.classList.add('search-top-loading');card.setAttribute('aria-label','Поиск лучшего совпадения');card.append(loadingFeature());}top.append(card);
       const bestArtist=artists.find(a=>normalize(a.name)===normalize(query))||(!tracks.length&&artists[0]);
       if(bestArtist){card.classList.add('search-top-artist');card.replaceChildren();const cover=document.createElement('div');cover.className='search-top-cover';mountArtistPortrait(ui,cover,bestArtist);const open=document.createElement('button');open.className='search-artist-open';open.innerHTML=`<h3>${ui.escapeHTML(bestArtist.name)}</h3><p>Исполнитель</p>`;open.onclick=()=>{remember(query,bestArtist);ui.navigateTo({type:'artist',id:bestArtist.name,title:bestArtist.name,artist:bestArtist});};card.append(cover,open);}
 
@@ -74,7 +74,8 @@ export function renderSearchView(container) {
       makeCards('artists','Исполнители',[...artistMap.values()]);
       makeCards('playlists','Плейлисты',ui.library.getPlaylists().filter(p=>normalize(p.name).includes(normalize(query))).map(p=>({name:p.name,subtitle:'Плейлист',playlist:p,tracks:ui.library.getPlaylistTracks(p.id),pictureUrl:p.coverUrl,action:()=>ui.navigateTo({type:'playlist',id:p.id,title:p.name})})));
     }
-    if(!tracks.length&&loading&&ui.searchFilter!=='all')results.append(loadingRows());
+    if(!tracks.length&&loading&&ui.searchFilter==='songs')results.append(loadingRows());
+    if(!artists.length&&loading&&ui.searchFilter==='artists')results.append(loadingCards(4,true));
     if(!loading&&results.children.length===1){const empty=document.createElement('div');empty.className='search-empty';empty.innerHTML=`<h2>${error?'Не удалось выполнить поиск':'Ничего не найдено'}</h2><p>${error?'Проверьте подключение и попробуйте ещё раз.':`Попробуйте другое название песни или исполнителя.`}</p>`;if(error){const retry=document.createElement('button');retry.textContent='Повторить';retry.onclick=()=>{ui.music.cache.delete(query.toLocaleLowerCase());ui.refreshCurrentView();};empty.append(retry);}results.append(empty);}
     if(enabled(18))for(const host of results.querySelectorAll('.track-name,.track-artist,.search-entity-card strong,.search-top-card h3'))highlightText(host,query);
     if(focusedRow&&typeof focusedClass==='string'){const row=[...results.querySelectorAll('.track-row')].find(r=>r.dataset.trackId===focusedRow.dataset.trackId);const target=row&&[...row.querySelectorAll('button')].find(b=>b.className===focusedClass);target?.focus({preventScroll:true});}

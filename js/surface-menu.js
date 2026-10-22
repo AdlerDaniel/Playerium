@@ -10,12 +10,15 @@ export function showSurfaceMenu(ui,{title,items,anchor}={}) {
   panel.innerHTML=`${ui.isMobile?'<div class="mobile-sheet-handle"></div>':''}<h3 class="menu-pane-title">${ui.escapeHTML(title)}</h3>`;
   document.body.append(root);
   let closed=false,unwatch=()=>{};
-  const close=()=>{if(closed)return;closed=true;unwatch();root.classList.remove('active');root.classList.add('closing');setTimeout(()=>root.remove(),200);if(ui.dismissSurface===close)ui.dismissSurface=null;opener?.isConnected&&opener.focus({preventScroll:true});};
+  const close=()=>{if(closed)return;closed=true;unwatch();root.inert=true;root.setAttribute('aria-hidden','true');root.classList.remove('active');root.classList.add('closing');setTimeout(()=>root.remove(),200);if(ui.dismissSurface===close)ui.dismissSurface=null;opener?.isConnected&&opener.focus({preventScroll:true});};
   ui.dismissSurface=close;
+  let previousGroup;
   for(const item of items){
+    if(item.group&&item.group!==previousGroup){if(previousGroup){const line=document.createElement('div');line.className='surface-divider';line.setAttribute('role','separator');panel.append(line);}const label=document.createElement('p');label.className='surface-group-label';label.textContent=item.group;panel.append(label);previousGroup=item.group;}
     const b=document.createElement('button');b.className=(ui.isMobile?'mobile-sheet-item':'context-menu-item')+(item.danger?' danger':'');
+    b.disabled=!!item.disabled;
     b.setAttribute('aria-label',item.label);
-    b.innerHTML=`${item.icon||icons.music}<span>${ui.escapeHTML(item.label)}</span>${item.selected?'<span class="surface-check">✓</span>':''}`;
+    b.innerHTML=`${item.icon||icons.music}<span class="surface-item-copy"><span>${ui.escapeHTML(item.label)}</span>${item.description?`<small>${ui.escapeHTML(item.description)}</small>`:''}</span>${item.selected?'<span class="surface-check">✓</span>':''}`;
     if(!ui.isMobile)b.setAttribute('role','menuitem');
     b.onclick=async()=>{close();try{await item.action();}catch(error){ui.showToast(error.message,'error');}};panel.append(b);
   }

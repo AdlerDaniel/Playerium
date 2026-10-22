@@ -1,4 +1,8 @@
 export const icons = {
+  arrowRight:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  image:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-7 5 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  sparkles:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5ZM20 2v4m-2-2h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   miniPlayer:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="11" width="7" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   desktop:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v12H3zm9 12v4m-5 0h10" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   phone:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 18h4" stroke="currentColor" stroke-width="1.8"/></svg>',
@@ -16,7 +20,7 @@ export const icons = {
   list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h4v4H3zm0 6h4v4H3zm0 6h4v4H3zm7-11h11v2H10zm0 6h11v2H10zm0 6h11v2H10z"/></svg>',
   sort: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v17m-4-4 4 4 4-4m6 5V4m-4 4 4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
   edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
-  queue: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h15v2H3zm0 5h15v2H3zm0 5h9v2H3zm15-1h2v4h4v2h-4v4h-2v-4h-4v-2h4z"/></svg>',
+  queue: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h17M3 10h17M3 15h9m5-1v8m-4-4h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h2c4 0 7 12 11 12h5m-4-4 4 4-4 4M3 18h2c4 0 7-12 11-12h5m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H5a3 3 0 0 0-3 3v4m18-7-4-4m4 4-4 4M4 17h15a3 3 0 0 0 3-3v-4M4 17l4-4m-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   timer: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="14" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 2h6m-3 0v3m0 5v5" stroke="currentColor" stroke-width="1.8"/></svg>',

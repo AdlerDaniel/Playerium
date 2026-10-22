@@ -24,9 +24,9 @@ for(const mobile of [false,true])test(`added collection generates, replaces and 
  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'home',title:'Главная'}));await expect(page.locator('.home-quick-card').filter({hasText:'Добавленные'}).locator('img')).toBeVisible();
  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'library',title:'Моя медиатека'}));await expect(page.locator('.mobile-lib-row').filter({hasText:'Добавленные'}).locator('img')).toBeVisible();
 });
-test('failed replacement clears busy state, keeps previous cover and permits retry',async({page})=>{
+test('temporary outage keeps previous cover and retries replacement automatically',async({page})=>{
  await setup(page,false);
  await page.evaluate(async()=>{const a=window.playerApp,art=a.library.addedArtwork;const c=document.createElement('canvas');c.width=c.height=128;art.coverType='generated';art.coverUrl=c.toDataURL('image/jpeg');const {persistCollectionArtwork}=await import('/js/visual-art.js');await persistCollectionArtwork(a.library,art);a.ui.refreshCurrentView();});
- const cover=page.locator('.view-header-cover');await expect(cover.locator('img')).toBeVisible();await cover.click();await expect(cover).toHaveAttribute('aria-busy','false');await expect(cover.locator('img')).toBeVisible();await expect(page.locator('.toast-container')).toContainText('Не удалось создать обложку');
- let count=0;await page.unroute('https://aihorde.net/**');await page.route('https://aihorde.net/**',route=>{count++;return route.fulfill({json:{id:'retry-job'}});});await cover.click();await expect(cover).toHaveAttribute('aria-busy','true');await expect.poll(()=>count).toBe(1);
+ const cover=page.locator('.view-header-cover');await expect(cover.locator('img')).toBeVisible();await cover.click();await expect(cover).toHaveAttribute('aria-busy','true');await expect(cover.locator('img')).toBeVisible();await expect(cover).toHaveAttribute('data-generation-note',/Повторяем автоматически/);await expect(page.locator('.toast-container')).not.toContainText('Не удалось');
+ let count=0;await page.unroute('https://aihorde.net/**');await page.route('https://aihorde.net/**',route=>{count++;return route.fulfill({json:{id:'retry-job'}});});await page.evaluate(async()=>{const a=window.playerApp,s=await a.library.getFromStore('settings','album-generation:__added-artwork');s.retryAt=0;await a.library.putInStore('settings',s);await a.albumArt.step();});await expect(cover).toHaveAttribute('aria-busy','true');await expect.poll(()=>count).toBe(1);
 });
