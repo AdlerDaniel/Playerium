@@ -1,4 +1,7 @@
 # Playerium visual test 1.7.24
+Current decisions from the annotation review supersede older layout details below: home uses a continuous solid canvas and a borderless collection feature; no duplicate page title, quick access, or default artists shelf. Mobile navigation is a separate matte capsule inspired by [Couple Space MobileNav](https://github.com/AdlerDaniel/couple-space/blob/main/components/MobileNav.tsx), with solid themed surfaces and distinct active tabs. Mini-player shows only artwork, track, artist and transport controls.
+Search starts with one field and a microphone; speech starts only from that button, through the browser or Android recognizer. Favorites and equalizer controls are retired, while legacy library/sync fields remain compatible and never delete recordings. Rows always use comfortable 64px spacing, waveform is off, and startup update checks are always enabled. Settings card headings live inside their cards; normalization shows its heading and two actions, with status revealed when invoked.
+
 Vanilla ES modules, Electron and Android WebView. Preserve the native player and existing synchronization protocol.
 Six palettes and the brown vinyl icon remain. Use neutral layered surfaces and local Inter, artwork as the color focus, 12px cards, 20px dialogs, 16/24px spacing.
 All twenty experiment IDs are documented in docs/visual-test-1.7.24.md and enabled in js/visual-features.js. Keep independent rollback boundaries.

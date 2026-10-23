@@ -21,7 +21,7 @@ for(const mobile of [false,true])test(`added collection generates, replaces and 
  await expect(cover).toHaveAttribute('aria-busy','false');expect(posts).toBe(2);
  expect(await page.evaluate(()=>window.playerApp.library.addedArtwork.coverUrl)).not.toBe(first);
  await page.screenshot({path:info.outputPath('ready.png')});
- await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'home',title:'Главная'}));await expect(page.locator('.home-quick-card').filter({hasText:'Добавленные'}).locator('img')).toBeVisible();
+ await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'home',title:'Главная'}));await expect(page.locator('.home-feature-art img')).toBeVisible();
  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'library',title:'Моя медиатека'}));await expect(page.locator('.mobile-lib-row').filter({hasText:'Добавленные'}).locator('img')).toBeVisible();
 });
 test('temporary outage keeps previous cover and retries replacement automatically',async({page})=>{

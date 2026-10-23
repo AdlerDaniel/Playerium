@@ -1,11 +1,11 @@
 const path=require('node:path');
 const {pathToFileURL}=require('node:url');
-const commands=new Set(['toggle','next','previous','seek','volume','like','openMain','pin','close','queue']);
+const commands=new Set(['toggle','next','previous','seek','volume','openMain','pin','close','queue']);
 function cleanState(value){
   if(!value||typeof value!=='object')throw Error('Invalid mini-player state');
   const text=(value,max=300)=>String(value??'').slice(0,max),number=(value,min,max)=>Math.max(min,Math.min(max,Number(value)||0));
   const theme=Object.fromEntries(['background','foreground','muted','accent','control','onAccent'].filter(key=>/^#[a-f0-9]{6}$/i.test(value.theme?.[key]||'')).map(key=>[key,value.theme[key]]));
-  const image=text(value.artwork,6*1024*1024);return {title:text(value.title),artist:text(value.artist),appName:text(value.appName,100),playing:!!value.playing,liked:!!value.liked,position:number(value.position,0,864000),duration:number(value.duration,0,864000),volume:number(value.volume,0,1),device:text(value.device,100),remote:!!value.remote,theme,artwork:/^(data:image\/(png|jpeg|webp);base64,|https:\/\/)/.test(image)?image:'',queue:Array.isArray(value.queue)?value.queue.slice(0,6).map(track=>({title:text(track.title),artist:text(track.artist)})):[]};
+  const image=text(value.artwork,6*1024*1024);return {title:text(value.title),artist:text(value.artist),appName:text(value.appName,100),playing:!!value.playing,position:number(value.position,0,864000),duration:number(value.duration,0,864000),volume:number(value.volume,0,1),device:text(value.device,100),remote:!!value.remote,theme,artwork:/^(data:image\/(png|jpeg|webp);base64,|https:\/\/)/.test(image)?image:'',queue:Array.isArray(value.queue)?value.queue.slice(0,6).map(track=>({title:text(track.title),artist:text(track.artist)})):[]};
 }
 class MiniPlayer{
   constructor({BrowserWindow,ipcMain,mainWindow,root=__dirname,displayName=()=> 'Playerium'}){Object.assign(this,{BrowserWindow,ipcMain,mainWindow,root,displayName});this.state={};this.url=pathToFileURL(path.join(root,'mini-player.html')).href;

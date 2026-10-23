@@ -38,7 +38,7 @@ export function bindMobileEvents() {
     new MutationObserver(syncFullscreen).observe(fsPlayer,{attributes:true,attributeFilter:['class']});syncFullscreen();
     if (miniPlayer) {
       miniPlayer.addEventListener("click", (e) => {
-        if (e.target.closest("#mobileMiniLike") || e.target.closest("#mobileMiniPlayPause")) return;
+        if (e.target.closest("#mobileMiniPlayPause")) return;
         if (this.player.currentTrack && fsPlayer) {
           fsPlayer.classList.add("active");fsPlayer.scrollTop=0;
           document.getElementById('btnMobileFsClose').focus({preventScroll:true});
@@ -52,10 +52,6 @@ export function bindMobileEvents() {
       this.player.togglePlay();
     });
 
-    document.getElementById("mobileMiniLike")?.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await this.toggleCurrentLike();
-    });
 
     // 3. Mobile Fullscreen Player Controls
     document.getElementById("btnMobileFsClose")?.addEventListener("click", () => {
@@ -82,9 +78,6 @@ export function bindMobileEvents() {
       this.player.toggleRepeat();
     });
 
-    document.getElementById("btnMobileFsLike")?.addEventListener("click", async () => {
-      await this.toggleCurrentLike();
-    });
 
     // Fullscreen Scrubber slider
     const fsSlider = document.getElementById("mobileFsSlider");
@@ -115,12 +108,7 @@ export function bindMobileEvents() {
       });
     }
 
-    // Fullscreen Equalizer & Queue
-    document.getElementById("btnMobileFsEq")?.addEventListener("click", () => {
-      fsPlayer?.classList.remove("active");
-      this.navigateTo({ type: "settings", title: "Настройки" });
-    });
-
+    // Fullscreen queue
     document.getElementById("btnMobileFsQueue")?.addEventListener("click", () => {
       fsPlayer?.classList.remove("active");
       this.toggleRightPanel("queue");

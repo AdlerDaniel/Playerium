@@ -52,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean uploadImages;
     private final static int FILECHOOSER_RESULTCODE = 1001;
     private final static int FOLDER_PICKER_RESULTCODE = 1002;
+    private final static int VOICE_SEARCH_RESULTCODE = 1003;
     private final static int PERMISSION_REQUEST_CODE = 2001;
 
     private final java.util.Map<String, JSONObject> metadataCache = new java.util.LinkedHashMap<>(128, 0.75f, true);
@@ -237,8 +238,17 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class)
                 .putExtra("command", command).putExtra("value", value)));
         }
-        @JavascriptInterface public void setEqualizer(final String settings) {
-            runOnUiThread(() -> startService(new Intent(MainActivity.this, MediaNotificationService.class).putExtra("equalizer", settings)));
+        @JavascriptInterface public void startVoiceSearch() {
+            runOnUiThread(() -> {
+                Intent voice = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                voice.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                voice.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ru-RU");
+                voice.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                voice.putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Назовите песню или исполнителя");
+                try { startActivityForResult(voice, VOICE_SEARCH_RESULTCODE); }
+                catch (android.content.ActivityNotFoundException e) { sendVoiceSearchResult("", "На устройстве недоступен голосовой ввод."); }
+                catch (SecurityException e) { sendVoiceSearchResult("", "Не удалось открыть голосовой ввод. Введите запрос вручную."); }
+            });
         }
         @JavascriptInterface public void clearSelectedFiles() { getSharedPreferences("playerium", MODE_PRIVATE).edit().remove("selected_music_files").apply(); }
         @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
@@ -430,9 +440,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void sendVoiceSearchResult(String text, String error) {
+        try {
+            org.json.JSONObject result = new org.json.JSONObject().put("text", text).put("error", error);
+            webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('playerium-voice-result',{detail:" + result.toString() + "}));", null);
+        } catch (org.json.JSONException ignored) { }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == VOICE_SEARCH_RESULTCODE) {
+            java.util.ArrayList<String> matches = resultCode == RESULT_OK && data != null ? data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS) : null;
+            sendVoiceSearchResult(matches == null || matches.isEmpty() ? "" : matches.get(0), "");
+            return;
+        }
         if(requestCode==GoogleCloud.AUTH_REQUEST){GoogleCloud.get(this).authorizationResult(resultCode==RESULT_OK?data:null);return;}
         if (requestCode == FILECHOOSER_RESULTCODE) {
             if (uploadMessage == null) return;

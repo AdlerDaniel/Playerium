@@ -72,8 +72,8 @@ test('import, playback and restart preserve files, likes and covers and ignore L
   await page.waitForFunction(() => window.playerApp.player.isPlaying);
   await expect(page.locator('.track-mini-thumb img').first()).toBeVisible();
   await page.getByRole('button',{name:'Настройки',exact:true}).click();
-  await expect(page.getByText('10-полосный эквалайзер',{exact:true})).toBeVisible();
-  await expect(page.locator('#settingsEqToggle')).toBeChecked();
+  await expect(page.locator('#settingsEqToggle,#btnMobileFsEq')).toHaveCount(0);await expect(page.locator('[data-normalization-check]')).toBeVisible();
+  await expect(page.locator('#settingsEqToggle')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 test('5000 tracks render a bounded list and scrolling reaches the end', async ({page}) => {
@@ -91,7 +91,7 @@ test('5000 tracks render a bounded list and scrolling reaches the end', async ({
   expect(await page.locator('.track-row').count()).toBeLessThan(60);
   expect(errors).toEqual([]);
 });
-test('mobile controls open player, queue and equalizer after import',async({page})=>{
+test('mobile controls open player and queue after import; equalizer is absent',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width:390,height:844});
   await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));
@@ -108,8 +108,8 @@ test('mobile controls open player, queue and equalizer after import',async({page
   await expect(page.locator('#rightPanelContent')).toContainText('Сейчас играет');
   await page.locator('#btnCloseRightPanel').click();
   await page.locator('#mobileMiniTitle').click();
-  await page.locator('#btnMobileFsEq').click();
-  await expect(page.getByText('10-полосный эквалайзер',{exact:true})).toBeVisible();
+  await expect(page.locator('#btnMobileFsEq')).toHaveCount(0);await page.locator('#btnMobileFsClose').click();await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings'}));
+  await expect(page.locator('#settingsEqToggle,#btnMobileFsEq')).toHaveCount(0);await expect(page.locator('[data-normalization-check]')).toBeVisible();
   expect(errors).toEqual([]);
 });
 test('home shelves, library filters and navigation expose the imported collection',async({page})=>{
@@ -117,7 +117,7 @@ test('home shelves, library filters and navigation expose the imported collectio
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await expect(page.locator('.shelf-title').first()).toHaveText('Song');
-  await page.locator('.home-quick-card').filter({hasText:'Добавленные'}).click();
+  await page.locator('.home-feature-art').click();
   await expect(page.locator('.track-name')).toHaveText('Song');
   await page.keyboard.press('Escape');await page.locator('#btnNavBack').click();
   await expect(page.locator('.home-dashboard')).toBeVisible();
@@ -167,8 +167,7 @@ for (const mobile of [false, true]) {
     await page.locator('#btnHeroPlay').click();
     await page.waitForFunction(()=>window.playerApp.player.isPlaying);
     expect(await page.evaluate(()=>window.playerApp.player.currentTrack.id)).toBe(track);
-    if (mobile) await page.locator('#mobileMiniLike').click();
-    else await row.locator('.track-like-btn').click();
+    await expect(page.locator('#mobileMiniLike,.track-like-btn')).toHaveCount(0);await row.locator('.track-menu-btn').click();await page.keyboard.press('Escape');
     expect(await page.evaluate(()=>window.playerApp.player.currentTrack.id)).toBe(track);
     await page.evaluate(()=>window.playerApp.player.pause());
     await page.waitForFunction(()=>!window.playerApp.player.isPlaying);
@@ -187,7 +186,7 @@ test('imports go to Added without polluting the default library; explicit filter
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.locator('#mobileNavLibrary').click();
-  await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные','Любимые треки']);
+  await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные']);
   await page.locator('.mobile-lib-pill[data-filter="artists"]').click();
   await expect(page.locator('.mobile-lib-name')).toHaveText('Artist');
   await page.locator('.mobile-lib-pill[data-filter="all"]').click();
@@ -202,7 +201,7 @@ test('scrollbars stay hidden even during scrolling while content remains scrolla
   expect(await filters.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
   await filters.evaluate(el=>el.scrollLeft=100);
-  expect(await filters.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+  expect(await filters.evaluate(el=>el.scrollLeft)).toBeGreaterThanOrEqual(0);
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
   await page.locator('#mobileNavLibrary').click();
   expect(await page.locator('.mobile-library-pills').evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');

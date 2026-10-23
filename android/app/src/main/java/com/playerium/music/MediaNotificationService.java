@@ -6,7 +6,6 @@ import android.app.PendingIntent;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import java.util.concurrent.atomic.AtomicReference;
-import android.media.audiofx.Equalizer;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -56,7 +55,6 @@ public class MediaNotificationService extends MediaSessionService {
     private ExoPlayer player;
     private final java.util.Random shuffleRandom=new java.security.SecureRandom();
     private MediaSession session;
-    private Equalizer equalizer;
     private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private final java.util.Set<String> artworkLoading=new java.util.HashSet<>();
     private final java.util.concurrent.ExecutorService connectWorker=java.util.concurrent.Executors.newSingleThreadExecutor(),connectCloudWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -65,14 +63,12 @@ public class MediaNotificationService extends MediaSessionService {
         MediaNotificationService service=instance;
         if(service!=null)service.handler.post(()->service.applyArtwork(id));
     }
-    private String equalizerSettings;
     private String error;
     private SharedPreferences playbackPrefs;
     private volatile java.util.Map<String,Integer> selectionIndices=java.util.Collections.emptyMap();
     private long requestedStartAt;
     private String requestedStartId="";
     private long startLatencyMs=-1;
-    private int equalizerSession;
     static boolean selectTrack(String id,int index,boolean play,long position,long requestedAt){
         MediaNotificationService service=instance;
         if(service==null||pendingQueue.get()!=null||!java.util.Objects.equals(service.selectionIndices.get(id),index))return false;
@@ -101,7 +97,6 @@ public class MediaNotificationService extends MediaSessionService {
         super.onCreate();
         instance=this;
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
-        equalizerSettings=playbackPrefs.getString("equalizer",null);
 
         androidx.media3.datasource.DataSource.Factory source=()->new OriginalAudioDataSource(this,new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource());
         androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(5000,20000,150,300).setPrioritizeTimeOverSizeThresholds(true).build();
@@ -120,7 +115,6 @@ public class MediaNotificationService extends MediaSessionService {
                 error = "Не удалось воспроизвести файл. Проверьте доступ к папке.";
                 player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
-            @Override public void onAudioSessionIdChanged(int id) { configureEqualizer(id); }
             @Override public void onMediaItemTransition(MediaItem item,int reason){refreshArtwork();}
             @Override public void onEvents(Player ignored,Player.Events events) {
                 updateMediaButtons();
@@ -171,7 +165,6 @@ public class MediaNotificationService extends MediaSessionService {
                     if (queue != null) setQueue(new JSONObject(queue));
                 }
                 if (intent.hasExtra("command")) command(intent.getStringExtra("command"), intent.getDoubleExtra("value", 0));
-                if (intent.hasExtra("equalizer")) { String settings=intent.getStringExtra("equalizer");if(!java.util.Objects.equals(settings,equalizerSettings)){equalizerSettings=settings;playbackPrefs.edit().putString("equalizer",settings).apply();configureEqualizer(player.getAudioSessionId());} }
             } catch (Exception e) { error = "Не удалось обновить очередь воспроизведения"; }
         }
         return player.getPlayWhenReady()&&player.getMediaItemCount()>0?START_STICKY:result;
@@ -371,26 +364,6 @@ public class MediaNotificationService extends MediaSessionService {
         }
     }
 
-    private void configureEqualizer(int sessionId) {
-        try {
-            if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId == 0) return;
-            if(equalizer==null||equalizerSession!=sessionId){if(equalizer!=null)equalizer.release();equalizer=new Equalizer(0,sessionId);equalizerSession=sessionId;}
-            if (equalizerSettings == null) return;
-            JSONObject settings = new JSONObject(equalizerSettings);
-            JSONArray gains = settings.getJSONArray("gains");
-            int[] frequencies = {32,64,125,250,500,1000,2000,4000,8000,16000};
-            short[] range = equalizer.getBandLevelRange();
-            for (short band = 0; band < equalizer.getNumberOfBands(); band++) {
-                int hz = equalizer.getCenterFreq(band) / 1000;
-                int nearest = 0;
-                for (int i = 1; i < frequencies.length; i++) if (Math.abs(Math.log((double)hz / frequencies[i])) < Math.abs(Math.log((double)hz / frequencies[nearest]))) nearest = i;
-                int level = (int)(gains.optDouble(nearest, 0) * 100);
-                equalizer.setBandLevel(band, (short)Math.max(range[0], Math.min(range[1], level)));
-            }
-            equalizer.setEnabled(settings.optBoolean("enabled", true));
-        } catch (Exception ignored) { /* Audio effects are optional on some devices. */ }
-    }
-
     private JSONArray playbackOrder(){
         JSONArray order=new JSONArray();androidx.media3.common.Timeline timeline=player.getCurrentTimeline();
         int index=timeline.getFirstWindowIndex(player.getShuffleModeEnabled());
@@ -440,7 +413,6 @@ public class MediaNotificationService extends MediaSessionService {
         savePlayback();
         handler.removeCallbacksAndMessages(null);
         artworkWorker.shutdownNow();connectWorker.shutdownNow();connectCloudWorker.shutdownNow();if(instance==this)instance=null;
-        if (equalizer != null) equalizer.release();
         session.release(); player.release(); stateSnapshot = "{}";
         super.onDestroy();
     }

@@ -1,3 +1,4 @@
+import {bindVoiceSearch} from './voice-search.js';
 import {artistResults} from './music-artists.js';
 import {icons} from './design-icons.js';
 import {mountCover,retainArtwork} from './artwork.js';
@@ -13,28 +14,16 @@ function remember(query,track){if(query.trim().length<2)return;try{localStorage.
 export function renderSearchView(container) {
   const ui=this,raw=ui.searchQuery||'',query=raw.trim();
   const wrapper=document.createElement('section');wrapper.className='mobile-search-view spotify-search'+(query?' search-active':'');
-  wrapper.innerHTML=`<h1 class="mobile-search-title">Поиск</h1><div class="search-input-line"><button class="search-back" aria-label="Назад">‹</button><div class="mobile-search-bar-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="2"/></svg><input class="mobile-search-input" type="search" inputmode="search" autocomplete="off" spellcheck="false" aria-label="Поиск песен и исполнителей" placeholder="Что хотите послушать?" value="${ui.escapeHTML(raw)}"><button class="mobile-search-clear" aria-label="Очистить поиск">×</button></div></div>`;
+  wrapper.innerHTML=`<div class="search-input-line"><div class="mobile-search-bar-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="2"/></svg><input class="mobile-search-input" type="search" inputmode="search" autocomplete="off" spellcheck="false" aria-label="Поиск песен и исполнителей" placeholder="Что хотите послушать?" value="${ui.escapeHTML(raw)}"><button class="mobile-search-clear" aria-label="Очистить поиск">×</button><button class="search-voice" aria-label="Голосовой поиск">${icons.microphone}</button></div></div>`;
   const input=wrapper.querySelector('input');
-  const setQuery=q=>{ui.searchQuery=q;document.getElementById('mainSearchInput').value=q;ui.refreshCurrentView();};
+  const setQuery=q=>{ui.voiceSearch?.cancel();ui.searchQuery=q;document.getElementById('mainSearchInput').value=q;ui.refreshCurrentView();};
   input.addEventListener('input',()=>setQuery(input.value));
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){remember(input.value);input.blur();}});
   wrapper.querySelector('.mobile-search-clear').addEventListener('click',()=>{setQuery('');document.querySelector('.mobile-search-input')?.focus();});
-  wrapper.querySelector('.search-back').addEventListener('click',()=>{setQuery('');});
+  wrapper.querySelector('.mobile-search-clear').hidden=!query;
+  bindVoiceSearch(ui,wrapper.querySelector('.search-voice'),input,setQuery);
   container.append(wrapper);
-  if(!query){
-    const recent=history();
-    if(recent.length){
-      const section=document.createElement('section');section.className='search-recent';section.innerHTML='<h2>Недавние поиски</h2>';
-      for(const q of recent){const row=document.createElement('div');row.className='search-recent-row';row.innerHTML=`<button class="search-recent-query">${icons.music}<span>${ui.escapeHTML(q)}</span></button><button class="search-history-remove" aria-label="Удалить из истории ${ui.escapeHTML(q)}">×</button>`;
-        if(enabled(17)){let saved;try{saved=JSON.parse(localStorage.getItem('playerium_search_cards')||'{}')[q];}catch{}const track=ui.library.getTrackById(saved?.id)||saved||ui.library.search(q)[0];const art=document.createElement('span');art.className='history-art';if(saved?.kind==='artist')mountArtistPortrait(ui,art,saved);else mountCover(art,track||{title:q},true);row.firstElementChild.querySelector('svg')?.remove();row.firstElementChild.prepend(art);}
-        row.firstElementChild.onclick=()=>setQuery(q);row.lastElementChild.onclick=()=>{localStorage.setItem(historyKey,JSON.stringify(history().filter(item=>item!==q)));ui.refreshCurrentView();};section.append(row);}
-      wrapper.append(section);
-    }
-    const heading=document.createElement('h2');heading.textContent='Все категории';wrapper.append(heading);
-    const grid=document.createElement('div');grid.className='mobile-search-categories';
-    const categories=[['Любимые треки','cat-purple',icons.heart,()=>ui.navigateTo({type:'liked',title:'Любимые треки'})],['Исполнители','cat-blue',icons.artist,()=>ui.navigateTo({type:'library',tab:'artists',title:'Моя медиатека'})],['Плейлисты','cat-green',icons.music,()=>ui.navigateTo({type:'library',tab:'playlists',title:'Моя медиатека'})],['Добавить файлы','cat-teal',icons.music,()=>ui.triggerMobileFileImport()],['Добавленные','cat-pink',icons.music,()=>ui.navigateTo({type:'allTracks',title:'Добавленные'})]];
-    for(const [label,color,icon,action] of categories){const card=document.createElement('button');card.className=`mobile-cat-card ${color}`;card.innerHTML=`<span>${label}</span>${icon}`;card.onclick=action;grid.append(card);}wrapper.append(grid);return;
-  }
+  if(!query)return;
   const tabs=document.createElement('div');tabs.className='search-filter-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Тип результатов');
   const results=document.createElement('div');results.className='song-search-results';results.id='searchResults';results.setAttribute('role','tabpanel');
   wrapper.append(tabs,results);

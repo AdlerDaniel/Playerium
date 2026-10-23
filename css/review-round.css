@@ -1,0 +1,43 @@
+/* Shared surfaces and compact mobile controls from the annotation review. */
+.interface-refresh[data-view="home"] .main-view-container,
+.interface-refresh[data-view="home"] .main-view,
+.interface-refresh .home-dashboard { background:var(--sp-dark-900);background-image:none; }
+.interface-refresh .home-feature { background:var(--sp-dark-800);background-image:none;border:0;border-radius:0;box-shadow:none; }
+.interface-refresh .settings-card>.settings-section-title { margin:18px 0 14px;padding:0;line-height:1.35; }
+.interface-refresh .normalization-actions { display:flex;flex-wrap:wrap;gap:10px;padding-bottom:18px; }
+.interface-refresh .normalization-actions button { flex:1;min-width:160px;min-height:44px;white-space:normal;line-height:1.4; }
+.interface-refresh .search-back { display:none; }
+.interface-refresh .search-voice { display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;padding:10px;border-radius:12px;color:var(--sp-text-primary); }
+.interface-refresh .search-voice svg { width:22px;height:22px;flex:none; }
+.interface-refresh .search-voice[aria-pressed="true"] { background:var(--surface-selected);color:var(--sp-green);animation:voice-listening 1.2s ease-in-out infinite; }
+.interface-refresh .mobile-search-bar-box { gap:8px;min-width:0; }
+.interface-refresh .mobile-search-input { min-width:0;flex:1; }
+@keyframes voice-listening { 50% { opacity:.6; } }
+@media(max-width:768px),(pointer:coarse) and (max-width:1024px) {
+ .interface-refresh { --sp-mobile-nav-height:88px;--sp-mobile-mini-height:72px; }
+ .interface-refresh[data-view="home"] #mainTopbar { align-items:center;background:var(--sp-dark-900)!important;background-image:none!important;transition:none; }
+ .interface-refresh #mainTopbar .home-filters { padding:0;margin:0;align-items:center;gap:6px;min-width:0; }
+ .interface-refresh #mainTopbar .home-filters .pill-btn { padding:8px 12px;min-height:36px;white-space:nowrap; }
+ .interface-refresh[data-view="home"] .home-dashboard { padding-top:0; }
+ .interface-refresh .home-feature { margin:0 -20px 24px;padding:24px 20px;gap:16px; }
+ .interface-refresh .mobile-nav-bar { left:12px;right:12px;bottom:calc(8px + var(--sp-mobile-safe-bottom));width:auto;height:72px;min-height:72px;padding:6px;gap:4px;border:1px solid var(--theme-border);border-radius:22px;background:var(--surface-overlay);background-image:none;box-shadow:0 12px 32px #0003;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);mask-image:none;-webkit-mask-image:none;opacity:1; }
+ .interface-refresh .mobile-nav-item { flex:1;min-width:0;min-height:58px;padding:6px 2px;gap:5px;border-radius:16px;opacity:1;color:var(--sp-text-secondary);font-size:11px;font-weight:600;line-height:1.1;transition:background-color 160ms var(--ease-out),color 160ms var(--ease-out); }
+ .interface-refresh .mobile-nav-item.active { color:var(--sp-green);background:var(--surface-selected); }
+ .interface-refresh .mobile-nav-item svg { width:22px;height:22px;opacity:1;transform:none; }
+ .interface-refresh .mobile-mini-player { left:12px;right:12px;bottom:calc(var(--sp-mobile-nav-height) + var(--sp-mobile-safe-bottom));height:64px;min-height:64px;padding:8px 10px;gap:10px; }
+ .interface-refresh .mobile-mini-cover { flex:0 0 44px;width:44px;height:44px; }
+ .interface-refresh .mobile-mini-info { gap:3px; }
+ .interface-refresh .mobile-mini-title { line-height:1.25; }
+ .interface-refresh .mobile-mini-artist { line-height:1.25; }
+ .interface-refresh .settings-container .settings-card { padding:0 16px; }
+ .interface-refresh .spotify-search { padding-top:16px; }
+ .interface-refresh .mobile-search-bar-box { padding:4px 6px 4px 12px;border-radius:16px;min-height:56px; }
+ .interface-refresh .mobile-search-input { font-size:16px;padding-inline:0; }
+ .interface-refresh .mobile-search-clear { flex:0 0 32px;width:32px;min-width:32px; }
+}
+@media(max-width:360px) {
+ .interface-refresh #mainTopbar .home-filters .pill-btn { font-size:11px;padding-inline:8px; }
+ .interface-refresh .home-feature { grid-template-columns:minmax(0,1fr) 88px;gap:12px; }
+ .interface-refresh .home-feature h2 { font-size:24px; }
+}
+@media(prefers-reduced-motion:reduce) { .interface-refresh .search-voice { animation:none; } }

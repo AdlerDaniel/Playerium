@@ -1,7 +1,7 @@
 // AI Horde supports anonymous generation. Persist the job to resume after restart.
-import {likedArtwork,addedArtwork,collectionTracks,persistCollectionArtwork} from './visual-art.js';
+import {addedArtwork,collectionTracks,persistCollectionArtwork} from './visual-art.js';
 const API='https://aihorde.net/api/v2/generate';
-const headers={'Content-Type':'application/json',apikey:'0000000000','Client-Agent':'Playerium:1.7.50:local-music-player'};
+const headers={'Content-Type':'application/json',apikey:'0000000000','Client-Agent':'Playerium:1.7.51:local-music-player'};
 export function albumPrompt(playlist,tracks){
  const clean=value=>String(value||'').replace(/[\r\n#]/g,' ').slice(0,90);
  const songs=tracks.slice(0,12).map(t=>[t.title,t.artist,t.genre].map(clean).filter(Boolean).join(' — ')).join('; ');
@@ -14,7 +14,7 @@ export function installAlbumArtGenerator(ui){
  const request=async(path,options={})=>{const r=await fetch(API+path,{...options,headers,signal:AbortSignal.timeout(45000)});if(!r.ok){const error=Error('Cover service '+r.status);error.status=r.status;const seconds=Number(r.headers.get('retry-after'));if(seconds>0)error.retryAfter=Math.min(seconds*1000,600000);throw error;}return r.json();};
  async function step(){
   if(busy||!library.db||navigator.onLine===false)return;busy=true;
-  try{let submitted=false;const collections=[...library.getPlaylists(),likedArtwork(library),addedArtwork(library)];if(priority)collections.sort((a,b)=>Number(b.id===priority)-Number(a.id===priority));
+  try{let submitted=false;const collections=[...library.getPlaylists(),addedArtwork(library)];if(priority)collections.sort((a,b)=>Number(b.id===priority)-Number(a.id===priority));
    for(const playlist of collections){
    if(playlist.isFolderPlaylist)continue;
    const tracks=collectionTracks(library,playlist);if(!tracks.length){mark(playlist,false);continue;}
@@ -35,7 +35,7 @@ export function installAlbumArtGenerator(ui){
     const coverUrl=await generatedCover(image.img);
     const current=await library.getFromStore('settings',key);
     if(current?.job!==saved.job)continue;
-    const live=playlist.special==='added'?addedArtwork(library):playlist.special?likedArtwork(library):library.getPlaylistById(playlist.id);if(live&&(!['custom','text'].includes(live.coverType)||saved.regenerate)&&(!live.coverUrl||saved.regenerate)){live.coverType='generated';live.coverUrl=coverUrl;live.updatedAt=Date.now();live.generating=false;live.generationNote='';await persistCollectionArtwork(library,live);library.onLibraryChanged?.();refresh();}
+    const live=playlist.special==='added'?addedArtwork(library):library.getPlaylistById(playlist.id);if(live&&(!['custom','text'].includes(live.coverType)||saved.regenerate)&&(!live.coverUrl||saved.regenerate)){live.coverType='generated';live.coverUrl=coverUrl;live.updatedAt=Date.now();live.generating=false;live.generationNote='';await persistCollectionArtwork(library,live);library.onLibraryChanged?.();refresh();}
     mark(playlist,false);if(priority===playlist.id)priority=null;delete saved.regenerate;
     await library.putInStore('settings',{key});
    }catch(error){
@@ -60,7 +60,7 @@ export function installAlbumArtGenerator(ui){
   try{await library.putInStore('settings',{key:'album-generation:'+playlist.id,regenerate:true});await step();schedule();}catch(error){mark(playlist,false);throw error;}
  }
  // Restore a replacement job without discarding the previous cover.
- Promise.all([...library.getPlaylists(),likedArtwork(library),addedArtwork(library)].map(async playlist=>{const saved=await library.getFromStore('settings','album-generation:'+playlist.id);if(saved?.job||saved?.regenerate){mark(playlist,!saved.permanent);if(playlist.special==='added')priority=playlist.id;}})).catch(console.warn);
+ Promise.all([...library.getPlaylists(),addedArtwork(library)].map(async playlist=>{const saved=await library.getFromStore('settings','album-generation:'+playlist.id);if(saved?.job||saved?.regenerate){mark(playlist,!saved.permanent);if(playlist.special==='added')priority=playlist.id;}})).catch(console.warn);
  const interval=setInterval(()=>{if(!document.hidden)step();},20000);schedule();const controller={step,regenerate,stop(){stopped=true;clearTimeout(timer);clearInterval(interval);}};ui.albumArt=controller;return controller;
 }
 

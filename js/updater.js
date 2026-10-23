@@ -4,13 +4,13 @@
  */
 
 export class AutoUpdater {
-  static CURRENT_VERSION = "1.7.50";
+  static CURRENT_VERSION = "1.7.51";
   static DEFAULT_REPO = "AdlerDaniel/Playerium"; // User can configure in Settings
 
   constructor() {
     this.currentVersion = AutoUpdater.CURRENT_VERSION;
     this.repo = this.loadRepo();
-    this.autoCheckEnabled = this.loadAutoCheck();
+    this.autoCheckEnabled = true;
     this.onUpdateFound = null; // Callback: (updateInfo) => void
   }
 
@@ -26,16 +26,6 @@ export class AutoUpdater {
     }
   }
 
-  loadAutoCheck() {
-    const val = localStorage.getItem("playerium_auto_update_check");
-    return val === null ? true : val === "true";
-  }
-
-  setAutoCheck(enabled) {
-    this.autoCheckEnabled = !!enabled;
-    localStorage.setItem("playerium_auto_update_check", this.autoCheckEnabled.toString());
-  }
-
   ignoreVersion(version) { localStorage.setItem('playerium_ignored_update', version); }
 
   /**
@@ -44,10 +34,6 @@ export class AutoUpdater {
    * @returns {Promise<Object>}
    */
   async checkForUpdates(isManual = false) {
-    if (!isManual && !this.autoCheckEnabled) {
-      return { hasUpdate: false, reason: "disabled" };
-    }
-
     if (!this.repo || this.repo.includes("username/")) {
       return { hasUpdate: false, reason: "unconfigured_repo" };
     }

@@ -6,11 +6,6 @@ export function renderSettingsView(container) {
     const settingsDiv = document.createElement("div");
     settingsDiv.className = "settings-container";
 
-    const eq = this.player.equalizer;
-    const presetsOptions = Object.keys(eq ? eq.constructor.PRESETS : {})
-      .map((key) => `<option value="${key}" ${eq && eq.currentPreset === key ? "selected" : ""}>${eq.constructor.PRESETS[key].name}</option>`)
-      .join("");
-
     const foldersListHtml = this.library.folders.map((f) => `
       <div class="folder-item">
         <div class="folder-path-wrap">
@@ -51,42 +46,6 @@ export function renderSettingsView(container) {
           </div>
           <div style="display: flex; gap: 12px; margin-top: 8px;">
             <button class="settings-btn-secondary" id="btnClearAllLibrary">Очистить всю медиатеку</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Equalizer Section -->
-      <div class="settings-section">
-        <h2 class="settings-section-title">
-          <svg viewBox="0 0 24 24"><path d="M10 20h4V4h-4v16zm-6 0h4v-8H4v8zM16 9v11h4V9h-4z"/></svg>
-          10-полосный эквалайзер
-        </h2>
-        <div class="settings-card">
-          <div class="settings-row">
-            <div class="settings-label-wrap">
-              <span class="settings-label">Включить эквалайзер</span>
-              <span class="settings-desc">Настройте частоты или выберите готовый аудио-пресет.</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="settingsEqToggle" ${eq && eq.isEnabled ? "checked" : ""}>
-              <span class="slider-toggle"></span>
-            </label>
-          </div>
-          <div class="eq-presets-row">
-            <span class="settings-label" style="font-size: 13px;">Пресет:</span>
-            <select class="eq-select" id="settingsEqPreset">
-              ${presetsOptions}
-              <option value="custom" ${eq && eq.currentPreset === "custom" ? "selected" : ""}>Пользовательский (Custom)</option>
-            </select>
-          </div>
-          <div class="eq-faders-container" id="eqFadersContainer">
-            ${eq ? eq.constructor.FREQUENCIES.map((freq, idx) => `
-              <div class="eq-fader-col">
-                <span class="eq-fader-val" id="eqVal_${idx}">${eq.gains[idx] > 0 ? "+" : ""}${eq.gains[idx]}dB</span>
-                <input type="range" class="eq-slider-vertical" min="-12" max="12" step="1" value="${eq.gains[idx]}" data-band-index="${idx}">
-                <span class="eq-fader-freq">${freq >= 1000 ? freq / 1000 + "k" : freq}</span>
-              </div>
-            `).join("") : ""}
           </div>
         </div>
       </div>
@@ -143,16 +102,6 @@ export function renderSettingsView(container) {
               Проверить обновления
             </button>
           </div>
-          <div class="settings-row">
-            <div class="settings-label-wrap">
-              <span class="settings-label">Автопроверка при входе</span>
-              <span class="settings-desc">Автоматически проверять релизы на GitHub при каждом запуске плеера.</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="toggleAutoUpdateCheck" ${this.updater.autoCheckEnabled ? "checked" : ""}>
-              <span class="slider-toggle"></span>
-            </label>
-          </div>
           <div id="updateCheckStatusWrap" style="font-size: 13px; color: var(--sp-text-subdued); margin-top: 4px; display: none;"></div>
         </div>
       </div>
@@ -168,12 +117,6 @@ export function renderSettingsView(container) {
     repoInput?.addEventListener("change", (e) => {
       this.updater.setRepo(e.target.value);
       this.showToast("Репозиторий GitHub сохранен");
-    });
-
-    const toggleAuto = document.getElementById("toggleAutoUpdateCheck");
-    toggleAuto?.addEventListener("change", (e) => {
-      this.updater.setAutoCheck(e.target.checked);
-      this.showToast(e.target.checked ? "Автопроверка обновлений включена" : "Автопроверка отключена");
     });
 
     const btnCheck = document.getElementById("btnCheckUpdatesManual");
@@ -201,9 +144,6 @@ export function renderSettingsView(container) {
       }
     });
 
-    settingsDiv.querySelector('#settingsEqToggle').setAttribute('aria-label','Включить эквалайзер');
-    settingsDiv.querySelector('#settingsEqPreset').setAttribute('aria-label','Пресет эквалайзера');
-    settingsDiv.querySelectorAll('.eq-slider-vertical').forEach((slider,i)=>slider.setAttribute('aria-label',`Частота ${eq.constructor.FREQUENCIES[i]} Гц`));
     settingsDiv.querySelectorAll('.theme-dot').forEach(dot=>{dot.tabIndex=0;dot.setAttribute('role','button');dot.setAttribute('aria-label',dot.title);dot.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();dot.click();}};});
     // Bind settings event listeners
     document.getElementById("btnSettingsAddFolder").addEventListener("click", () => this.triggerFolderPicker());
@@ -227,42 +167,6 @@ export function renderSettingsView(container) {
         this.showToast("Медиатека очищена", "danger");
         this.renderSettingsView(container);
       }
-    });
-
-    // Equalizer toggle
-    document.getElementById("settingsEqToggle").addEventListener("change", (e) => {
-      if (this.player.equalizer) {
-        this.player.equalizer.setEnabled(e.target.checked);
-        this.showToast(e.target.checked ? "Эквалайзер включен" : "Эквалайзер выключен");
-      }
-    });
-
-    // Equalizer preset
-    document.getElementById("settingsEqPreset").addEventListener("change", (e) => {
-      if (this.player.equalizer && e.target.value !== "custom") {
-        this.player.equalizer.applyPreset(e.target.value);
-        // Update slider values
-        this.player.equalizer.gains.forEach((val, i) => {
-          const slider = settingsDiv.querySelector(`input[data-band-index="${i}"]`);
-          const label = document.getElementById(`eqVal_${i}`);
-          if (slider) slider.value = val;
-          if (label) label.textContent = (val > 0 ? "+" : "") + val + "dB";
-        });
-      }
-    });
-
-    // Equalizer vertical sliders
-    settingsDiv.querySelectorAll(".eq-slider-vertical").forEach((slider) => {
-      slider.addEventListener("input", (e) => {
-        const idx = parseInt(e.target.dataset.bandIndex, 10);
-        const val = parseFloat(e.target.value);
-        if (this.player.equalizer) {
-          this.player.equalizer.setGain(idx, val);
-          const label = document.getElementById(`eqVal_${idx}`);
-          if (label) label.textContent = (val > 0 ? "+" : "") + val + "dB";
-          document.getElementById("settingsEqPreset").value = "custom";
-        }
-      });
     });
 
     settingsDiv.querySelectorAll('.theme-choice').forEach(button=>button.onclick=()=>{

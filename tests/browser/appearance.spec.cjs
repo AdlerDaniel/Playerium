@@ -13,7 +13,7 @@ test('Android assets restore playback with the APIs available in an older WebVie
  const restored=await page.evaluate(async()=>({uuid:crypto.randomUUID(),last:[1,2].at(-1),settled:(await Promise.allSettled([Promise.resolve(1),Promise.reject('fixture')])).map(x=>x.status),bytes:Array.from(new Uint8Array(await new Blob([new Uint8Array([1,2])]).arrayBuffer()))}));
  expect(restored.uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);expect(restored.last).toBe(2);expect(restored.settled).toEqual(['fulfilled','rejected']);expect(restored.bytes).toEqual([1,2]);
 });
-test('mobile home and search have continuous themed surfaces and aligned history in every palette',async({page},info)=>{
+test('mobile home has continuous surfaces and search stays minimal in every palette',async({page},info)=>{
  await page.setViewportSize({width:390,height:844});await boot(page);
  await page.evaluate(()=>{
   localStorage.setItem('playerium_search_history',JSON.stringify(['Anna asti','Nirvana','Kler','Дорофеева']));
@@ -22,13 +22,13 @@ test('mobile home and search have continuous themed surfaces and aligned history
  for(const id of ['light-brown','dark-brown','burgundy','green','blue','yellow','dark','light']){
   await page.evaluate(async id=>{(await import('/js/themes.js')).applyTheme(id);window.playerApp.ui.navigateTo({type:'home'});},id);
   const home=await page.evaluate(()=>({child:getComputedStyle(document.querySelector('.home-dashboard')).backgroundImage,parent:getComputedStyle(document.querySelector('.main-view-container')).backgroundImage,top:getComputedStyle(document.querySelector('.topbar')).backgroundColor}));
-  expect(home.child).toBe('none');await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.main-view-container')).backgroundImage.includes(getComputedStyle(document.querySelector('.topbar')).backgroundColor))).toBe(true);
+  expect(home.child).toBe('none');expect(home.parent).toBe('none');await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.main-view-container')).backgroundColor===getComputedStyle(document.querySelector('.topbar')).backgroundColor)).toBe(true);
   await page.screenshot({path:info.outputPath(id+'-home.png')});
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'search'}));
-  const xs=await page.locator('.search-recent-query .history-art').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().left));expect(new Set(xs).size).toBe(1);expect(xs[0]).toBeLessThan(40);
+  await expect(page.locator('.search-recent-query,.history-art,.mobile-search-title')).toHaveCount(0);await expect(page.locator('.search-voice')).toBeVisible();
   await page.locator('.mobile-search-input').focus();
   expect(await page.locator('.mobile-search-input').evaluate(n=>getComputedStyle(n).outlineStyle)).toBe('none');
-  const title=await page.locator('.mobile-search-title').boundingBox();expect(title.y).toBeGreaterThanOrEqual(24);
+  const input=await page.locator('.mobile-search-bar-box').boundingBox();expect(input.y).toBeGreaterThanOrEqual(16);expect(input.x).toBeLessThan(40);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:info.outputPath(id+'-search.png')});
  }

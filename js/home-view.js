@@ -1,7 +1,7 @@
 import { bindCollectionPlay, playRow } from './playback-controls.js';
 import { icons } from './design-icons.js';
 import {mountCover} from './artwork.js';
-import {likedArtwork,addedArtwork,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
+import {addedArtwork,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 
 function artwork(ui, item) {
   return item.pictureUrl || item.playlist || item.round || item.tracks?.[0] ? '<span class="card-cover"></span>' : icons[item.icon || 'music'];
@@ -27,9 +27,6 @@ export function renderHomeDashboard(container) {
     view:{type:'artist',id:a.name,title:a.name},tracks:a.tracks}));
   const filter = this.homeFilter || 'all';
   const home = document.createElement('div'); home.className='home-dashboard';
-  const heading=document.createElement('header');heading.className='home-heading';
-  heading.innerHTML=`<div><span class="section-eyebrow">PLAYERIUM</span><h1>Главная</h1></div><button class="home-add-music">${icons.plus}<span>Добавить музыку</span></button>`;
-  heading.querySelector('button').onclick=()=>this.isMobile?this.showMobileAddSheet():this.triggerFolderPicker();home.append(heading);
   const filters = document.createElement('div'); filters.className='home-filters';
   for (const [value,label] of [['all','Все'],['playlists','Плейлисты'],['artists','Исполнители']]) {
     const button=document.createElement('button'); button.className='pill-btn'+(filter===value?' active':'');
@@ -38,8 +35,6 @@ export function renderHomeDashboard(container) {
   }
   if (this.isMobile) document.getElementById('mainTopbar').append(filters);
   else home.append(filters);
-  const quick=document.createElement('div');quick.className='home-quick-grid';
-  const liked={playlist:likedArtwork(this.library),title:'Любимые треки',icon:'heart',className:'liked-art',view:{type:'liked',title:'Любимые треки'},tracks:this.library.getLikedTracks()};
   const all={playlist:addedArtwork(this.library),title:'Добавленные',icon:'music',className:'local-art',view:{type:'allTracks',title:'Добавленные'},tracks};
   if(filter==='all'&&tracks.length){
     const feature=document.createElement('section');feature.className='home-feature';feature.setAttribute('aria-label','Ваша коллекция');
@@ -49,14 +44,6 @@ export function renderHomeDashboard(container) {
     feature.querySelector('.home-feature-open').onclick=feature.querySelector('.home-feature-art').onclick=()=>this.navigateTo(all.view);
     home.append(feature);
   }
-  const quickItems=filter==='all'?[liked,all,...playlists]:filter==='playlists'?[liked,...playlists]:artists;
-  for (const item of quickItems.filter(item=>item.view?.type!=='liked'||item.tracks.length>0).slice(0,8)) {
-    const card=document.createElement('div');card.className='home-quick-card';
-    card.innerHTML=`<div class="home-quick-art ${item.className||''}">${artwork(ui,item)}</div><span>${this.escapeHTML(item.title)}</span>`;
-    const cover=card.querySelector('.card-cover');if(cover){if(item.playlist)mountPlaylistArt(cover,item.playlist,item.tracks);else if(item.round)mountArtistPortrait(ui,cover,{name:item.title,pictureUrl:item.pictureUrl});else mountCover(cover,item.tracks?.[0]||item,true);}
-    activate(card,()=>this.navigateTo(item.view));quick.append(card);
-  }
-  if(quick.childElementCount){const section=document.createElement('section');section.className='home-quick-section';const label=document.createElement('h2');label.className='quick-heading';label.textContent='Быстрый доступ';section.append(label,quick);home.append(section);}
   const shelf=(title,items,view)=>{
     if(!items.length) return;
     const section=document.createElement('section');section.className='home-shelf';
@@ -80,7 +67,6 @@ export function renderHomeDashboard(container) {
   };
   if(filter==='all') shelf('Недавно добавленные',tracks.slice(0,12).map(t=>({title:t.title,subtitle:t.artist,pictureUrl:t.pictureUrl,tracks:[t,...tracks.filter(x=>x.id!==t.id)]})),all.view);
   if(filter==='artists') shelf('Ваши исполнители',artists,{type:'library',title:'Моя медиатека',tab:'artists'});
-  if(filter==='all'){shelf('Ваши исполнители',artists,{type:'library',title:'Моя медиатека',tab:'artists'});}
   if(filter==='all'||filter==='playlists') shelf('Ваши плейлисты',playlists,{type:'library',title:'Моя медиатека',tab:'playlists'});
   if(!home.querySelector('.home-shelf')) {
     const empty=document.createElement('section');empty.className='home-onboarding';

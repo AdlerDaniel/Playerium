@@ -1,10 +1,8 @@
 /**
  * Spotify Local Player - Audio Engine
- * Coordinates HTML5 Audio, Web Audio API, Equalizer, Queuing, Shuffle, and Repeat.
+ * Coordinates HTML5 Audio, Web Audio API, Queuing, Shuffle, and Repeat.
  */
 
-import { NativeEqualizer } from "./native-equalizer.js";
-import { Equalizer } from "./equalizer.js";
 import {browserLoudness} from './loudness.js';
 
 export class AudioPlayer {
@@ -30,7 +28,6 @@ export class AudioPlayer {
     this.browserLoudnessCache=new Map();
     this.loudnessPending=new Map();
     this.nativeArtworkSent=new Map();
-    this.equalizer = null;
     this.isWebAudioInitialized = false;
 
     // Playback state
@@ -63,7 +60,7 @@ export class AudioPlayer {
   }
 
   initWebAudio() {
-    if (window.AndroidBridge?.setEqualizer) { this.equalizer ||= new NativeEqualizer(); return; }
+    if (window.AndroidBridge?.setPlaybackQueue) return;
     if (this.isWebAudioInitialized) return;
     try {
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
@@ -71,7 +68,6 @@ export class AudioPlayer {
       this.gainNode = this.audioCtx.createGain();
       this.gainNode.gain.value = this.volume;
 
-      this.equalizer = new Equalizer(this.audioCtx);
       this.audio.volume = 1;
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
       this.normalizationNode=this.audioCtx.createGain();
@@ -79,10 +75,9 @@ export class AudioPlayer {
       const limiter=this.audioCtx.createDynamicsCompressor();
       limiter.threshold.value=-1;limiter.knee.value=0;limiter.ratio.value=20;limiter.attack.value=.003;limiter.release.value=.15;
 
-      // Graph: source -> equalizer input -> equalizer output -> gainNode -> destination
+      // Graph: source -> constant normalization -> volume -> peak protection.
       this.sourceNode.connect(this.normalizationNode);
-      this.equalizer.connectSource(this.normalizationNode);
-      this.equalizer.connectDestination(this.gainNode);
+      this.normalizationNode.connect(this.gainNode);
       this.gainNode.connect(limiter);limiter.connect(this.audioCtx.destination);
 
       this.isWebAudioInitialized = true;
@@ -227,7 +222,6 @@ export class AudioPlayer {
       // Android opens the original URI. Constant-gain file processing is a
       // separate background task and never changes playback gain on selection.
       this.syncNativeQueue(true, true);
-      this.equalizer?.sync?.();
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
       return;

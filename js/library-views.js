@@ -7,7 +7,7 @@ import { bindCollectionPlay } from './playback-controls.js';
 import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
 import { viewFingerprint } from './view-stability.js';
-import {likedArtwork,addedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
+import {addedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 import {changeTrackSort} from './track-sort.js';
 export function renderSidebar() {
     const list = document.getElementById("sidebarList");
@@ -16,28 +16,6 @@ export function renderSidebar() {
     this.sidebarSignature=signature;
     const scroll=list.scrollTop;
     retainArtwork(list);list.innerHTML = "";
-
-    const likedTracks = this.library.getLikedTracks();
-
-    // 1. Liked Songs Item (always first unless filtered out)
-    if (likedTracks.length && (this.sidebarFilter === "all" || this.sidebarFilter === "playlists")) {
-      const likedItem = document.createElement("div");
-      likedItem.className = "sidebar-item" + (this.currentView.type === "liked" ? " active" : "");
-      likedItem.innerHTML = `
-        <div class="item-thumb liked-songs-thumb">
-          <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-        </div>
-        <div class="item-info">
-          <span class="item-title">Любимые треки</span>
-          <span class="item-subtitle">Закреплено • ${likedTracks.length} треков</span>
-        </div>
-      `;
-      likedItem.addEventListener("click", () => {
-        this.navigateTo({ type: "liked", title: "Любимые треки" });
-      });
-      const art=likedArtwork(this.library);if(art.coverUrl)mountPlaylistArt(likedItem.querySelector('.item-thumb'),art,likedTracks);
-      list.appendChild(likedItem);
-    }
 
     if (this.sidebarFilter === "all" || this.sidebarFilter === "playlists") {
       const added = document.createElement('div');
@@ -155,43 +133,6 @@ export function renderAllTracksView(container) {
 }
 
 export function renderLibraryView(container) { return renderLibrary(this,container); }
-
-export function renderLikedView(container) {
-    let tracks = this.library.getLikedTracks();
-    if (this.searchQuery) {
-      tracks = tracks.filter((t) =>
-        (t.title || "").toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-        (t.artist || "").toLowerCase().includes(this.searchQuery.toLowerCase())
-      );
-    }
-    tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
-
-    const totalDur = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
-
-    const header = document.createElement("div");
-    header.className = "view-header";
-    header.innerHTML = `
-      <div class="view-header-cover liked-banner">
-        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-      </div>
-      <div class="view-header-details">
-        <span class="view-type-badge">Плейлист</span>
-        <h1 class="view-title">Любимые треки</h1>
-        <div class="view-metadata">
-          <strong>Вы</strong>
-          <span class="dot">•</span>
-          <span>${tracks.length} треков</span>
-          <span class="dot">•</span>
-          <span>${this.formatDurationHours(totalDur)}</span>
-        </div>
-      </div>
-    `;
-
-    const art=likedArtwork(this.library),cover=header.querySelector('.view-header-cover');if(art.coverUrl)mountPlaylistArt(cover,art,tracks);bindPlaylistCover(this,cover,art);
-    container.appendChild(header);
-    container.appendChild(this.createActionBar(tracks));
-    container.appendChild(this.createTrackTable(tracks));
-}
 
 export function renderPlaylistView(container, playlistId) {
     const pl = this.library.getPlaylistById(playlistId);

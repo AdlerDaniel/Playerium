@@ -1,5 +1,5 @@
 import {mountCover} from './artwork.js';
-import { saveIcon, icons } from "./design-icons.js";
+import { icons } from "./design-icons.js";
 import { mountTrackRows } from "./virtual-list.js";
 import { playRow } from './playback-controls.js';
 import {changeTrackSort} from './track-sort.js';
@@ -83,9 +83,6 @@ export function createTrackTable(tracks, playlistContext = null) {
         <div class="track-col-date">${this.formatDate(track.dateAdded)}</div>
         <div class="track-col-duration">
           ${track.catalog ? `<button class="track-download-btn" title="Скачать" aria-label="Скачать ${this.escapeHTML(track.title)}"><svg viewBox="0 0 24 24"><path d="M11 3h2v10l3-3 1.4 1.4L12 17l-5.4-5.6L8 10l3 3V3zM5 19h14v2H5z"/></svg></button>` : ''}
-          <button class="track-like-btn ${track.liked ? "liked" : ""}" data-like-id="${track.id}" title="${track.liked ? "Удалить из любимых" : "Добавить в любимые"}">
-${saveIcon}
-          </button>
           <span>${this.formatTime(track.duration)}</span>
           <button class="track-menu-btn" data-track-id="${track.id}" title="Ещё">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>
@@ -112,19 +109,6 @@ ${saveIcon}
       playButton.innerHTML = isCurrent && this.player.isPlaying ? icons.pause : icons.play;
       playButton.title = isCurrent && this.player.isPlaying ? 'Пауза' : 'Воспроизвести';
       playButton.setAttribute('aria-label', playButton.title);
-
-      // Like button click
-      const likeBtn = row.querySelector(".track-like-btn");
-      likeBtn.setAttribute("aria-pressed",String(!!track.liked));
-      likeBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        try {
-          const saved=track.catalog?await this.music.ensureTrack(track):track;
-          const liked = await this.library.toggleLike(saved.id);
-          this.updateLikeButtons(saved.id, liked);
-          this.showToast(liked ? "Добавлено в «Любимые треки»" : "Удалено из «Любимых треков»");
-        }catch(error){this.showToast(error.message,'error');}
-      });
 
       row.querySelector('.track-download-btn')?.addEventListener('click',async e=>{
         e.stopPropagation();const task=this.music.ensureTrack(track);decorateTrackState(this,row,track,true);try{await task;this.showToast('Трек сохранён','success');this.refreshCurrentView();}

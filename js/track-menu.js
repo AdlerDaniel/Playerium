@@ -1,4 +1,4 @@
-import {icons,saveIcon} from './design-icons.js';
+import {icons} from './design-icons.js';
 import {mountCover} from './artwork.js';
 import {showFormDialog} from './surface-menu.js';
 import {positionFloating,watchFloating} from './floating-surfaces.js';
@@ -29,7 +29,6 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
     pane='main';panel.replaceChildren();header();
     const prefix=mobile?'sheetOpt':'ctx';
     button(mobile?'sheetOptAddToPlaylist':'ctxAddToPlaylist','Добавить в плейлист',icons.music,()=>{close();openPlaylistPicker(ui,[track],mobile?null:opener);},true);
-    const liked=button(mobile?'sheetOptLike':'ctxToggleLike',track.liked?'Удалить из любимых треков':'Сохранить в любимые треки',saveIcon,async()=>{const saved=await ui.music.ensureTrack(track);const liked=await ui.library.toggleLike(saved.id);ui.updateLikeButtons(saved.id,liked);ui.showToast(liked?'Добавлено в «Любимые треки»':'Удалено из «Любимых треков»');});liked.classList.toggle('liked',!!track.liked);
     button(mobile?'sheetOptQueue':'ctxAddToQueue','Добавить в очередь',moreIcons.queue,async()=>{ui.player.addToQueue(await ui.music.ensureTrack(track));ui.showToast('Добавлено в очередь');});
     button(prefix+'PlayNext','Включить следующим',icons.play,async()=>{ui.player.playNext(await ui.music.ensureTrack(track));ui.showToast('Будет воспроизведено следующим');});
     const divider=document.createElement('div');divider.className='context-divider';panel.append(divider);

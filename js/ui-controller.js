@@ -4,8 +4,7 @@ import {collectionMenu,editPlaylist} from './collection-menu.js';
 import {showTrackMenu} from './track-menu.js';
 import {renderSearchView} from './search-view.js';
 import { bindSlider, syncPlaybackControls } from './playback-controls.js';
-import { saveIcon } from "./design-icons.js";
-import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderLikedView, renderPlaylistView, renderArtistView, createActionBar } from "./library-views.js";
+import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderPlaylistView, renderArtistView, createActionBar } from "./library-views.js";
 import {loadingRows,loadingIndicator} from './loading.js';
 import {initSidebarCollapse} from './sidebar-collapse.js';
 import { renderSettingsView } from "./settings-view.js";
@@ -55,7 +54,7 @@ export class UIController {
     this.setupDropZone();
     // The native service can report a track before the WebView finishes loading.
     this.syncPlayerDisplay();
-    const restoreView=()=>{if(!document.hidden){document.getElementById('mainViewContent')?.classList.remove('view-enter');this.refreshCurrentView();}};
+    const restoreView=()=>{if(!document.hidden&&!this.voiceSearch?.active){document.getElementById('mainViewContent')?.classList.remove('view-enter');this.refreshCurrentView();}};
     document.addEventListener('visibilitychange',restoreView);window.addEventListener('pageshow',restoreView);
     setTimeout(() => this.updater.checkForUpdates(false), 2000);
   }
@@ -91,10 +90,6 @@ export class UIController {
     });
     document.getElementById("btnLibraryHeader").addEventListener("click", () => {if(this.isMobile)this.navigateTo({type:"library",title:"Моя медиатека"});});
     document.getElementById("librarySearchInput").addEventListener("input", e => {this.libraryQuery=e.target.value.trim();this.renderSidebar();});
-    for(const id of ["btnPlayerLike","mobileMiniLike","btnMobileFsLike"]) {
-      document.getElementById(id).innerHTML=saveIcon;
-      document.getElementById(id).setAttribute("aria-pressed", "false");
-    }
     // Navigation arrows
     document.getElementById("btnNavBack").addEventListener("click", () => this.navigateBack());
     document.getElementById("btnNavForward").addEventListener("click", () => this.navigateForward());
@@ -140,9 +135,6 @@ export class UIController {
     document.getElementById("btnPrev").addEventListener("click", () => this.player.prev());
     document.getElementById("btnShuffle").addEventListener("click", () => this.player.toggleShuffle());
     document.getElementById("btnRepeat").addEventListener("click", () => this.player.toggleRepeat());
-    document.getElementById("btnPlayerLike").addEventListener("click", async () => {
-      await this.toggleCurrentLike();
-    });
 
     // Scrubber / Progress slider
     const progressContainer = document.getElementById("progressSliderContainer");
@@ -372,7 +364,7 @@ export class UIController {
       document.querySelector('.mobile-fs-context-subtitle').textContent=contextType==='artist'?'Играет из исполнителя':contextType==='search'?'Играет из поиска':'Играет из плейлиста';
       document.getElementById('mobileFsAboutArtist').textContent=track.artist||'Неизвестный исполнитель';
 
-      this.updateLikeButtons(track.id, track.liked);
+
 
       // Update Right Panel Now Playing tab
       if (this.activeRightTab === 'nowPlaying') this.renderRightNowPlaying(track);
@@ -532,6 +524,8 @@ export class UIController {
   }
 
   refreshCurrentView() {
+    // Background library changes must not detach an active speech result listener.
+    if(this.currentView?.type==='search'&&this.voiceSearch?.active)return;
     const stable=['home','allTracks','library','playlist','liked'].includes(this.currentView?.type);
     const signature=stable?viewFingerprint(this):null;
     if(stable&&this.viewSignature===signature&&document.getElementById('mainViewContent').childElementCount){
@@ -545,6 +539,8 @@ export class UIController {
   }
 
   loadView(view, preserveScroll = false) {
+    this.voiceSearch?.cancel();
+    if(view.type==='liked')view={type:'allTracks',title:'Добавленные'};
     const scroll = document.getElementById('mainScrollContainer');
     if (this.currentView) this.currentView.scrollTop = scroll.scrollTop;
     const restoreScroll = preserveScroll ? scroll.scrollTop : view.scrollTop || 0;
@@ -576,9 +572,6 @@ export class UIController {
         break;
       case "library":
         this.renderLibraryView(container);
-        break;
-      case "liked":
-        this.renderLikedView(container);
         break;
       case "playlist":
         this.renderPlaylistView(container, view.id);
@@ -620,7 +613,6 @@ export class UIController {
 
   renderLibraryView(...args) { return renderLibraryView.apply(this, args); }
 
-  renderLikedView(...args) { return renderLikedView.apply(this, args); }
 
   renderPlaylistView(...args) { return renderPlaylistView.apply(this, args); }
 
@@ -799,38 +791,6 @@ export class UIController {
   updatePendingPlayback(){for(const row of document.querySelectorAll('.track-row')){const pending=!!this.pendingPlayback&&row.dataset.trackId===this.pendingPlayback.id;row.setAttribute('aria-busy',String(pending));row.classList.toggle('track-pending',pending&&this.playbackLoadingVisible);}}
 
   // --- UI Helpers ---
-
-  async toggleCurrentLike() {
-    const track=this.player.currentTrack;if(!track||this.likingTrack)return;
-    this.likingTrack=true;
-    try {
-      let local=this.library.getTrackById(track.id)||this.library.getTracks().find(t=>track.cloudKey&&t.cloudKey===track.cloudKey),liked;
-      if(!local&&track.catalog)local=await this.music.ensureTrack(track);
-      if(local)liked=await this.library.toggleLike(local.id);
-      else if(track.cloudKey&&this.cloud?.account){liked=!track.liked;this.cloud.operation('like',{key:track.cloudKey,liked});await this.cloud.save();this.cloud.schedule(0);}
-      else throw Error('Трек ещё не появился в медиатеке. Дождитесь синхронизации.');
-      track.liked=liked;this.updateLikeButtons(track.id,liked);if(local&&local.id!==track.id)this.updateLikeButtons(local.id,liked);
-      this.showToast(liked?'Добавлено в «Любимые треки»':'Удалено из «Любимых треков»');
-    }catch(error){this.showToast(error.message,'error');}finally{this.likingTrack=false;}
-  }
-
-  updateLikeButtons(trackId, isLiked) {
-    isLiked=!!isLiked;
-    document.querySelectorAll(`.track-like-btn[data-like-id="${trackId}"]`).forEach((btn) => {
-      btn.classList.toggle("liked", isLiked);
-      btn.setAttribute("aria-pressed", String(isLiked));
-      btn.title = isLiked ? "Удалить из любимых" : "Добавить в любимые";
-    });
-
-    if (this.player.currentTrack && this.player.currentTrack.id === trackId) {
-      this.player.currentTrack.liked=isLiked;
-      for(const id of ["btnPlayerLike","mobileMiniLike","btnMobileFsLike"]) {
-        const button=document.getElementById(id);button.classList.toggle("liked",isLiked);
-        button.setAttribute("aria-pressed",String(isLiked));button.title=isLiked?"Удалить из любимых":"Добавить в любимые";button.setAttribute('aria-label',button.title);
-        button.innerHTML=isLiked?'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m7 12 3 3 7-7" fill="none" stroke="var(--sp-on-accent)" stroke-width="2"/></svg>':saveIcon;
-      }
-    }
-  }
 
   showMobileTrackOptionsSheet(...args) { return showMobileTrackOptionsSheet.apply(this, args); }
 
