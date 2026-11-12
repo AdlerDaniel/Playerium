@@ -33,7 +33,8 @@ export function renderHomeDashboard(container) {
     button.textContent=label;button.setAttribute('aria-pressed',String(filter===value));
     button.addEventListener('click',()=>{this.homeFilter=value;this.refreshCurrentView();});filters.append(button);
   }
-  home.append(filters);
+  if(this.isMobile)document.getElementById('mainTopbar').append(filters);
+  else home.append(filters);
   const all={playlist:addedArtwork(this.library),title:'Добавленные',icon:'music',className:'local-art',view:{type:'allTracks',title:'Добавленные'},tracks};
   if(filter==='all'&&tracks.length){
     const feature=document.createElement('section');feature.className='home-feature';feature.setAttribute('aria-label','Ваша коллекция');

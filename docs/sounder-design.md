@@ -4,7 +4,7 @@ Playerium imports Sounder's six accents in both light and dark mode (12 palettes
 
 The source accents are violet, brown, red, blue, green and yellow. Mode and accent are selected separately, matching Sounder's controls. Old Playerium theme preferences map to the nearest new accent/mode without deleting settings.
 
-The library is a right-aligned header rail: Added sits nearest the circular profile; user playlists grow leftwards in creation order. The create button remains fixed at the left of the rail as covers scroll. Covers have accessible names and context menus without visible captions. Folder import lives in Settings; individual file import remains available.
+On Windows the library is a right-aligned header rail: Added sits nearest the circular profile; user playlists grow leftwards in creation order. The create button remains fixed at the left of the rail as covers scroll. Covers have accessible names and context menus without visible captions. Android uses the full library screen from 1.7.51, with named collections, search, filters and list/grid choices; the desktop header rail is hidden. Its home filters return beside the profile, and content screens keep their own headers. Folder import lives in Settings; individual file import remains available.
 
 The profile opens a top-aligned dialog above existing player windows. The backdrop blurs, background controls become inert, focus stays inside, Escape or an outside click closes it and returns focus. Its placement follows the free [Watermelon Dialog 17](https://ui.watermelon.sh/components/dialog) pattern, implemented with existing vanilla modules. There is no new framework or dependency. Nested confirmation dialogs stay above settings.
 

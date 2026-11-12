@@ -192,7 +192,7 @@ test('imports go to Added without polluting the default library; explicit filter
 test('scrollbars stay hidden even during scrolling while content remains scrollable',async({page})=>{
   await page.setViewportSize({width:320,height:640});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  const filters=page.locator('.home-dashboard .home-filters');
+  const filters=page.locator('#mainTopbar .home-filters');
   expect(await filters.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
   await filters.evaluate(el=>el.scrollLeft=100);
@@ -267,8 +267,8 @@ test('mobile home filters remain visible and search keeps focus while typing',as
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  await expect(page.locator('.home-dashboard .home-filters')).toBeVisible();
-  const box=await page.locator('.home-dashboard .home-filters').boundingBox();
+  await expect(page.locator('#mainTopbar .home-filters')).toBeVisible();
+  const box=await page.locator('#mainTopbar .home-filters').boundingBox();
   expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(140);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.locator('#mobileNavSearch').click();

@@ -11,6 +11,7 @@ import {addedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} fro
 import {changeTrackSort} from './track-sort.js';
 export function renderSidebar() {
  const list=document.getElementById('sidebarList');
+ if(this.isMobile){retainArtwork(list);list.replaceChildren();this.sidebarSignature=null;return;}
  const signature=JSON.stringify([viewFingerprint(this),this.currentView?.type,this.currentView?.id]);
  if(list.children.length&&this.sidebarSignature===signature)return;this.sidebarSignature=signature;
  const scroll=list.scrollLeft;retainArtwork(list);list.replaceChildren();

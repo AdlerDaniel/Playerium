@@ -70,3 +70,11 @@ body.keyboard-focus :is(button,input,select,textarea,[role="slider"],[role="butt
  .settings-dialog .settings-navigation { position:static; }
 }
 @media(prefers-reduced-motion:reduce) { .settings-dialog { animation:none; } }
+
+/* Android keeps the full library screen used before the desktop header rail. */
+.interface-refresh.is-mobile .top-library { display:none; }
+.interface-refresh.is-mobile .topbar-left { display:none; }
+.interface-refresh.is-mobile[data-view] #mainTopbar { display:none!important; }
+.interface-refresh.is-mobile[data-view="home"] #mainTopbar { display:flex!important; }
+.interface-refresh.is-mobile .topbar-right { flex:0 0 auto;width:auto;margin-left:0;gap:0; }
+.interface-refresh.is-mobile #mainTopbar>.home-filters { flex:1;min-width:0;align-items:center;margin:0;padding:0; }

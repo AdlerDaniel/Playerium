@@ -4,7 +4,7 @@ async function ready(page,width=1280){
  await page.goto('/');await page.waitForFunction(()=>window.playerApp?.albumArt);
  await page.evaluate(async()=>{const a=window.playerApp;a.albumArt.stop();for(let i=0;i<4;i++){const t={id:'sounder-'+i,title:'Song '+i,artist:'Artist',duration:180,dateAdded:i};a.library.tracks.set(t.id,t);await a.library.putInStore('tracks',t);}for(let i=0;i<8;i++){const p=await a.library.createPlaylist('Playlist '+i);p.createdAt=i+1;await a.library.putInStore('playlists',p);}a.ui.renderSidebar();a.ui.refreshCurrentView();});
 }
-for(const width of [320,390,800,1280])test(`album rail and profile fit ${width}, albums grow leftwards and plus stays visible`,async({page},info)=>{
+for(const width of [800,1280])test(`album rail and profile fit ${width}, albums grow leftwards and plus stays visible`,async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));await ready(page,width);
  await expect(page.locator('.sidebar,#btnAddMusicFolder,.sidebar-filters,.item-title,.item-subtitle')).toHaveCount(0);
  await expect(page.locator('.library-album')).toHaveCount(9);
@@ -15,6 +15,18 @@ for(const width of [320,390,800,1280])test(`album rail and profile fit ${width},
  await page.locator('#btnCreatePlaylist').click();const dialog=page.getByRole('dialog',{name:'Создать плейлист'});await expect(dialog).toBeVisible();await page.getByLabel('Название',{exact:true}).fill('New album');await dialog.getByRole('button',{name:'Сохранить',exact:true}).click();await expect(page.locator('.library-album')).toHaveCount(10);
  await page.locator('#btnOpenSettings').hover();expect(await page.locator('#btnOpenSettings').evaluate(n=>getComputedStyle(n).backgroundColor)).toBe('rgba(0, 0, 0, 0)');await page.mouse.move(0,0);
  await page.screenshot({path:info.outputPath('header.png')});expect(errors).toEqual([]);
+});
+for(const width of [320,390,740])test(`Android retains its named library and filters at ${width}`,async({page},info)=>{
+ await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{value:'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Mobile'}));
+ await ready(page,width);await expect(page.locator('.top-library')).toBeHidden();await expect(page.locator('.library-album')).toHaveCount(0);await expect(page.locator('#mainTopbar .home-filters')).toBeVisible();
+ const centers=await page.evaluate(()=>['.profile-avatar','#mainTopbar .home-filters button'].map(s=>{const r=document.querySelector(s).getBoundingClientRect();return r.y+r.height/2;}));expect(Math.abs(centers[0]-centers[1])).toBeLessThan(1);
+ await page.locator('#mobileNavLibrary').click();await expect(page.locator('#mainTopbar')).toBeHidden();await expect(page.locator('.mobile-library-title')).toHaveText('Моя медиатека');await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные',...Array.from({length:8},(_,i)=>'Playlist '+i)]);
+ await page.locator('.library-search-toggle').click();await page.getByRole('searchbox',{name:'Найти в медиатеке'}).fill('Playlist 3');await expect(page.locator('.mobile-lib-name')).toHaveText('Playlist 3');await page.getByRole('button',{name:'Закрыть поиск',exact:true}).click();
+ await page.locator('[data-filter="artists"]').click();await expect(page.locator('.mobile-lib-name')).toHaveText('Artist');await page.locator('[data-filter="all"]').click();
+ await page.locator('#btnMobileLibAdd').click();await page.getByRole('button',{name:'Плейлист',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Создать плейлист'});await page.getByLabel('Название',{exact:true}).fill('Android playlist');await dialog.getByRole('button',{name:'Сохранить',exact:true}).click();
+ await page.locator('#mobileNavLibrary').click();await expect(page.locator('.mobile-lib-name')).toContainText(['Android playlist']);await page.screenshot({path:info.outputPath('android-library.png')});
+ await page.locator('.mobile-lib-row').filter({hasText:'Добавленные'}).click();await expect(page.locator('.track-row')).toHaveCount(4);
+ await page.reload();await page.waitForFunction(()=>window.playerApp?.albumArt);await page.locator('#mobileNavLibrary').click();await expect(page.locator('.mobile-lib-name')).toContainText(['Android playlist']);
 });
 test('settings open above full player, blur and block background, close restores the same screen',async({page},info)=>{
  await ready(page,390);await page.evaluate(()=>{const a=window.playerApp;a.player.currentTrack=a.library.getTracks()[0];a.ui.syncPlayerDisplay();document.querySelector('#mobileFullscreenPlayer').classList.add('active');a.ui.openSettings();});
