@@ -1,4 +1,12 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+test('native shuffle publishes actual playback order and following a remote queue restores the local native order',async()=>{
+ global.window={};global.document={querySelectorAll:()=>[]};const {ConnectController}=await import('../js/connect-controller.js');
+ const tracks=['a','b','c','d'].map(id=>({id,cloudKey:id,nativeUri:'content://'+id}));
+ const player={queue:tracks,originalQueue:tracks.slice(),queueIndex:0,currentTrack:tracks[0],isShuffle:true,repeatMode:'off',nativePlayback:true,nativePlaybackOrder:[0,3,1,2],nativeOrderKey:'local-order',volume:.8,getCurrentTime:()=>20,getDuration:()=>180,playbackOrder(){return this.nativePlaybackOrder;},playTrack(){},applyNativeState(){}};
+ const cloud={device:'phone',library:{getTracks:()=>tracks},links:{},events:[],outbox:[],status:{account:'test'}},ui={};const c=new ConnectController(cloud,player,ui);c.info={};c.installControls();
+ assert.deepEqual(c.snapshot().queue,['a','d','b','c']);c.saveLocal();c.selected='pc';c.display({id:'pc',state:{queue:['a','c','b','d'],track:{key:'a'},shuffle:true,repeat:'off',position:20,duration:180,volume:.8}});
+ assert.deepEqual(player.playbackOrder(),[0,1,2,3]);assert.equal(player.queue[1].id,'c');c.restoreLocal();assert.deepEqual(player.playbackOrder(),[0,3,1,2]);assert.deepEqual(player.queue.map(t=>t.id),['a','b','c','d']);
+});
 test('handoff preserves position, queue and modes; both clients control the selected device and return playback',async()=>{
  global.window={};global.document={querySelectorAll:()=>[]};const {ConnectController}=await import('../js/connect-controller.js');
  const key=crypto.createHash('sha256').update('song').digest('hex'),events=[{version:1,id:'track',device:'pc',clock:1,kind:'track',key,track:{title:'Song',artist:'Artist',ext:'.mp3',size:4,audioId:'audio'}}];

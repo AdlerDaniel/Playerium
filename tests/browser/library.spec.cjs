@@ -121,12 +121,7 @@ test('home shelves, library filters and navigation expose the imported collectio
   await expect(page.locator('.track-name')).toHaveText('Song');
   await page.keyboard.press('Escape');await page.locator('#btnNavBack').click();
   await expect(page.locator('.home-dashboard')).toBeVisible();
-  await page.locator('#librarySearchInput').fill('not present');
-  await expect(page.locator('.sidebar-item:visible')).toHaveCount(0);
-  await page.locator('#librarySearchInput').fill('Artist');
-  await expect(page.locator('.sidebar-item:visible')).toHaveCount(0);
-  await page.locator('#librarySearchInput').fill('Добавленные');
-  await expect(page.locator('.sidebar-item:visible')).toHaveCount(1);
+  await expect(page.locator('#librarySearchInput')).toHaveCount(0);await expect(page.locator('.library-album')).toHaveCount(1);await expect(page.locator('.library-album')).toHaveAttribute('aria-label','Добавленные');
   await expect(page.locator('.home-filters').getByRole('button',{name:'Альбомы',exact:true})).toHaveCount(0);
   await page.locator('.home-filters').getByRole('button',{name:'Исполнители',exact:true}).click();
   await expect(page.locator('.shelf-heading h2')).toHaveText('Ваши исполнители');
@@ -197,7 +192,7 @@ test('imports go to Added without polluting the default library; explicit filter
 test('scrollbars stay hidden even during scrolling while content remains scrollable',async({page})=>{
   await page.setViewportSize({width:320,height:640});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  const filters=page.locator('#mainTopbar .home-filters');
+  const filters=page.locator('.home-dashboard .home-filters');
   expect(await filters.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
   await filters.evaluate(el=>el.scrollLeft=100);
@@ -265,16 +260,16 @@ test('refresh and back navigation preserve scroll position in large collections'
   await page.evaluate(()=>window.playerApp.ui.refreshCurrentView());
   expect(await scroll.evaluate(el=>el.scrollTop)).toBe(1500);
   await page.getByRole('button',{name:'Настройки',exact:true}).click();
-  await page.locator('#btnNavBack').click();
+  await page.locator('.settings-close').click();
   expect(await scroll.evaluate(el=>el.scrollTop)).toBe(1500);
 });
 test('mobile home filters remain visible and search keeps focus while typing',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  await expect(page.locator('#mainTopbar .home-filters')).toBeVisible();
-  const box=await page.locator('#mainTopbar .home-filters').boundingBox();
-  expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(80);
+  await expect(page.locator('.home-dashboard .home-filters')).toBeVisible();
+  const box=await page.locator('.home-dashboard .home-filters').boundingBox();
+  expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(140);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.locator('#mobileNavSearch').click();
   await page.locator('.mobile-search-input').pressSequentially('Song');

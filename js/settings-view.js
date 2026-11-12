@@ -1,3 +1,5 @@
+import {renderProfileSettings} from './profile-avatar.js';
+import {renderThemePicker} from './theme-picker.js';
 import {organizeSettings} from './settings-layout.js';
 import {THEMES,applyTheme,currentTheme} from './themes.js';
 import {renderCloudSettings} from './cloud-settings.js';
@@ -63,7 +65,7 @@ export function renderSettingsView(container) {
               <span class="settings-desc">Цвета фонов, панелей, карточек, меню и элементов управления.</span>
             </div>
           </div>
-          <div class="theme-picker" aria-label="Цветовая тема">${THEMES.map(t=>`<button class="theme-choice" data-theme-id="${t.id}" aria-pressed="${currentTheme().id===t.id}" style="--preview-bg:${t.colors[0]};--preview-panel:${t.colors[1]};--preview-raised:${t.colors[3]};--preview-accent:${t.colors[9]};--preview-text:${t.colors[7]};--preview-on-accent:${t.colors[11]}"><span class="theme-preview" aria-hidden="true"><span class="theme-preview-sidebar"></span><span class="theme-preview-main"><span></span><span></span></span><span class="theme-preview-player"></span></span><span class="theme-choice-name">${t.name}</span></button>`).join('')}</div>
+          <div class="theme-settings-picker"></div>
         </div>
       </div>
 
@@ -110,7 +112,9 @@ export function renderSettingsView(container) {
     container.replaceChildren(settingsDiv);
     renderCloudSettings(this,settingsDiv);
     renderNormalizationSettings(this,settingsDiv);
+    renderThemePicker(settingsDiv.querySelector('.theme-settings-picker'));
     organizeSettings(settingsDiv,{mobile:this.isMobile});
+    renderProfileSettings(this,settingsDiv);
 
     // Bind update settings
     const repoInput = document.getElementById("inputSettingsGithubRepo");
@@ -169,7 +173,5 @@ export function renderSettingsView(container) {
       }
     });
 
-    settingsDiv.querySelectorAll('.theme-choice').forEach(button=>button.onclick=()=>{
-      applyTheme(button.dataset.themeId);settingsDiv.querySelectorAll('.theme-choice').forEach(choice=>choice.setAttribute('aria-pressed',String(choice===button)));
-    });
+
 }

@@ -38,6 +38,7 @@
   <link rel="stylesheet" href="css/interface-v2.css">
     <link rel="stylesheet" href="css/interface-refresh.css">
     <link rel="stylesheet" href="css/review-round.css">
+    <link rel="stylesheet" href="css/sounder-refresh.css">
 </head>
 <body>
   <div id="app">
@@ -59,6 +60,10 @@
           </div>
 
           <div class="topbar-right">
+            <nav class="top-library" aria-label="Моя медиатека">
+              <button id="btnCreatePlaylist" class="library-create" aria-label="Создать плейлист" data-tooltip="Создать плейлист"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+              <div id="sidebarList" class="library-albums"></div>
+            </nav>
             <button class="topbar-btn" id="btnOpenSettings" data-tooltip="Настройки" aria-label="Настройки">
 <span class="profile-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg></span>
             </button>
@@ -66,36 +71,6 @@
         </header>
     <!-- Top & Content Body -->
     <div class="app-body">
-      <!-- Left Sidebar (Моя медиатека) -->
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <button class="library-btn" id="btnLibraryHeader" title="Моя медиатека">
-            <svg viewBox="0 0 24 24"><path d="M3 22a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1zM15.5 2.1a1 1 0 0 0-1.07.2l-8 7a1 1 0 0 0 0 1.4l8 7a1 1 0 0 0 1.07.2 1 1 0 0 0 .5-.8V3a1 1 0 0 0-.5-.9zM21 2a1 1 0 0 0-1 1v18a1 1 0 0 0 2 0V3a1 1 0 0 0-1-1z"/></svg>
-            <span>Моя медиатека</span>
-          </button>
-          <div class="sidebar-actions">
-            <button class="icon-circle-btn" id="btnCreatePlaylist" data-tooltip="Создать плейлист">
-              <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-            </button>
-            <button class="icon-circle-btn" id="btnAddMusicFolder" data-tooltip="Добавить папку с музыкой">
-              <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Sidebar Filter Pills -->
-        <div class="sidebar-filters">
-          <button class="pill-btn active" data-filter="all">Все</button>
-          <button class="pill-btn" data-filter="playlists">Плейлисты</button>
-          <button class="pill-btn" data-filter="artists">Исполнители</button>
-        </div>
-
-        <div class="library-tools"><label class="library-search" aria-label="Поиск в медиатеке"><svg viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3L21 22l1-1-5.7-6.1A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg><input id="librarySearchInput" placeholder="Поиск в медиатеке" aria-label="Поиск в медиатеке"></label></div>
-        <!-- Sidebar List Items -->
-        <div class="sidebar-list" id="sidebarList">
-          <!-- Populated by UIController -->
-        </div>
-      </aside>
 
       <!-- Main Center Content Area -->
       <main class="main-view-container">

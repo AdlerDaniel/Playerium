@@ -307,8 +307,13 @@ public class MediaNotificationService extends MediaSessionService {
         GoogleConnect connect=cloud.connect;JSONObject local=connect.local();if(local==null||local.optString("id").isEmpty())return;
         try{
             String device=local.getString("id");JSONArray saved=snapshot.optJSONArray("tracks"),keys=new JSONArray();JSONObject track=null;int index=snapshot.optInt("index");
-            int start=saved==null?0:Math.max(0,Math.min(index-100,saved.length()-200));
-            if(saved!=null)for(int i=start;i<Math.min(saved.length(),start+200);i++){JSONObject item=saved.getJSONObject(i);String key=item.optString("cloudKey");if(!key.isEmpty())keys.put(key);if(i==index)track=new JSONObject().put("key",key).put("title",item.optString("title")).put("artist",item.optString("artist"));}
+            // ExoPlayer keeps physical entries in import order. Publish its actual
+            // permutation so an idle controller sees the same next song as Android.
+            JSONArray order=snapshot.optJSONArray("playbackOrder");
+            int count=saved==null?0:saved.length(),currentPosition=index;
+            if(order!=null&&order.length()==count)for(int at=0;at<count;at++)if(order.optInt(at,-1)==index){currentPosition=at;break;}
+            int start=Math.max(0,Math.min(currentPosition-100,count-200));
+            for(int at=start;at<Math.min(count,start+200);at++){int i=order!=null&&order.length()==count?order.optInt(at,-1):at;if(i<0||i>=count)continue;JSONObject item=saved.getJSONObject(i);String key=item.optString("cloudKey");if(!key.isEmpty())keys.put(key);if(i==index)track=new JSONObject().put("key",key).put("title",item.optString("title")).put("artist",item.optString("artist"));}
             JSONObject state=new JSONObject().put("queue",keys).put("track",track).put("playing",snapshot.optBoolean("playing")).put("position",snapshot.optDouble("position")/1000).put("duration",snapshot.optDouble("duration")/1000).put("volume",snapshot.optDouble("volume",.8)).put("shuffle",snapshot.optBoolean("shuffle")).put("repeat",new String[]{"off","one","all"}[Math.max(0,Math.min(2,snapshot.optInt("repeat")))]);
             local.put("state",state).put("seenAt",System.currentTimeMillis()).put("ack",connect.ack(device)).put("ackHistory",connect.ackHistory(device));
             connect.live.publish(local);

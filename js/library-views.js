@@ -10,89 +10,15 @@ import { viewFingerprint } from './view-stability.js';
 import {addedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
 import {changeTrackSort} from './track-sort.js';
 export function renderSidebar() {
-    const list = document.getElementById("sidebarList");
-    const signature=JSON.stringify([viewFingerprint(this),this.sidebarFilter,this.libraryQuery,this.currentView?.type,this.currentView?.id]);
-    if(list.children.length&&this.sidebarSignature===signature)return;
-    this.sidebarSignature=signature;
-    const scroll=list.scrollTop;
-    retainArtwork(list);list.innerHTML = "";
-
-    if (this.sidebarFilter === "all" || this.sidebarFilter === "playlists") {
-      const added = document.createElement('div');
-      added.className = 'sidebar-item' + (this.currentView.type === 'allTracks' ? ' active' : '');
-      added.innerHTML = `<div class="item-thumb local-art">${icons.music}</div><div class="item-info"><span class="item-title">Добавленные</span><span class="item-subtitle">${this.library.getTracks().length} треков</span></div>`;
-      added.addEventListener('click', () => this.navigateTo({ type: 'allTracks', title: 'Добавленные' }));
-      mountPlaylistArt(added.querySelector('.item-thumb'),addedArtwork(this.library),this.library.getTracks());
-      list.append(added);
-    }
-
-    // 2. Playlists
-    if (this.sidebarFilter === "all" || this.sidebarFilter === "playlists") {
-      const playlists = this.library.getPlaylists().filter(p => !p.isFolderPlaylist);
-      playlists.forEach((pl) => {
-        const cover = this.library.getPlaylistTracks(pl.id).find(t => t.pictureUrl)?.pictureUrl;
-        const item = document.createElement("div");
-        item.className = "sidebar-item" + (this.currentView.type === "playlist" && this.currentView.id === pl.id ? " active" : "");
-        item.dataset.playlistId = pl.id;
-
-        item.innerHTML = `
-          <div class="item-thumb"></div>
-          <div class="item-info">
-            <span class="item-title">${this.escapeHTML(pl.name)}</span>
-            <span class="item-subtitle">Плейлист • ${pl.trackIds.length} треков</span>
-          </div>
-        `;
-
-        item.addEventListener("click", () => {
-          this.navigateTo({ type: "playlist", id: pl.id, title: pl.name });
-        });
-
-        mountPlaylistArt(item.querySelector('.item-thumb'),pl,this.library.getPlaylistTracks(pl.id));
-        // Right-click context menu on playlist
-        item.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          this.showPlaylistContextMenu(e.clientX, e.clientY, pl);
-        });
-
-        list.appendChild(item);
-      });
-    }
-
-    // 3. Artists
-    if (this.sidebarFilter === "artists") {
-      const artists = this.library.getArtists();
-      artists.forEach((art) => {
-        const item = document.createElement("div");
-        item.className = "sidebar-item" + (this.currentView.type === "artist" && this.currentView.id === art.name ? " active" : "");
-        const thumbHtml = art.pictureUrl
-          ? `<img src="${art.pictureUrl}" alt="Artist" />`
-          : `<svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>`;
-
-        item.innerHTML = `
-          <div class="item-thumb round"></div>
-          <div class="item-info">
-            <span class="item-title">${this.escapeHTML(art.name)}</span>
-            <span class="item-subtitle">Исполнитель</span>
-          </div>
-        `;
-
-        mountArtistPortrait(this,item.querySelector('.item-thumb'),art);
-        item.addEventListener("click", () => {
-          this.navigateTo({ type: "artist", id: art.name, title: art.name });
-        });
-        list.appendChild(item);
-      });
-    }
-
-    list.querySelectorAll('.item-thumb img').forEach(img=>mountCover(img.parentElement,{pictureUrl:img.getAttribute('src')}));
-    const query = (this.libraryQuery || "").toLocaleLowerCase();
-    for (const item of list.children) {
-      item.hidden = query && !item.textContent.toLocaleLowerCase().includes(query);
-      item.tabIndex = 0;
-      item.setAttribute("role", "button");
-      item.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " ") {e.preventDefault();item.click();} });
-    }
-    list.scrollTop=scroll;
+ const list=document.getElementById('sidebarList');
+ const signature=JSON.stringify([viewFingerprint(this),this.currentView?.type,this.currentView?.id]);
+ if(list.children.length&&this.sidebarSignature===signature)return;this.sidebarSignature=signature;
+ const scroll=list.scrollLeft;retainArtwork(list);list.replaceChildren();
+ const items=[{art:addedArtwork(this.library),tracks:this.library.getTracks(),name:'Добавленные',view:{type:'allTracks',title:'Добавленные'}},...this.library.getPlaylists().filter(p=>!p.isFolderPlaylist).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)||a.id.localeCompare(b.id)).map(p=>({art:p,tracks:this.library.getPlaylistTracks(p.id),name:p.name,view:{type:'playlist',id:p.id,title:p.name}}))];
+ for(const item of items){const button=document.createElement('button');button.className='sidebar-item library-album';button.dataset.playlistId=item.art.id;button.setAttribute('aria-label',item.name);button.title=item.name;button.setAttribute('aria-current',String(this.currentView.type===item.view.type&&this.currentView.id===item.view.id));
+  const cover=document.createElement('span');cover.className='item-thumb';cover.setAttribute('aria-hidden','true');mountPlaylistArt(cover,item.art,item.tracks);const placeholder=cover.querySelector('.playlist-letter-art');if(placeholder)placeholder.innerHTML=icons.music;button.append(cover);button.onclick=()=>this.navigateTo(item.view);
+  button.oncontextmenu=e=>{e.preventDefault();collectionMenu(this,{playlist:item.view.type==='playlist'?item.art:null,tracks:item.tracks,anchor:button});};list.append(button);
+ }list.scrollLeft=scroll;
 }
 
 export function renderHomeView(container) {

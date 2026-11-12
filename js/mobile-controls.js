@@ -149,7 +149,6 @@ export function showMobileAddSheet() {
   return showSurfaceMenu(this,{title:'Создать и добавить',items:[
     {label:'Плейлист',icon:icons.music,action:()=>this.showCreatePlaylistModal()},
     {label:'Выбрать аудиофайлы',icon:icons.plus,action:()=>this.triggerMobileFileImport()},
-    {label:'Добавить папку с музыкой',icon:icons.music,action:()=>this.triggerFolderPicker()},
   ]});
 }
 

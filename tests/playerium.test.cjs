@@ -154,6 +154,14 @@ test('audio and cover blobs remain readable after database reopen',async()=>{
 async function player(lib={ getAudioFile:async()=>new Blob(['a']) }) {
   const {AudioPlayer}=await modules(); const p=new AudioPlayer(lib); p.initWebAudio=()=>{}; return p;
 }
+test('native shuffle and repeat ignore pre-command snapshots until acknowledged, then accept external changes',async()=>{
+ const calls=[];window.AndroidBridge={playbackCommand:(...args)=>calls.push(args)};
+ const tracks=['a','b','c','d'].map(id=>({id,nativeUri:'content://'+id})),p=await player({getTrackById:id=>tracks.find(t=>t.id===id)});p.queue=tracks;p.originalQueue=tracks.slice();p.currentTrack=tracks[0];p.queueIndex=0;p.nativePlayback=true;
+ const old={id:'a',index:0,shuffle:false,repeat:0,playing:false,position:1000,duration:10000,playbackOrder:[0,1,2,3]};
+ p.toggleShuffle();p.toggleRepeat();p.applyNativeState(old);assert.equal(p.isShuffle,true);assert.equal(p.repeatMode,'all');assert.deepEqual(p.playbackOrder(),[]);
+ p.applyNativeState({...old,shuffle:true,repeat:2,playbackOrder:[0,3,1,2]});assert.equal(p.getNextQueueEntry().track.id,'d');assert.equal(p.pendingNativeShuffle,null);assert.equal(p.pendingNativeRepeat,null);
+ p.applyNativeState({...old,position:2000});assert.equal(p.isShuffle,false);assert.equal(p.repeatMode,'off');assert.equal(p.getCurrentTime(),2);assert.deepEqual(calls,[['shuffle',1],['repeat',2]]);
+});
 test('unavailable track clears old source and reports error instead of playing previous song',async()=>{
   const p=await player({getAudioFile:async()=>null}); p.audio.src='old'; let error;
   p.onError=message=>error=message;

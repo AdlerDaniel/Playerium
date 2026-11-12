@@ -399,12 +399,16 @@ export class AudioPlayer {
        || [...(this.library.tracks?.values() || [])].find(saved => saved.nativeUri === track.nativeUri)
        || track;if(track.queueOrigin==='manual'){const entry=track.queueEntry;Object.assign(track,base,{queueOrigin:'manual',queueEntry:entry});return track;}return base;});
     const previousOrder=JSON.stringify(this.playbackOrder()),previousRepeat=this.repeatMode,previousShuffle=this.isShuffle;
-    if(typeof state.shuffle==='boolean'&&this.isShuffle!==state.shuffle){this.isShuffle=state.shuffle;this.onShuffleChange?.(this.isShuffle);this.savePreferences();}
+    const waitingShuffle=this.pendingNativeShuffle&&Date.now()<this.pendingNativeShuffle.until&&state.shuffle!==this.pendingNativeShuffle.value;
+    if(!waitingShuffle)this.pendingNativeShuffle=null;
+    if(!waitingShuffle&&typeof state.shuffle==='boolean'&&this.isShuffle!==state.shuffle){this.isShuffle=state.shuffle;this.onShuffleChange?.(this.isShuffle);this.savePreferences();}
     const repeat=['off','one','all'][state.repeat];
-    if(repeat&&repeat!==this.repeatMode){this.repeatMode=repeat;this.onRepeatChange?.(repeat);this.savePreferences();}
-    if(Array.isArray(state.playbackOrder)&&state.playbackOrder.length===this.queue.length&&new Set(state.playbackOrder).size===this.queue.length&&state.playbackOrder.every(index=>Number.isInteger(index)&&index>=0&&index<this.queue.length)){
+    const waitingRepeat=this.pendingNativeRepeat&&Date.now()<this.pendingNativeRepeat.until&&repeat!==this.pendingNativeRepeat.value;
+    if(!waitingRepeat)this.pendingNativeRepeat=null;
+    if(!waitingRepeat&&repeat&&repeat!==this.repeatMode){this.repeatMode=repeat;this.onRepeatChange?.(repeat);this.savePreferences();}
+    if(!waitingShuffle&&Array.isArray(state.playbackOrder)&&state.playbackOrder.length===this.queue.length&&new Set(state.playbackOrder).size===this.queue.length&&state.playbackOrder.every(index=>Number.isInteger(index)&&index>=0&&index<this.queue.length)){
       this.nativePlaybackOrder=state.playbackOrder.slice();this.nativeOrderKey=this.queueOrderKey();
-    }else if(state.playbackOrder!==undefined){this.nativePlaybackOrder=null;this.nativeOrderKey=null;}
+    }else if(!waitingShuffle&&state.playbackOrder!==undefined){this.nativePlaybackOrder=null;this.nativeOrderKey=null;}
     const orderChanged=previousOrder!==JSON.stringify(this.playbackOrder())||previousRepeat!==this.repeatMode||previousShuffle!==this.isShuffle;
     const nativeUri = state.tracks?.[state.index]?.uri;
     const index = Number.isInteger(state.index) && (this.queue[state.index]?.id === state.id || (nativeUri && this.queue[state.index]?.nativeUri === nativeUri)) ? state.index : this.queue.findIndex(t => t.id === state.id);
@@ -564,6 +568,7 @@ export class AudioPlayer {
   toggleShuffle() {
     this.isShuffle = !this.isShuffle;
     if(this.nativePlayback){
+      this.pendingNativeShuffle={value:this.isShuffle,until:Date.now()+2500};
       window.AndroidBridge?.playbackCommand?.('shuffle',this.isShuffle?1:0);
       this.nativePlaybackOrder=null;this.nativeOrderKey=null;
       this.savePreferences();this.onShuffleChange?.(this.isShuffle);this.onQueueChange?.(this.queue,this.queueIndex);return;
@@ -607,7 +612,7 @@ export class AudioPlayer {
     } else {
       this.repeatMode = "off";
     }
-    if (this.nativePlayback) window.AndroidBridge.playbackCommand("repeat", ["off", "one", "all"].indexOf(this.repeatMode));
+    if (this.nativePlayback) {this.pendingNativeRepeat={value:this.repeatMode,until:Date.now()+2500};window.AndroidBridge.playbackCommand("repeat", ["off", "one", "all"].indexOf(this.repeatMode));}
     if (this.onRepeatChange) this.onRepeatChange(this.repeatMode);
     this.savePreferences();this.onQueueChange?.(this.queue,this.queueIndex);
   }

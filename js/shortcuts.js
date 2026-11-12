@@ -33,6 +33,7 @@ export class ShortcutsManager {
         return;
       }
 
+      if (this.ui.settingsOverlay?.isConnected) return;
       if (isInput || e.defaultPrevented || (target.tagName === "BUTTON" && ["Space", "Enter"].includes(e.code))) return;
 
       switch (e.code) {

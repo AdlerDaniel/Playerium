@@ -1,31 +1,14 @@
-import {enabled} from './visual-features.js';
-export const THEMES=[
- {id:'light-brown',name:'Светло-коричневая',scheme:'light',colors:['#ded0bd','#f6efe5','#eee3d4','#e5d6c1','#dcc9ae','#d0b895','#bea07a','#392b20','#6b5541','#795333','#563923','#ffffff','#bda17a']},
- {id:'dark-brown',name:'Тёмно-коричневая',scheme:'dark',colors:['#160f0c','#251b16','#30231c','#3b2b22','#463228','#574034','#705442','#f4e9da','#c8b49e','#d8ad78','#eac391','#24190f','#76523a']},
- {id:'burgundy',name:'Бургунди',scheme:'dark',colors:['#160a0f','#28131c','#331924','#40202d','#4c2636','#603146','#78455a','#fcebf1','#d3aebd','#f093b5','#ffb2cf','#35111e','#85334f']},
- {id:'green',name:'Зелёная',scheme:'dark',colors:['#08130e','#11251b','#172f22','#1e3a2b','#264635','#325741','#426f55','#eaf8ee','#afc9b8','#68de94','#91efb1','#082414','#347752']},
- {id:'blue',name:'Синяя',scheme:'dark',colors:['#09111e','#122238','#182c46','#203652','#294363','#355477','#48688a','#edf4ff','#adc1db','#85b9ff','#acd0ff','#102c50','#365f96']},
- {id:'yellow',name:'Жёлтая',scheme:'dark',colors:['#181507','#282311','#342d17','#40371d','#4c4224','#61532d','#796b3b','#fff8dc','#d4c797','#f4d45c','#ffe789','#322809','#8a742a']},
- {id:'dark',name:'Тёмная',scheme:'dark',preserveSurfaceColors:true,colors:['#161312','#1e1a18','#292320','#342c28','#40352f','#4c3e36','#5b4b41','#F5EBDA','#d3c5b2','#F5EBDA','#ffffff','#161312','#4a3c31']},
- {id:'light',name:'Светлая',scheme:'light',preserveSurfaceColors:true,colors:['#F5EBDA','#fbf6ee','#f0e4d2','#e9dac4','#e1d0b7','#d8c4a7','#cfbb9b','#161312','#594d3f','#161312','#352c27','#F5EBDA','#dbc5a5']}
-];
-export function currentTheme(){try{return THEMES.find(t=>t.id===localStorage.getItem('playerium_theme'))||THEMES[3];}catch{return THEMES[3];}}
+import {SOUNDER_PALETTES} from './sounder-palettes.js';
+export const THEMES=SOUNDER_PALETTES.map(t=>({...t,colors:[t.tokens.bg,t.tokens.panel,t.tokens.surface,t.tokens.hover,t.tokens.selection,t.tokens.track,t.tokens.border,t.tokens.text,t.tokens.muted,t.tokens.accent,t.tokens.accent_hover,t.tokens.on_accent,t.tokens.selection]}));
+const legacy={'light-brown':'brown-light','dark-brown':'brown-dark',burgundy:'red-dark',green:'green-dark',blue:'blue-dark',yellow:'yellow-dark',dark:'violet-dark',light:'violet-light'};
+export function currentTheme(){try{const id=localStorage.getItem('playerium_theme');return THEMES.find(t=>t.id===(legacy[id]||id))||THEMES[0];}catch{return THEMES[0];}}
 export function applyTheme(id,persist=true){
- const theme=THEMES.find(t=>t.id===id)||THEMES[3],c=theme.colors,root=document.documentElement;
- const keys=['--sp-black','--sp-dark-900','--sp-dark-800','--sp-dark-700','--sp-dark-600','--sp-dark-500','--sp-dark-400','--sp-text-primary','--sp-text-secondary','--sp-green','--sp-green-hover','--sp-on-accent','--theme-hero'];
- keys.forEach((key,i)=>root.style.setProperty(key,c[i]));
-  const mix = (a,b,weight) => '#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*weight+parseInt(b.slice(i,i+2),16)*(1-weight)).toString(16).padStart(2,'0')).join('');
-   if(enabled(1)&&!theme.preserveSurfaceColors){for(let i=0;i<7;i++)root.style.setProperty(keys[i],mix(c[i],theme.scheme==='light'?'#faf7f2':'#101011',.78));}
-   root.style.setProperty('--theme-home-top',mix(c[12],getComputedStyle(root).getPropertyValue('--sp-dark-900').trim()||c[1],enabled(1)?.32:.22));
- root.style.setProperty('--sp-text-subdued',c[8]);root.style.setProperty('--sp-green-active',c[9]);root.style.setProperty('--sp-theme-color',c[9]);
-  root.style.setProperty('--theme-border',theme.scheme==='light'?c[7]+'38':'#ffffff30');root.style.setProperty('--theme-accent-soft',c[9]+(theme.scheme==='light'?'24':'26'));
-  root.style.setProperty('--theme-hover',theme.scheme==='light'?c[7]+'1a':'#ffffff18');root.style.setProperty('--theme-selection',c[9]+(theme.scheme==='light'?'30':'38'));
- root.style.setProperty('--surface-control',mix(c[3],'#ffffff',theme.scheme==='light'?.5:.88));
- root.style.setProperty('--surface-overlay',mix(c[2],'#ffffff',theme.scheme==='light'?.35:.92));
- root.style.setProperty('--surface-selected',mix(c[9],c[1],theme.scheme==='light'?.16:.25));
- root.style.setProperty('--surface-control-hover',mix(c[4],'#ffffff',theme.scheme==='light'?.45:.82));
+ const theme=THEMES.find(t=>t.id===(legacy[id]||id))||THEMES[0],p=theme.tokens,root=document.documentElement;
+ const values={'sp-black':p.bg,'sp-dark-900':p.panel,'sp-dark-800':p.surface,'sp-dark-700':p.hover,'sp-dark-600':p.selection,'sp-dark-500':p.track,'sp-dark-400':p.border,'sp-text-primary':p.text,'sp-text-secondary':p.muted,'sp-text-subdued':p.muted,'sp-green':p.accent,'sp-green-hover':p.accent_hover,'sp-green-active':p.accent,'sp-on-accent':p.on_accent,'sp-theme-color':p.accent,'theme-hero':p.selection,'theme-home-top':p.panel,'theme-border':p.line,'theme-accent-soft':p.selection,'theme-hover':p.hover,'theme-selection':p.selection,'surface-control':p.surface,'surface-overlay':p.panel,'surface-selected':p.selection,'surface-control-hover':p.hover,'control-inactive':p.muted,'control-active':p.accent};
+ for(const [key,value] of Object.entries(values))root.style.setProperty('--'+key,value);
+ for(const [key,value] of Object.entries(p))root.style.setProperty('--sounder-'+key.replace(/_/g,'-'),value);
  root.dataset.theme=theme.id;root.style.colorScheme=theme.scheme;
- document.querySelectorAll('meta[name="theme-color"]').forEach(meta=>meta.content=c[0]);document.querySelector('meta[name="color-scheme"]')?.setAttribute('content',theme.scheme);
+ document.querySelectorAll('meta[name="theme-color"]').forEach(meta=>meta.content=p.bg);document.querySelector('meta[name="color-scheme"]')?.setAttribute('content',theme.scheme);
  if(persist)try{localStorage.setItem('playerium_theme',theme.id);}catch{}
  return theme;
 }

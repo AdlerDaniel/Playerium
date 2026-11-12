@@ -6,7 +6,8 @@ import {renderSearchView} from './search-view.js';
 import { bindSlider, syncPlaybackControls } from './playback-controls.js';
 import { renderSidebar, renderAllTracksView, renderHomeView, renderLibraryView, renderPlaylistView, renderArtistView, createActionBar } from "./library-views.js";
 import {loadingRows,loadingIndicator} from './loading.js';
-import {initSidebarCollapse} from './sidebar-collapse.js';
+import {openSettings} from './settings-overlay.js';
+import {volumeIcon} from './volume-icon.js';
 import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
 import { renderRightQueue } from "./queue-view.js";
@@ -46,7 +47,7 @@ export class UIController {
     this.hideTooltip=installTooltips();
     this.initMobileState();
     this.bindDOM();
-    initSidebarCollapse(this);
+
     this.bindMobileEvents();
     this.bindPlayerEvents();
     this.renderSidebar();
@@ -88,8 +89,6 @@ export class UIController {
       document.getElementById("searchClearBtn").classList.remove("visible");
       this.navigateTo({type:"home",title:"Главная"});
     });
-    document.getElementById("btnLibraryHeader").addEventListener("click", () => {if(this.isMobile)this.navigateTo({type:"library",title:"Моя медиатека"});});
-    document.getElementById("librarySearchInput").addEventListener("input", e => {this.libraryQuery=e.target.value.trim();this.renderSidebar();});
     // Navigation arrows
     document.getElementById("btnNavBack").addEventListener("click", () => this.navigateBack());
     document.getElementById("btnNavForward").addEventListener("click", () => this.navigateForward());
@@ -112,12 +111,11 @@ export class UIController {
 
     // Topbar Settings button
     document.getElementById("btnOpenSettings").addEventListener("click", () => {
-      this.navigateTo({ type: "settings", title: "Настройки" });
+      this.openSettings();
     });
 
     // Sidebar '+' and 'Add Folder'
     document.getElementById("btnCreatePlaylist").addEventListener("click", () => this.showCreatePlaylistModal());
-    document.getElementById("btnAddMusicFolder").addEventListener("click", () => this.triggerFolderPicker());
 
     // Sidebar filter pills
     document.querySelectorAll(".sidebar-filters .pill-btn").forEach((btn) => {
@@ -422,14 +420,7 @@ export class UIController {
       volIcon.title = isMuted ? 'Включить звук' : 'Выключить звук';
       volIcon.setAttribute('aria-label', volIcon.title);
 
-      // Spotify volume icons based on level
-      if (isMuted || volume === 0) {
-        volIcon.innerHTML = `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M13.86 5.47a.75.75 0 0 0-1.061 0l-1.47 1.47-1.47-1.47A.75.75 0 0 0 8.8 6.53L10.269 8l-1.47 1.47a.75.75 0 1 0 1.06 1.06l1.47-1.47 1.47 1.47a.75.75 0 0 0 1.06-1.06L12.39 8l1.47-1.47a.75.75 0 0 0 0-1.06zM3.208 4.25H1.75A.75.75 0 0 0 1 5v6a.75.75 0 0 0 .75.75h1.458l3.96 3.659A.75.75 0 0 0 8.5 14.86V1.14a.75.75 0 0 0-1.332-.549L3.208 4.25z"/></svg>`;
-      } else if (volume < 0.5) {
-        volIcon.innerHTML = `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4H.75A.75.75 0 0 1 0 10.4V5.6a.75.75 0 0 1 .75-.75h1.316l6.925-4a.75.75 0 0 1 .75 0zm-2 2.53L2.991 6.13H1.5v3.74h1.491l4.75 2.75V3.38zm4.28 1.83a.75.75 0 0 1 1.06 0 4 4 0 0 1 0 5.66.75.75 0 1 1-1.06-1.06 2.5 2.5 0 0 0 0-3.54.75.75 0 0 1 0-1.06z"/></svg>`;
-      } else {
-        volIcon.innerHTML = `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M9.741.85a.75.75 0 0 1 .375.65v13a.75.75 0 0 1-1.125.65l-6.925-4H.75A.75.75 0 0 1 0 10.4V5.6a.75.75 0 0 1 .75-.75h1.316l6.925-4a.75.75 0 0 1 .75 0zm-2 2.53L2.991 6.13H1.5v3.74h1.491l4.75 2.75V3.38zm4.28 1.83a.75.75 0 0 1 1.06 0 4 4 0 0 1 0 5.66.75.75 0 1 1-1.06-1.06 2.5 2.5 0 0 0 0-3.54.75.75 0 0 1 0-1.06zm2.122-2.122a.75.75 0 0 1 1.06 0 7 7 0 0 1 0 9.9.75.75 0 1 1-1.06-1.06 5.5 5.5 0 0 0 0-7.78.75.75 0 0 1 0-1.06z"/></svg>`;
-      }
+      volIcon.innerHTML=volumeIcon(volume,isMuted);
     };
 
     this.player.onShuffleChange = (isShuffle) => {
@@ -476,7 +467,11 @@ export class UIController {
 
   // --- View Navigation ---
 
+  openSettings(){return openSettings(this);}
+
   navigateTo(view) {
+    if(view.type==='settings')return this.openSettings();
+    if(this.settingsOverlay?.isConnected)this.closeSettings();
     if (this.historyIndex >= 0 && this.currentView.type === view.type && this.currentView.id === view.id && this.currentView.extra === view.extra && this.currentView.tab === view.tab) return;
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1);
@@ -539,6 +534,7 @@ export class UIController {
   }
 
   loadView(view, preserveScroll = false) {
+    if(view.type==='settings')return this.openSettings();
     this.voiceSearch?.cancel();
     if(view.type==='liked')view={type:'allTracks',title:'Добавленные'};
     const scroll = document.getElementById('mainScrollContainer');

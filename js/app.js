@@ -1,4 +1,6 @@
 import { bindUpdateController } from "./update-controller.js";
+import './input-modality.js';
+import {updateProfileAvatar} from './profile-avatar.js';
 /**
  * Spotify Local Player - Main Entry Point
  */
@@ -45,6 +47,7 @@ class App {
       const restoreTask=window.AndroidBridge?this.music.restore():null;
       this.player.loadSavedPreferences();
       this.ui.init();
+      updateProfileAvatar(this.cloud.status);
       this.audioPreparation=installAudioPreparation(this);
       this.ui.audioPreparation=this.audioPreparation;
       this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);

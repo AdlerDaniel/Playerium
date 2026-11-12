@@ -33,8 +33,7 @@ export function renderHomeDashboard(container) {
     button.textContent=label;button.setAttribute('aria-pressed',String(filter===value));
     button.addEventListener('click',()=>{this.homeFilter=value;this.refreshCurrentView();});filters.append(button);
   }
-  if (this.isMobile) document.getElementById('mainTopbar').append(filters);
-  else home.append(filters);
+  home.append(filters);
   const all={playlist:addedArtwork(this.library),title:'Добавленные',icon:'music',className:'local-art',view:{type:'allTracks',title:'Добавленные'},tracks};
   if(filter==='all'&&tracks.length){
     const feature=document.createElement('section');feature.className='home-feature';feature.setAttribute('aria-label','Ваша коллекция');
@@ -71,7 +70,7 @@ export function renderHomeDashboard(container) {
   if(!home.querySelector('.home-shelf')) {
     const empty=document.createElement('section');empty.className='home-onboarding';
     empty.innerHTML=`<h2>${tracks.length?'Ваша музыка — в одном месте':'Начните с любимой музыки'}</h2><p>Добавьте музыку и соберите свою коллекцию треков и плейлистов.</p><div><button class="home-import">Добавить музыку</button><button class="home-create">Создать плейлист</button></div>`;
-    empty.querySelector('.home-import').addEventListener('click',()=>this.isMobile?this.showMobileAddSheet():this.triggerFolderPicker());
+    empty.querySelector('.home-import').addEventListener('click',()=>this.triggerMobileFileImport());
     empty.querySelector('.home-create').addEventListener('click',()=>this.showCreatePlaylistModal());home.append(empty);
   }
   container.append(home);
