@@ -1,7 +1,7 @@
 // AI Horde supports anonymous generation. Persist the job to resume after restart.
 import {addedArtwork,collectionTracks,persistCollectionArtwork} from './visual-art.js';
 const API='https://aihorde.net/api/v2/generate';
-const headers={'Content-Type':'application/json',apikey:'0000000000','Client-Agent':'Playerium:1.7.51:local-music-player'};
+const headers={'Content-Type':'application/json',apikey:'0000000000','Client-Agent':'Playerium:1.7.52:local-music-player'};
 export function albumPrompt(playlist,tracks){
  const clean=value=>String(value||'').replace(/[\r\n#]/g,' ').slice(0,90);
  const songs=tracks.slice(0,12).map(t=>[t.title,t.artist,t.genre].map(clean).filter(Boolean).join(' — ')).join('; ');
