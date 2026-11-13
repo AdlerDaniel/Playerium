@@ -35,18 +35,11 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     assert.equal(tracks.length,1, `Expected one audio track, got ${tracks.length}; errors: ${errors.join("; ")}`);
     const track=tracks[0];
     assert.equal(track.title,'Song');assert.equal(track.duration,20);assert.equal(track.lyrics,undefined);
-    const measured=await win.evaluate(async()=>{const a=window.playerApp;return a.player.measureLoudness(a.library.getTracks().find(t=>t.filePath?.includes('Artist - Song.wav')));});assert.ok(measured.gain>0);
-    await app.evaluate(()=>{
-      const {createRequire}=process.getBuiltinModule('module');
-      const {LoudnessAnalyzer}=createRequire(process.cwd()+'/.latency-test.cjs')('./desktop-loudness.js');
-      global.originalLoudness=LoudnessAnalyzer.prototype.analyze;
-      LoudnessAnalyzer.prototype.analyze=function(){return new Promise(resolve=>global.releaseLoudness=resolve);};
-    });
     const startup=await win.evaluate(async()=>{
       const start=performance.now();
       await Promise.race([
         window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))),
-        new Promise((_,reject)=>setTimeout(()=>reject(Error('Playback is blocked by loudness analysis')),2000))
+        new Promise((_,reject)=>setTimeout(()=>reject(Error('Local playback did not start')),2000))
       ]);
       return performance.now()-start;
     });
@@ -65,14 +58,7 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
       return {audible,context:player.audioCtx.state,volume:player.volume,position:player.audio.currentTime};
     });
     assert.equal(sound.audible,true,`Streaming audio must reach Web Audio: ${JSON.stringify(sound)}`);
-    assert.ok(startup<2000,'Cached loudness must not hold the first audible frame');
-    await app.evaluate(()=>{
-      global.releaseLoudness?.({gain:1});
-      const {createRequire}=process.getBuiltinModule('module');
-      createRequire(process.cwd()+'/.latency-test.cjs')('./desktop-loudness.js').LoudnessAnalyzer.prototype.analyze=global.originalLoudness;
-    });
-    assert.equal(await win.evaluate(()=>window.playerApp.player.normalizationGain),1);
-    console.log('Audible playback starts immediately with measured, cached loudness:',Math.round(startup),'ms');
+    assert.ok(startup<2000,'Local audio must start without background processing');
     const range=await app.evaluate(async({net},src)=>{const r=await net.fetch(src,{headers:{Range:'bytes=44-63'}});return {status:r.status,range:r.headers.get('content-range'),bytes:(await r.arrayBuffer()).byteLength};},await win.evaluate(()=>window.playerApp.player.audio.src));
     assert.deepEqual(range,{status:206,range:'bytes 44-63/320044',bytes:20},'Audio protocol must deliver the requested byte interval for seeking');
     await win.evaluate(()=>window.playerApp.player.seekToTime(12));
@@ -89,7 +75,6 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     await app.evaluate(({app})=>app.emit('second-instance'));
     const denied=await win.evaluate(async()=>{try{await window.electronAPI.getMetadata('/etc/passwd');return false;}catch{return true;}});
     assert.equal(denied,true);
-    const deniedLoudness=await win.evaluate(async()=>{try{await window.electronAPI.getLoudness('/etc/passwd');return false;}catch{return true;}});assert.equal(deniedLoudness,true);
     await win.reload();await win.waitForFunction(()=>window.playerApp?.library.db);
     await win.evaluate(()=>window.playerApp.player.playTrack(window.playerApp.library.getTracks().find(t=>t.filePath?.includes("Artist - Song.wav"))));
     await win.waitForFunction(()=>window.playerApp.player.isPlaying);

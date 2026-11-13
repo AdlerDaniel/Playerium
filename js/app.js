@@ -10,12 +10,9 @@ import { AudioPlayer } from "./audio-player.js";
 import { UIController } from "./ui-controller.js";
 import { ShortcutsManager } from "./shortcuts.js";
 import { MusicCatalog } from './music-catalog.js';
-import {CloudSync} from './cloud-sync.js';
 import {initWindowFrame} from './window-frame.js';
-import {ConnectController} from './connect-controller.js';
 import {installVisualExperience} from './visual-experience.js';
 import {hydratePortraits,hydrateCollectionArtwork} from './visual-art.js';
-import {installAudioPreparation} from './audio-preparation.js';
 import {installInterfaceV2} from './interface-v2.js';
 import {installAlbumArtGenerator} from './album-art-generator.js';
 import {installInterfaceRefresh} from './interface-refresh.js';
@@ -27,7 +24,6 @@ class App {
     this.ui = new UIController(this.library, this.player);
     this.music = new MusicCatalog(this.library, this.ui);
     this.ui.music = this.music;
-    this.cloud = new CloudSync(this.library,this.ui);this.ui.cloud=this.cloud;
     this.shortcuts = new ShortcutsManager(this.player, this.ui);
     this.player.onError = message => this.ui.showToast(message, "error");
     this.library.onAccessError = p => this.ui.showToast(`Нет доступа к папке «${p.name}». Нажмите «Добавить папку», чтобы восстановить доступ.`, "error");
@@ -47,16 +43,11 @@ class App {
       const restoreTask=window.AndroidBridge?this.music.restore():null;
       this.player.loadSavedPreferences();
       this.ui.init();
-      updateProfileAvatar(this.cloud.status);
-      this.audioPreparation=installAudioPreparation(this);
-      this.ui.audioPreparation=this.audioPreparation;
-      this.connect=new ConnectController(this.cloud,this.player,this.ui);this.ui.connect=this.connect;this.connect.init().catch(console.warn);
+      updateProfileAvatar();
       installVisualExperience(this.ui);
       installInterfaceV2(this.ui);
       installInterfaceRefresh(this.ui);
       this.albumArt=installAlbumArtGenerator(this.ui);
-      // A slow cloud connection must never delay restoring local playback.
-      this.cloud.init().catch(error=>{this.cloud.error=error.message;this.cloud.changed?.();});
       if(!window.AndroidBridge)this.music.restore();
       if (window.AndroidBridge?.getPlaybackState) {
         let relocated = false;

@@ -68,8 +68,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         instance = this;
-        CloudPush.schedule(this);
-        PreparedAudio.recoverLater(this);
+        RetiredFeatures.disable(this);
 
         updater = new AppUpdater(this);
         webView = new WebView(this);
@@ -252,10 +251,8 @@ public class MainActivity extends AppCompatActivity {
         }
         @JavascriptInterface public void clearSelectedFiles() { getSharedPreferences("playerium", MODE_PRIVATE).edit().remove("selected_music_files").apply(); }
         @JavascriptInterface public String getPlaybackState() { return MediaNotificationService.currentState(); }
-        @JavascriptInterface public String getCachedLoudness(String uri) { try { org.json.JSONObject cached=MusicEngine.get(MainActivity.this).cachedLoudness(Uri.parse(uri));return cached==null?"null":cached.toString(); }catch(Exception ignored){return "null";} }
         @JavascriptInterface public void storePlaybackArtwork(String id,String base64) { PlaybackArtwork.storeAsync(MainActivity.this,id,base64); }
         @JavascriptInterface public void musicRequest(String id,String operation,String payload) { MusicEngine.get(MainActivity.this).request(id,operation,payload); }
-        @JavascriptInterface public void cloudRequest(String id,String operation,String payload) { GoogleCloud.get(MainActivity.this).request(id,operation,payload); }
         @JavascriptInterface public void cancelMusic(String id) { MusicEngine.get(MainActivity.this).cancel(id); }
 
         @JavascriptInterface
@@ -315,9 +312,6 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onPause() { foreground = false; super.onPause(); }
     void sendMusicResponse(JSONObject response) {
         runOnUiThread(()->{if(webView!=null)webView.evaluateJavascript("window.onMusicResponse && window.onMusicResponse("+response+");",null);});
-    }
-    void sendCloudResponse(JSONObject response) {
-        runOnUiThread(()->{if(webView!=null)webView.evaluateJavascript("window.onCloudResponse && window.onCloudResponse("+response+");",null);});
     }
 
     public void sendUpdateState(final JSONObject state) {
@@ -455,7 +449,6 @@ public class MainActivity extends AppCompatActivity {
             sendVoiceSearchResult(matches == null || matches.isEmpty() ? "" : matches.get(0), "");
             return;
         }
-        if(requestCode==GoogleCloud.AUTH_REQUEST){GoogleCloud.get(this).authorizationResult(resultCode==RESULT_OK?data:null);return;}
         if (requestCode == FILECHOOSER_RESULTCODE) {
             if (uploadMessage == null) return;
             if(uploadImages){uploadMessage.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode,data));uploadMessage=null;uploadImages=false;return;}

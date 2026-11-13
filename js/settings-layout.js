@@ -3,9 +3,8 @@ export function organizeSettings(container,{mobile=false}={}){
  container.classList.add('settings-redesigned');
  const content=document.createElement('div');content.className='settings-content';
  const groups=[
-  ['settings-account','Аккаунт',container.querySelector('.account-settings')],
+  ['settings-account','Профиль',container.querySelector('.account-settings')],
   ['settings-appearance','Оформление',container.querySelector('.theme-picker')?.closest('.settings-section')],
-  ['settings-sound','Звук',container.querySelector('.normalization-settings')],
   ['settings-files','Файлы',container.querySelector('#settingsFolderList')?.closest('.settings-section')],
   ['settings-updates','Обновления',container.querySelector('#btnCheckUpdatesManual')?.closest('.settings-section')],
   ['settings-shortcuts','Горячие клавиши',container.querySelector('.shortcuts-grid')?.closest('.settings-section')]

@@ -72,7 +72,7 @@ test('import, playback and restart preserve files, likes and covers and ignore L
   await page.waitForFunction(() => window.playerApp.player.isPlaying);
   await expect(page.locator('.track-mini-thumb img').first()).toBeVisible();
   await page.getByRole('button',{name:'Настройки',exact:true}).click();
-  await expect(page.locator('#settingsEqToggle,#btnMobileFsEq')).toHaveCount(0);await expect(page.locator('[data-normalization-check]')).toBeVisible();
+  await expect(page.locator('#settingsEqToggle,#btnMobileFsEq')).toHaveCount(0);await expect(page.locator('[data-normalization-check]')).toHaveCount(0);
   await expect(page.locator('#settingsEqToggle')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -109,7 +109,7 @@ test('mobile controls open player and queue after import; equalizer is absent',a
   await page.locator('#btnCloseRightPanel').click();
   await page.locator('#mobileMiniTitle').click();
   await expect(page.locator('#btnMobileFsEq')).toHaveCount(0);await page.locator('#btnMobileFsClose').click();await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings'}));
-  await expect(page.locator('#settingsEqToggle,#btnMobileFsEq')).toHaveCount(0);await expect(page.locator('[data-normalization-check]')).toBeVisible();
+  await expect(page.locator('#settingsEqToggle,#btnMobileFsEq')).toHaveCount(0);await expect(page.locator('[data-normalization-check]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 test('home shelves, library filters and navigation expose the imported collection',async({page})=>{

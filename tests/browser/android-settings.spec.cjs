@@ -8,7 +8,7 @@ test('Android native playback opens settings repeatedly without restoring a save
  await page.evaluate(()=>{const a=window.playerApp;a.player.initWebAudio();a.ui.navigateTo({type:'settings'});});
  await expect(page.locator('.settings-container h1')).toHaveText('Настройки');
  await expect(page.locator('.eq-slider-vertical,#settingsEqToggle,#settingsEqPreset')).toHaveCount(0);
- await expect(page.locator('[data-normalization-check]')).toBeVisible();
+ await expect(page.locator('[data-normalization-check]')).toHaveCount(0);
  await page.evaluate(()=>{window.playerApp.ui.navigateTo({type:'home'});window.playerApp.ui.navigateTo({type:'settings'});});
  await expect(page.getByRole('dialog',{name:'Настройки',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>window.equalizerCalls)).toEqual([]);

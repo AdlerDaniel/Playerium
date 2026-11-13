@@ -199,9 +199,9 @@ test('native playback sends URI queue without reading audio into JavaScript',asy
 
 test('desktop playback never waits for analysis or applies obsolete cached attenuation',async()=>{
  let calls=0;window.electronAPI={getAudioSource:async file=>'music://'+file,getLoudness:()=>{calls++;return new Promise(()=>{});},getCachedLoudness:()=>{calls++;return new Promise(()=>{});}};
- const p=await player(),a={id:'a',filePath:'a.mp3',normalizationGain:.05};a.normalizationKey=p.loudnessKey(a);
+ const p=await player(),a={id:'a',filePath:'a.mp3',normalizationGain:.05};a.normalizationKey='legacy-cache-key';
  await Promise.race([p.playTrack(a,0,[a]),new Promise((_,reject)=>setTimeout(()=>reject(Error('Playback waited for analysis')),200))]);
- assert.equal(calls,0);assert.equal(p.isPlaying,true);assert.equal(p.normalizationGain,1);
+ assert.equal(calls,0);assert.equal(p.isPlaying,true);assert.equal(p.normalizationGain,undefined);
 });
 test('Android playlist playback bypasses even unresolved analysis and old cached gains',async()=>{
  const messages=[];let calls=0;window.AndroidBridge={setPlaybackQueue:s=>messages.push(JSON.parse(s)),setEqualizer:()=>{},getCachedLoudness:()=>{calls++;return null;}};

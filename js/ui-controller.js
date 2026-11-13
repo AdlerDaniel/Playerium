@@ -455,7 +455,7 @@ export class UIController {
     this.player.onRepeatChange(this.player.repeatMode);
     this.player.onPlayStateChange(this.player.isPlaying);
     this.library.onLibraryChanged = () => {
-      this.queueLibraryRefresh({skipSettings:!!this.cloud?.applying});
+      this.queueLibraryRefresh();
       clearTimeout(this.coverRepairTimer);
       this.coverRepairTimer=setTimeout(()=>this.music?.repairCovers().catch(console.warn),1500);
     };
@@ -524,10 +524,6 @@ export class UIController {
     const stable=['home','allTracks','library','playlist','liked'].includes(this.currentView?.type);
     const signature=stable?viewFingerprint(this):null;
     if(stable&&this.viewSignature===signature&&document.getElementById('mainViewContent').childElementCount){
-      const container=document.getElementById('mainViewContent');
-      const loading=container.querySelector('[data-cloud-loading]');
-      if(this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total){if(!loading){const rows=loadingRows(3);rows.dataset.cloudLoading='true';container.append(rows);}}
-      else loading?.remove();
       syncPlaybackControls(this.player);return;
     }
     this.loadView(this.currentView, true);
@@ -584,7 +580,6 @@ export class UIController {
     }}catch(error){console.error('View render failed',error);container.replaceChildren();const panel=document.createElement('section');panel.className='search-empty';const title=document.createElement('h2');title.textContent='Не удалось открыть страницу';const retry=document.createElement('button');retry.textContent='Повторить';retry.onclick=()=>this.refreshCurrentView();panel.append(title,retry);container.append(panel);}
 
     if(['home','allTracks','library','playlist','liked'].includes(view.type)&&this.library.importing)container.append(loadingRows(3));
-    else if(['home','allTracks','library','playlist','liked'].includes(view.type)&&this.cloud?.busy&&this.cloud.progress?.done<this.cloud.progress?.total){const loading=loadingRows(3);loading.dataset.cloudLoading='true';container.append(loading);}
     if (focusedSearch) {
       const input = container.querySelector(".mobile-search-input");
       input?.focus(); if (input && caret !== null) input.setSelectionRange(caret, caret);

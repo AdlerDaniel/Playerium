@@ -12,20 +12,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   unwatchFolder: path => ipcRenderer.invoke('folder:unwatch', path),
   getAudioSource: path => ipcRenderer.invoke('file:source', path),
   getMetadata: path => ipcRenderer.invoke('file:metadata', path),
-  getLoudness: path => ipcRenderer.invoke('file:loudness', path),
-  prepareAudio: path => ipcRenderer.invoke('file:prepareAudio', path),
-  audioPreparationStatus: paths => ipcRenderer.invoke('file:preparationStatus', paths),
-  getCachedLoudness: path => ipcRenderer.invoke('file:loudnessCached', path),
   musicRequest: async (operation,payload,id) => {
     const result=await ipcRenderer.invoke('music:request',operation,payload,id);
     if(!result.ok)throw Error(result.error);
     return result.data;
   },
   cancelMusic: id => ipcRenderer.invoke('music:cancel',id),
-  cloudRequest: async (operation,payload) => {
-    const result=await ipcRenderer.invoke('cloud:request',operation,payload);
-    if(!result.ok)throw Error(result.error);return result.data;
-  },
   onMusicProgress: callback => {
     const listener=(_event,state)=>callback(state);ipcRenderer.on('music:progress',listener);
     return ()=>ipcRenderer.removeListener('music:progress',listener);

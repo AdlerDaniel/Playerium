@@ -73,7 +73,6 @@ export class MusicCatalog {
     window.electronAPI?.onMusicProgress?.(state=>this.progress(state));
     window.onMusicProgress=state=>this.progress(state);
     library.ensureTrack=track=>this.ensureTrack(track);
-    library.getLoudness=track=>this.request('loudness',{uri:track.nativeUri});
     installCoverRepair(this,catalogTracks);
   }
   get available(){return !!(window.electronAPI?.musicRequest || window.AndroidBridge?.musicRequest || window.playeriumPreviewMusic?.request);}
@@ -186,7 +185,6 @@ export class MusicCatalog {
       if(!saved)throw lastError||discoveryError||Error('Не удалось найти доступную полную запись.');
       const added=await this.library.addDownloaded(saved,track);
       await this.repairCover(added).catch(()=>{});
-       try{await this.ui.player?.measureLoudness?.(added);}catch{}
       this.cache.clear();this.ui.renderSidebar();return added;
     })();
     this.downloads.set(track.id,task);this.progress({id:track.id});

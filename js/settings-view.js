@@ -2,8 +2,6 @@ import {renderProfileSettings} from './profile-avatar.js';
 import {renderThemePicker} from './theme-picker.js';
 import {organizeSettings} from './settings-layout.js';
 import {THEMES,applyTheme,currentTheme} from './themes.js';
-import {renderCloudSettings} from './cloud-settings.js';
-import {renderNormalizationSettings} from './normalization-settings.js';
 export function renderSettingsView(container) {
     const settingsDiv = document.createElement("div");
     settingsDiv.className = "settings-container";
@@ -110,11 +108,9 @@ export function renderSettingsView(container) {
     `;
 
     container.replaceChildren(settingsDiv);
-    renderCloudSettings(this,settingsDiv);
-    renderNormalizationSettings(this,settingsDiv);
     renderThemePicker(settingsDiv.querySelector('.theme-settings-picker'));
-    organizeSettings(settingsDiv,{mobile:this.isMobile});
     renderProfileSettings(this,settingsDiv);
+    organizeSettings(settingsDiv,{mobile:this.isMobile});
 
     // Bind update settings
     const repoInput = document.getElementById("inputSettingsGithubRepo");

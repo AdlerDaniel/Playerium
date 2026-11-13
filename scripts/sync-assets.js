@@ -2,7 +2,28 @@ const fs = require('node:fs');
 const {transformSync} = require('esbuild');
 const target = 'android/app/src/main/assets';
 fs.mkdirSync(target, { recursive: true });
-for (const removed of ['js/lyrics.js', 'css/lyrics.css', 'js/equalizer.js', 'js/native-equalizer.js']) fs.rmSync(`${target}/${removed}`, { force: true });
+const retiredAssets = [
+  "js/lyrics.js",
+  "css/lyrics.css",
+  "js/equalizer.js",
+  "js/native-equalizer.js",
+  "js/cloud-model.js",
+  "js/cloud-settings.js",
+  "js/cloud-sync.js",
+  "js/connect-controller.js",
+  "js/connect-rtc.js",
+  "js/realtime-config.js",
+  "js/realtime-sync.js",
+  "js/audio-preparation.js",
+  "js/normalization-settings.js",
+  "js/loudness.js",
+  "js/loudness-worker.js",
+  "js/vendor/realtime.js",
+  "js/vendor/realtime.LICENSE.txt",
+  "css/cloud.css",
+  "css/connect.css",
+];
+for (const removed of retiredAssets) fs.rmSync(`${target}/${removed}`, { force: true });
 for (const file of ['index.html','migration.html','app-branding.js','js','css','assets']) fs.cpSync(file, `${target}/${file}`, { recursive: true });
 fs.rmSync(`${target}/assets/icon-master.png`,{force:true});
 fs.copyFileSync('MUSIC-NOTICES.md',`${target}/MUSIC-NOTICES.md`);

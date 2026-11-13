@@ -17,10 +17,6 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.DefaultRenderersFactory;
-import androidx.media3.exoplayer.audio.AudioSink;
-import androidx.media3.exoplayer.audio.DefaultAudioSink;
-import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 import androidx.media3.session.CommandButton;
@@ -57,8 +53,6 @@ public class MediaNotificationService extends MediaSessionService {
     private MediaSession session;
     private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private final java.util.Set<String> artworkLoading=new java.util.HashSet<>();
-    private final java.util.concurrent.ExecutorService connectWorker=java.util.concurrent.Executors.newSingleThreadExecutor(),connectCloudWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
-    private boolean connecting;
     static void artworkChanged(String id){
         MediaNotificationService service=instance;
         if(service!=null)service.handler.post(()->service.applyArtwork(id));
@@ -87,7 +81,6 @@ public class MediaNotificationService extends MediaSessionService {
             stateSnapshot = data.toString();
             if (activity != null && activity.isForeground()) activity.sendPlayerState(data);
             if (SystemClock.elapsedRealtime()-lastSaved>5000) savePlayback();
-            pollConnect(data);
             error = null;
             handler.postDelayed(this, 500);
         }
@@ -98,7 +91,7 @@ public class MediaNotificationService extends MediaSessionService {
         instance=this;
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
 
-        androidx.media3.datasource.DataSource.Factory source=()->new OriginalAudioDataSource(this,new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource());
+        androidx.media3.datasource.DataSource.Factory source=()->new LocalAudioDataSource(this,new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource());
         androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(5000,20000,150,300).setPrioritizeTimeOverSizeThresholds(true).build();
         player = new ExoPlayer.Builder(this).setLoadControl(loadControl).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
         player.addAnalyticsListener(new androidx.media3.exoplayer.analytics.AnalyticsListener(){
@@ -179,7 +172,7 @@ public class MediaNotificationService extends MediaSessionService {
         for (int i = 0; i < tracks.length(); i++) {
             JSONObject t = tracks.getJSONObject(i);
             Uri uri = Uri.parse(t.getString("uri"));
-            android.os.Bundle extras=new android.os.Bundle();extras.putDouble("normalizationGain",t.optDouble("normalizationGain",1));extras.putString("cloudKey",t.optString("cloudKey"));extras.putString("queueOrigin","manual".equals(t.optString("queueOrigin"))?"manual":"collection");extras.putString("queueEntry",t.optString("queueEntry").substring(0,Math.min(160,t.optString("queueEntry").length())));
+            android.os.Bundle extras=new android.os.Bundle();extras.putString("queueOrigin","manual".equals(t.optString("queueOrigin"))?"manual":"collection");extras.putString("queueEntry",t.optString("queueEntry").substring(0,Math.min(160,t.optString("queueEntry").length())));
             MediaMetadata metadata = PlaybackArtwork.metadata(this,t.getString("id"),new MediaMetadata.Builder().setTitle(t.optString("title"))
                 .setArtist(t.optString("artist")).setExtras(extras),i==selectedIndex).build();
             items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
@@ -196,7 +189,7 @@ public class MediaNotificationService extends MediaSessionService {
             && items.get(index).mediaId.equals(currentId)
             && java.util.Objects.equals(items.get(index).localConfiguration, current.localConfiguration);
         boolean sameQueue=items.size()==player.getMediaItemCount();
-        for(int i=0;sameQueue&&i<items.size();i++){MediaItem before=player.getMediaItemAt(i),after=items.get(i);sameQueue=before.mediaId.equals(after.mediaId)&&java.util.Objects.equals(before.localConfiguration,after.localConfiguration)&&java.util.Objects.equals(before.mediaMetadata.title,after.mediaMetadata.title)&&java.util.Objects.equals(before.mediaMetadata.artist,after.mediaMetadata.artist)&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("cloudKey",""),after.mediaMetadata.extras.getString("cloudKey",""))&&java.util.Objects.equals(before.mediaMetadata.extras==null?"collection":before.mediaMetadata.extras.getString("queueOrigin","collection"),after.mediaMetadata.extras.getString("queueOrigin","collection"))&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("queueEntry",""),after.mediaMetadata.extras.getString("queueEntry",""));}
+        for(int i=0;sameQueue&&i<items.size();i++){MediaItem before=player.getMediaItemAt(i),after=items.get(i);sameQueue=before.mediaId.equals(after.mediaId)&&java.util.Objects.equals(before.localConfiguration,after.localConfiguration)&&java.util.Objects.equals(before.mediaMetadata.title,after.mediaMetadata.title)&&java.util.Objects.equals(before.mediaMetadata.artist,after.mediaMetadata.artist)&&java.util.Objects.equals(before.mediaMetadata.extras==null?"collection":before.mediaMetadata.extras.getString("queueOrigin","collection"),after.mediaMetadata.extras.getString("queueOrigin","collection"))&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("queueEntry",""),after.mediaMetadata.extras.getString("queueEntry",""));}
         if(sameQueue){
             // A song selection in the existing queue reuses prepared media sources.
             if(data.optBoolean("reset")||index!=player.getCurrentMediaItemIndex()||data.has("position"))
@@ -285,7 +278,7 @@ public class MediaNotificationService extends MediaSessionService {
                 MediaItem item=player.getMediaItemAt(i);if(item.localConfiguration==null)continue;
                 tracks.put(new JSONObject().put("id",item.mediaId).put("uri",item.localConfiguration.uri.toString())
                     .put("title",String.valueOf(item.mediaMetadata.title==null?"":item.mediaMetadata.title))
-                    .put("artist",String.valueOf(item.mediaMetadata.artist==null?"":item.mediaMetadata.artist)).put("cloudKey",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("cloudKey","")).put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection")).put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""))
+                    .put("artist",String.valueOf(item.mediaMetadata.artist==null?"":item.mediaMetadata.artist)).put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection")).put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""))
                     );
             }
             JSONObject data=new JSONObject().put("tracks",tracks).put("index",player.getCurrentMediaItemIndex())
@@ -298,47 +291,6 @@ public class MediaNotificationService extends MediaSessionService {
 
     static long retainedPosition(boolean reset,String currentId,String nextId,long position) {
         return !reset&&!currentId.isEmpty()&&currentId.equals(nextId)?Math.max(0,position):0;
-    }
-
-    private long lastConnect;private boolean cloudConnecting;
-    private void pollConnect(JSONObject snapshot){
-        MainActivity activity=MainActivity.getInstance();if(activity!=null&&activity.isForeground())return;
-        GoogleCloud cloud=GoogleCloud.get(this);if(!cloud.prefs.getBoolean("enabled",false))return;
-        GoogleConnect connect=cloud.connect;JSONObject local=connect.local();if(local==null||local.optString("id").isEmpty())return;
-        try{
-            String device=local.getString("id");JSONArray saved=snapshot.optJSONArray("tracks"),keys=new JSONArray();JSONObject track=null;int index=snapshot.optInt("index");
-            // ExoPlayer keeps physical entries in import order. Publish its actual
-            // permutation so an idle controller sees the same next song as Android.
-            JSONArray order=snapshot.optJSONArray("playbackOrder");
-            int count=saved==null?0:saved.length(),currentPosition=index;
-            if(order!=null&&order.length()==count)for(int at=0;at<count;at++)if(order.optInt(at,-1)==index){currentPosition=at;break;}
-            int start=Math.max(0,Math.min(currentPosition-100,count-200));
-            for(int at=start;at<Math.min(count,start+200);at++){int i=order!=null&&order.length()==count?order.optInt(at,-1):at;if(i<0||i>=count)continue;JSONObject item=saved.getJSONObject(i);String key=item.optString("cloudKey");if(!key.isEmpty())keys.put(key);if(i==index)track=new JSONObject().put("key",key).put("title",item.optString("title")).put("artist",item.optString("artist"));}
-            JSONObject state=new JSONObject().put("queue",keys).put("track",track).put("playing",snapshot.optBoolean("playing")).put("position",snapshot.optDouble("position")/1000).put("duration",snapshot.optDouble("duration")/1000).put("volume",snapshot.optDouble("volume",.8)).put("shuffle",snapshot.optBoolean("shuffle")).put("repeat",new String[]{"off","one","all"}[Math.max(0,Math.min(2,snapshot.optInt("repeat")))]);
-            local.put("state",state).put("seenAt",System.currentTimeMillis()).put("ack",connect.ack(device)).put("ackHistory",connect.ackHistory(device));
-            connect.live.publish(local);
-            JSONObject message=connect.live.take(device);
-            if(message!=null&&!connecting){connecting=true;connectWorker.submit(()->{try{applyConnectCommand(message,snapshot,connect);}catch(Exception ignored){}finally{handler.post(()->connecting=false);}});}
-            long interval=connect.live.devices().length()>0?15000:3000;
-            if(!cloudConnecting&&SystemClock.elapsedRealtime()-lastConnect>interval){cloudConnecting=true;lastConnect=SystemClock.elapsedRealtime();connectCloudWorker.submit(()->{try{connect.live.start();connect.write("device",device,new JSONObject(local.toString()).put("lan",connect.live.descriptor()));JSONObject incoming=connect.command(device);if(incoming!=null)connect.live.enqueue(incoming);}catch(Exception ignored){}finally{handler.post(()->cloudConnecting=false);}});}
-        }catch(Exception ignored){}
-    }
-    private void applyConnectCommand(JSONObject message,JSONObject snapshot,GoogleConnect connect)throws Exception{
-        String device=connect.local().getString("id");if(connect.wasAcknowledged(device,message.getString("id")))return;
-        GoogleCloud cloud=GoogleCloud.get(this);JSONArray saved=snapshot.optJSONArray("tracks");
-        JSONObject queue=null;
-                if("transfer".equals(message.optString("action"))){JSONObject incoming=message.getJSONObject("state");String key=incoming.getJSONObject("track").getString("key");
-                    JSONArray supplied=message.optJSONArray("media");if(supplied==null)throw new java.io.IOException("Очередь треков не передана.");JSONArray tracks=new JSONArray();int selected=-1;
-                    for(int i=0;i<Math.min(supplied.length(),200);i++){JSONObject entry=supplied.getJSONObject(i),file=cloud.localCopy(entry.getString("key"),entry.getJSONObject("track"));if(file==null)file=cloud.download(entry.getString("key"),entry.getJSONObject("track"));String id="remote_"+entry.getString("key");if(saved!=null)for(int j=0;j<saved.length();j++)if(file.getString("uri").equals(saved.getJSONObject(j).optString("uri"))){id=saved.getJSONObject(j).optString("id",id);break;}if(entry.getString("key").equals(key)){selected=tracks.length();if(file.has("coverBase64"))PlaybackArtwork.saveBase64(this,id,file.getString("coverBase64"));else if(PlaybackArtwork.find(this,id)==null&&entry.getJSONObject("track").has("coverId"))try{byte[] cover=cloud.media(entry.getJSONObject("track").getString("coverId"),4*1024*1024);PlaybackArtwork.save(this,id,cover);}catch(Exception ignored){}}
-                        tracks.put(new JSONObject().put("id",id).put("uri",file.getString("uri")).put("title",entry.getJSONObject("track").optString("title")).put("artist",entry.getJSONObject("track").optString("artist")).put("cloudKey",entry.getString("key")));}
-                    if(selected<0)throw new java.io.IOException("Песня не найдена.");queue=new JSONObject().put("tracks",tracks).put("index",selected).put("position",Math.max(0,incoming.optDouble("position"))*1000).put("play",incoming.optBoolean("playing")).put("volume",incoming.optDouble("volume",.8)).put("repeat",incoming.optString("repeat","off")).put("shuffle",incoming.optBoolean("shuffle")).put("reset",true);
-                }
-                if(System.currentTimeMillis()-message.optLong("issuedAt")>25000)throw new java.io.IOException("Команда устарела.");
-                final JSONObject prepared=queue;java.util.concurrent.CountDownLatch applied=new java.util.concurrent.CountDownLatch(1);final Exception[] failure=new Exception[1];
-                handler.post(()->{try{if(prepared!=null)setQueue(prepared);else{String action=message.optString("action");double value=message.optDouble("value");if("seek".equals(action))value*=1000;if("shuffle".equals(action))value=message.optBoolean("value")?1:0;if("repeat".equals(action))value="one".equals(message.optString("value"))?1:"all".equals(message.optString("value"))?2:0;if(java.util.Arrays.asList("play","pause","next","previous","seek","volume","shuffle","repeat").contains(action))command(action,value);else throw new java.io.IOException("Неизвестная команда.");}}catch(Exception e){failure[0]=e;}finally{applied.countDown();}});
-                if(!applied.await(15,java.util.concurrent.TimeUnit.SECONDS))throw new java.io.IOException("Команда не выполнена.");if(failure[0]!=null)throw failure[0];
-                if(prepared!=null&&prepared.optBoolean("play")){long readyUntil=SystemClock.elapsedRealtime()+5000;boolean ready=false;while(SystemClock.elapsedRealtime()<readyUntil){JSONObject current=new JSONObject(stateSnapshot);if(current.optBoolean("playing")&&current.optString("id").equals(prepared.getJSONArray("tracks").getJSONObject(prepared.getInt("index")).getString("id"))){ready=true;break;}Thread.sleep(100);}if(!ready)throw new java.io.IOException("Песня не запустилась.");}
-                connect.acknowledge(device,message.getString("id"));
     }
 
     private void freshShuffle(){
@@ -391,7 +343,7 @@ public class MediaNotificationService extends MediaSessionService {
                 track.put("uri", item.localConfiguration == null ? "" : item.localConfiguration.uri.toString());
                 track.put("title", item.mediaMetadata.title == null ? "" : item.mediaMetadata.title.toString());
                 track.put("artist", item.mediaMetadata.artist == null ? "" : item.mediaMetadata.artist.toString());
-                String cloudKey=item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("cloudKey","");if(cloudKey.isEmpty()&&item.localConfiguration!=null){String name=item.localConfiguration.uri.getLastPathSegment();if(name!=null&&name.matches("[a-f0-9]{64}\\.(mp3|flac|wav|m4a|aac|ogg|opus|wma)"))cloudKey=name.substring(0,64);}track.put("cloudKey",cloudKey);track.put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection"));track.put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""));
+                track.put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection"));track.put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""));
                 tracks.put(track);
             }
             data.put("queue", queue);
@@ -417,7 +369,7 @@ public class MediaNotificationService extends MediaSessionService {
     @Override public void onDestroy() {
         savePlayback();
         handler.removeCallbacksAndMessages(null);
-        artworkWorker.shutdownNow();connectWorker.shutdownNow();connectCloudWorker.shutdownNow();if(instance==this)instance=null;
+        artworkWorker.shutdownNow();if(instance==this)instance=null;
         session.release(); player.release(); stateSnapshot = "{}";
         super.onDestroy();
     }

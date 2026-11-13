@@ -65,16 +65,3 @@ test('repeated player updates retain the right cover, queue selection and contro
   });
   expect(result).toEqual({retainedCover:true,retainedIcon:true,selected:true,scroll:200,restored:true});
 });
-
-test('background sync retains loading indicators until completion and an empty saved device never throws',async({page})=>{
-  await library(page,false,183);
-  const result=await page.evaluate(()=>{
-    const a=window.playerApp;a.cloud.busy=true;a.cloud.progress={done:0,total:10};a.ui.refreshCurrentView();
-    const loading=document.querySelector('[data-cloud-loading]');
-    for(let i=0;i<5;i++){a.cloud.progress.done=i;a.ui.refreshCurrentView();}
-    const same=loading===document.querySelector('[data-cloud-loading]');a.cloud.busy=false;a.ui.refreshCurrentView();
-    a.connect.devices=[{id:'inactive',state:{playing:false}}];a.cloud.status={};a.connect.followRemote();
-    return {same,finished:!document.querySelector('[data-cloud-loading]')};
-  });
-  expect(result).toEqual({same:true,finished:true});
-});

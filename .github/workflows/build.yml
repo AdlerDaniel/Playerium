@@ -20,8 +20,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run realtime:build
-      - run: git diff --exit-code -- js/vendor/realtime.js js/vendor/realtime.LICENSE.txt
       - run: npm run android:assets
       - run: npm run check
       - run: npm test
@@ -46,11 +44,9 @@ jobs:
       - run: python scripts/generate_icons.py
       - run: npm ci
       - run: python scripts/prepare_music_runtime.py --windows
-      - run: node --test tests/prepared-audio.test.cjs
-      - name: Verify native Windows audio and local synchronization
-        run: node --test tests/live.test.cjs tests/desktop-cloud.test.cjs tests/audio-range.test.cjs tests/original-audio.test.cjs
+      - name: Verify native Windows audio and local library
+        run: node --test tests/audio-range.test.cjs tests/local-only.test.cjs
       - run: npm run test:desktop
-      - run: node tests/desktop/cloud-runtime.cjs
       - run: node tests/desktop/background.cjs
       - run: node tests/desktop/mini-player.cjs
       - run: node tests/desktop/update-window.cjs
@@ -136,7 +132,6 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: |
-            gradle -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.playerium.music.LoudnessTest,com.playerium.music.NormalizationDocumentTest,com.playerium.music.CloudStorageTest,com.playerium.music.CloudJournalTest,com.playerium.music.CloudPushTest,com.playerium.music.RealtimeSyncTest,com.playerium.music.ConnectTest --no-daemon
             gradle -p android connectedDebugAndroidTest --no-daemon
             adb pull /data/local/tmp/playerium-media-card.png android/app/build/outputs/androidTest-results/media-card-29.png
             adb pull /data/local/tmp/playerium-playlist-start.log android/app/build/outputs/androidTest-results/playlist-start-29.log

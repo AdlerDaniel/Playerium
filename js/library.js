@@ -1,6 +1,7 @@
 import {normalizeSearch} from './music-match.js';
 import { normalizeTrackTitle } from "./track-title.js";
 import {isInternalAudioFile} from './internal-audio-files.js';
+import {retireLibraryFeatures} from './local-library.js';
 /**
  * Spotify Local Player - Library & Database Layer
  * IndexedDB persistence for tracks, playlists, folders, and likes.
@@ -42,6 +43,7 @@ export class Library {
       }
       window.AndroidBridge.completeLegacyMigration();
     }
+    await retireLibraryFeatures(this);
     this.ensureDefaultPlaylists();
   }
 
@@ -217,12 +219,10 @@ export class Library {
   }
 
   async repairInternalImports(){
-    const sync=await this.getFromStore('settings','cloudSync');
-    const linked=new Set(Object.values(sync?.value||{}).flatMap(state=>Object.values(state.links||{}).map(link=>link.localId)));
     const directory=t=>String(t.sourceKey||t.filePath||'').replace(/\\/g,'/').split('/').slice(0,-1).join('/').toLocaleLowerCase();
     const text=value=>String(value||'').normalize('NFKC').toLocaleLowerCase().trim();
     for(const temp of [...this.tracks.values()]){
-      if(!isInternalAudioFile(temp.fileName||temp.sourceKey)||linked.has(temp.id)||temp.cloudKey)continue;
+      if(!isInternalAudioFile(temp.fileName||temp.sourceKey))continue;
       const matches=this.getTracks().filter(t=>directory(t)===directory(temp)&&t.fileSize>0&&t.fileSize===temp.fileSize&&Number.isFinite(t.lastModified)&&Math.abs(t.lastModified-temp.lastModified)<2&&text(t.title)===text(temp.title)&&text(t.artist)===text(temp.artist)&&Math.abs((t.duration||0)-(temp.duration||0))<.1);
       if(matches.length===1)await this.mergeDuplicateTracks(matches[0].id,temp.id);
     }
@@ -593,7 +593,6 @@ export class Library {
         if(previous&&(previous.fileSize!==track.fileSize||previous.lastModified!==track.lastModified)){
           // Keep the logical recording ID, but never certify edited bytes using an old measurement.
           for(const key of ['audioKey','normalization','normalizationStamp','normalizationGain','normalizationKey'])if(metadata[key]===undefined)delete track[key];
-          delete track.cloudSource;
         }
         track.title = normalizeTrackTitle(track.title);
      delete track.lyrics; delete track.lyricsModified;

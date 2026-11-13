@@ -53,6 +53,5 @@ export function renderRightQueue() {
   controls=document.createElement('div');controls.className='queue-controls';controls.innerHTML=`<button class="queue-shuffle" aria-pressed="${this.player.isShuffle}">${icons.shuffle}<span>Перемешать</span></button><button class="queue-repeat" aria-label="Повтор" data-repeat="${this.player.repeatMode}" aria-pressed="${this.player.repeatMode!=='off'}">${icons.repeat}<span>Повтор</span></button><button class="queue-remove-selected" hidden>Удалить выбранные</button>`;
   controls.querySelector('.queue-shuffle').onclick=()=>{this.player.toggleShuffle();this.renderRightQueue();};controls.querySelector('.queue-repeat').onclick=()=>{this.player.toggleRepeat();this.renderRightQueue();};
   controls.querySelector('.queue-remove-selected').onclick=()=>{this.player.removeUpcomingTracks([...selected]);};container.append(controls);
-  if(this.connect&&this.connect.selected!==this.connect.id){for(const control of container.querySelectorAll('.queue-select,.queue-item-remove,.queue-drag,.queue-origin-heading button,#btnClearQueueBtn'))control.disabled=true;const note=document.createElement('p');note.className='queue-remote-note';note.textContent='Для изменения состава очереди откройте её на устройстве воспроизведения.';container.append(note);}
   container.scrollTop=scrollTop;
 }

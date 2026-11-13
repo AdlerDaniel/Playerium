@@ -16,9 +16,8 @@ export class InterfaceV2{
     after(ui,'loadView',()=>this.enhance());after(ui,'openRightPanel',()=>this.saveSidebar());after(ui,'closeRightPanel',()=>this.saveSidebar());after(ui,'switchRightTab',()=>this.saveSidebar());
     for(const name of ['onTrackChange','onPlayStateChange','onQueueChange','onVolumeChange','onTimeUpdate']){const original=ui.player[name];ui.player[name]=(...args)=>{original?.(...args);if(name==='onTrackChange'){this.covers.cancel();this.tintPlaying(args[0]);}this.publishMini();};}
     const ensure=ui.music.ensureTrack.bind(ui.music);ui.trackDownloadErrors=new Map();ui.music.ensureTrack=async track=>{ui.trackDownloadErrors.delete(track.id);const task=ensure(track);refreshTrackStates(ui);try{return await task;}catch(error){ui.trackDownloadErrors.set(track.id,error.message);throw error;}finally{refreshTrackStates(ui);}};
-    after(ui.connect,'updateButtons',()=>{this.outputLabel();this.publishMini();});
     after(ui.experience,'openCinema',()=>this.cinema());
-    this.mobilePlayer();this.resizableSidebar();this.miniPlayer();this.enhance();this.tintPlaying(ui.player.currentTrack);ui.connect.updateButtons();this.outputLabel();
+    this.mobilePlayer();this.resizableSidebar();this.miniPlayer();this.enhance();this.tintPlaying(ui.player.currentTrack);
     if(this.sidebar.open&&!ui.isMobile)ui.openRightPanel(this.sidebar.tab==='queue'?'queue':'nowPlaying');
     this.timer=setInterval(()=>{if(!document.hidden)refreshTrackStates(ui);},1000);
   }
@@ -34,15 +33,14 @@ export class InterfaceV2{
     const ui=this.ui,mini=document.getElementById('mobileMiniPlayer'),full=document.getElementById('mobileFullscreenPlayer');
     const next=makeButton('Следующий трек',icons.next,e=>{e.stopPropagation();ui.player.next();});next.id='mobileMiniNext';next.className='mobile-mini-btn';mini.querySelector('.mobile-mini-actions').append(next);
 
-    const output=document.createElement('div');output.className='mobile-output-row';full.querySelector('.mobile-fs-controls').after(output);const devices=document.getElementById('btnMobilePlaybackDevices');if(devices)output.append(devices);output.append(document.getElementById('btnMobileFsQueue'));
+    const output=document.createElement('div');output.className='mobile-output-row';full.querySelector('.mobile-fs-controls').after(output);output.append(document.getElementById('btnMobileFsQueue'));
     bindSeekRange(ui,document.getElementById('mobileFsSlider'),value=>{document.getElementById('mobileFsTimeCurrent').textContent=ui.formatTime(value/100*ui.player.getDuration());});
     let active=full.classList.contains('active');new MutationObserver(()=>{const open=full.classList.contains('active');if(open===active)return;active=open;this.covers.move(document.getElementById(open?'mobileMiniCover':'mobileFsArtwork'),document.getElementById(open?'mobileFsArtwork':'mobileMiniCover'));}).observe(full,{attributes:true,attributeFilter:['class']});
   }
   cinema(){
-    const root=this.ui.experience.cinema;if(!root)return;bindSeekRange(this.ui,root.querySelector('.cinema-seek'));const controls=root.querySelector('.cinema-controls'),device=controls.children[3];if(device){device.classList.add('playback-device-button');const row=document.createElement('div');row.className='cinema-device-row';root.querySelector('.cinema-upcoming').before(row);row.append(device);this.ui.connect.updateButtons();}
+    const root=this.ui.experience.cinema;if(!root)return;bindSeekRange(this.ui,root.querySelector('.cinema-seek'));
     this.covers.move(document.getElementById(this.ui.isMobile?'mobileFsArtwork':'nowPlayingCover'),root.querySelector('.cinema-art'));
   }
-  outputLabel(){const connect=this.ui.connect,remote=connect.selected!==connect.id,name=remote?connect.remote?.name||'Другое устройство':window.AndroidBridge?'Этот телефон':'Этот компьютер';for(const host of document.querySelectorAll('.mini-output-label')){host.textContent=name;host.classList.toggle('remote-active',remote);}}
   saveSidebar(){const ui=this.ui;this.sidebar={...this.sidebar,open:ui.isRightPanelOpen,tab:ui.activeRightTab};try{localStorage.setItem('playerium_interface_sidebar',JSON.stringify(this.sidebar));}catch{}}
   resizableSidebar(){
     const panel=document.getElementById('rightPanel'),grip=document.createElement('div');grip.className='right-panel-resize';grip.tabIndex=0;grip.setAttribute('role','separator');grip.setAttribute('aria-label','Ширина боковой панели');grip.setAttribute('aria-orientation','vertical');panel.prepend(grip);
@@ -62,9 +60,9 @@ export class InterfaceV2{
     new MutationObserver(()=>{this.miniTheme=null;this.publishMini(true);}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
   }
   async publishMini(force=false){
-    const api=window.electronAPI;if(!this.miniActive||!api?.publishMiniState||!force&&Date.now()-this.lastMiniAt<250)return;this.lastMiniAt=Date.now();const ui=this.ui,p=ui.player,track=p.currentTrack,remote=ui.connect.selected!==ui.connect.id;
+    const api=window.electronAPI;if(!this.miniActive||!api?.publishMiniState||!force&&Date.now()-this.lastMiniAt<250)return;this.lastMiniAt=Date.now();const ui=this.ui,p=ui.player,track=p.currentTrack;
     if(!this.miniTheme){const styles=getComputedStyle(document.documentElement);this.miniTheme=Object.fromEntries(Object.entries({background:'--sp-dark-900',foreground:'--sp-text-primary',muted:'--sp-text-secondary',accent:'--sp-green',control:'--sp-dark-700',onAccent:'--sp-on-accent'}).map(([key,token])=>[key,styles.getPropertyValue(token).trim()]));}
-    const state={appName:document.title,title:track?.title,artist:track?.artist,playing:p.isPlaying,position:p.getCurrentTime(),duration:p.getDuration(),volume:p.volume,device:remote?ui.connect.remote?.name:window.AndroidBridge?'Этот телефон':'Этот компьютер',remote,theme:this.miniTheme,queue:p.getUpcomingQueue().slice(0,6).map(({track:t})=>({title:t.title,artist:t.artist}))};
+    const state={appName:document.title,title:track?.title,artist:track?.artist,playing:p.isPlaying,position:p.getCurrentTime(),duration:p.getDuration(),volume:p.volume,theme:this.miniTheme,queue:p.getUpcomingQueue().slice(0,6).map(({track:t})=>({title:t.title,artist:t.artist}))};
     const key=track?.pictureBlob||track?.pictureUrl||null;if(key!==this.miniArtKey){this.miniArtKey=key;state.artwork='';if(track?.pictureBlob&&/image\/(jpeg|png|webp)/.test(track.pictureBlob.type)){const reader=new FileReader();reader.onload=()=>{if(this.miniArtKey===key)api.publishMiniState({artwork:reader.result}).catch(()=>{});};reader.readAsDataURL(track.pictureBlob);}else if(/^(https:\/\/|data:image\/(jpeg|png|webp);base64,)/.test(track?.pictureUrl||''))state.artwork=track.pictureUrl;}
     try{await api.publishMiniState(state);}catch{/* Mini window closure must never affect the audio session. */}
   }

@@ -13,7 +13,7 @@ export function attachTrackSelection(ui,table,tracks,playlist){
   const entry=document.createElement('button');entry.type='button';entry.className='selection-entry';entry.textContent='#';entry.title='Выделить все треки';entry.setAttribute('aria-label','Выделить все треки');table.querySelector('.th-num')?.replaceChildren(entry);
   const sync=()=>{const list=chosen();bar.hidden=!list.length;table.classList.toggle('selecting',!!list.length);bar.querySelector('.selection-count').textContent=`Выбрано: ${list.length}`;
     for(const row of table.querySelectorAll('.track-row')){const selected=state.ids.has(row.dataset.trackId);row.classList.toggle('track-selected',selected);row.setAttribute('aria-selected',String(selected));const box=row.querySelector('.track-select');if(box)box.checked=selected;}
-    const remote=ui.connect&&ui.connect.selected!==ui.connect.id;bar.querySelector('.selection-queue').disabled=!!remote;bar.querySelector('.selection-remove').disabled=!playlist&&!list.some(track=>!track.catalog);
+    bar.querySelector('.selection-queue').disabled=false;bar.querySelector('.selection-remove').disabled=!playlist&&!list.some(track=>!track.catalog);
   };
   const select=(track,{range=false,toggle=false}={})=>{
     if(range&&state.anchor){const a=tracks.findIndex(t=>t.id===state.anchor),b=tracks.indexOf(track);if(a>=0&&b>=0)for(const t of tracks.slice(Math.min(a,b),Math.max(a,b)+1))state.ids.add(t.id);}

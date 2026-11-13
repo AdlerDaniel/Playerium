@@ -3,7 +3,6 @@
  * Coordinates HTML5 Audio, Web Audio API, Queuing, Shuffle, and Repeat.
  */
 
-import {browserLoudness} from './loudness.js';
 
 export class AudioPlayer {
   constructor(library) {
@@ -23,10 +22,6 @@ export class AudioPlayer {
     this.audioCtx = null;
     this.sourceNode = null;
     this.gainNode = null;
-    this.normalizationNode = null;
-    this.normalizationGain = 1;
-    this.browserLoudnessCache=new Map();
-    this.loudnessPending=new Map();
     this.nativeArtworkSent=new Map();
     this.isWebAudioInitialized = false;
 
@@ -70,15 +65,8 @@ export class AudioPlayer {
 
       this.audio.volume = 1;
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
-      this.normalizationNode=this.audioCtx.createGain();
-      this.normalizationNode.gain.value=this.normalizationGain;
-      const limiter=this.audioCtx.createDynamicsCompressor();
-      limiter.threshold.value=-1;limiter.knee.value=0;limiter.ratio.value=20;limiter.attack.value=.003;limiter.release.value=.15;
-
-      // Graph: source -> constant normalization -> volume -> peak protection.
-      this.sourceNode.connect(this.normalizationNode);
-      this.normalizationNode.connect(this.gainNode);
-      this.gainNode.connect(limiter);limiter.connect(this.audioCtx.destination);
+      this.sourceNode.connect(this.gainNode);
+      this.gainNode.connect(this.audioCtx.destination);
 
       this.isWebAudioInitialized = true;
     } catch (e) {
@@ -214,13 +202,9 @@ export class AudioPlayer {
     if (newQueue) this.playbackContext = context ? { ...context } : null;
 
     this.currentTrack = track;
-    this.normalizationGain=1;
-    if(this.normalizationNode){this.normalizationNode.gain.cancelScheduledValues(this.audioCtx.currentTime);this.normalizationNode.gain.setValueAtTime(1,this.audioCtx.currentTime);}
 
     this.nativePlayback = !!(track.nativeUri && window.AndroidBridge?.setPlaybackQueue && this.queue.every(t => t.nativeUri));
     if (this.nativePlayback) {
-      // Android opens the original URI. Constant-gain file processing is a
-      // separate background task and never changes playback gain on selection.
       this.syncNativeQueue(true, true);
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
@@ -240,20 +224,12 @@ export class AudioPlayer {
       if (request !== this.playRequest) { if (url?.startsWith("blob:")) URL.revokeObjectURL(url); return; }
       this.sourceUrl = url;
       this.audio.src = url;
-      // Native/desktop sources are normalized on disk by a separate durable queue.
-      // Playback never starts an analysis or applies obsolete -18 LUFS gain again.
-      let cached=!window.AndroidBridge&&!track.filePath?this.browserLoudnessCache.get(this.loudnessKey(track,file)):null;
-      if(!window.AndroidBridge&&!cached&&!track.filePath&&track.normalizationKey===this.loudnessKey(track,file))cached={gain:track.normalizationGain};
-      if(request!==this.playRequest)return;
-      if(cached)this.applyNormalization(cached.gain,false);
-      if(request!==this.playRequest)return;
       await this.audio.play();
       if (request !== this.playRequest) return;
       this.failedTracks.clear();
       this.updateMediaSessionMetadata(track);
       this.onTrackChange?.(track);
       this.onQueueChange?.(this.queue, this.queueIndex);
-      if(!window.AndroidBridge&&!track.filePath)this.normalizationTask=this.normalizeInBackground(track,file,request);
     } catch (error) {
       if (request !== this.playRequest) return;
       this.audio.pause();
@@ -264,56 +240,10 @@ export class AudioPlayer {
     }finally{if(request===this.playRequest){this.pendingTrack=null;this.onLoadingChange?.(null);}}
   }
 
-  loudnessKey(track,file) {
-    return `lufs14-v2|${track.filePath||track.nativeUri||track.id}|${file?.size??track.fileSize}|${file?.lastModified??track.lastModified}`;
-  }
-
-  applyNormalization(gain,smooth=true) {
-    if(!Number.isFinite(gain)||gain<=0||gain>8)return;
-    this.normalizationGain=gain;
-    if(!this.normalizationNode||!this.audioCtx)return;
-    const param=this.normalizationNode.gain,time=this.audioCtx.currentTime;
-    param.cancelScheduledValues(time);
-    if(smooth)param.setTargetAtTime(gain,time,.08);
-    else param.setValueAtTime(gain,time);
-  }
-
-  async measureLoudness(track,file) {
-    const key=this.loudnessKey(track,file);
-    if(this.browserLoudnessCache.has(key))return this.browserLoudnessCache.get(key);
-    let cached=track.normalizationKey===key?{gain:track.normalizationGain}:null;
-    if(!Number.isFinite(cached?.gain)&&track.nativeUri&&window.AndroidBridge?.getCachedLoudness){try{cached=JSON.parse(window.AndroidBridge.getCachedLoudness(track.nativeUri)||'null');}catch{}}
-    if(Number.isFinite(cached?.gain)&&cached.gain>0&&cached.gain<=8){this.browserLoudnessCache.set(key,cached);track.normalizationGain=cached.gain;track.normalizationKey=key;return cached;}
-    if(this.loudnessPending.has(key))return this.loudnessPending.get(key);
-    let task;
-    if(track.nativeUri&&this.library.getLoudness)task=this.library.getLoudness(track);
-    else if(track.filePath&&window.electronAPI?.getLoudness)task=window.electronAPI.getLoudness(track.filePath);
-    else if(file&&file.size<=64*1024*1024&&this.audioCtx&&this.normalizationNode)task=browserLoudness(file,this.audioCtx);
-    else return null;
-    const pending=Promise.resolve(task).then(result=>{
-      if(Number.isFinite(result?.gain)&&result.gain>0&&result.gain<=8){
-        this.browserLoudnessCache.set(key,result);
-        track.normalizationGain=result.gain;track.normalizationKey=key;
-        this.library.putInStore?.('tracks',track).catch(()=>{});
-        if(this.browserLoudnessCache.size>200)this.browserLoudnessCache.delete(this.browserLoudnessCache.keys().next().value);
-      }
-      return result;
-    });
-    this.loudnessPending.set(key,pending);
-    try{return await pending;}finally{this.loudnessPending.delete(key);}
-  }
-
-  async normalizeInBackground(track,file,request) {
-    try {
-      // Cache for a future start; changing gain after playback starts is audible.
-      await this.measureLoudness(track,file);
-    }catch{/* Optional analysis must not delay or interrupt playback. */}
-  }
-
   syncNativeQueue(play = this.isPlaying, reset = false, position = null) {
     if (!this.nativePlayback) return;
     this.nativeMediaIds=this.queue.map(t=>t.id);
-    const tracks=this.queue.map(t=>({id:t.id,uri:t.nativeUri,title:t.title,artist:t.artist,cloudKey:t.cloudKey,queueOrigin:t.queueOrigin,queueEntry:t.queueEntry})),signature=JSON.stringify(tracks);
+    const tracks=this.queue.map(t=>({id:t.id,uri:t.nativeUri,title:t.title,artist:t.artist,queueOrigin:t.queueOrigin,queueEntry:t.queueEntry})),signature=JSON.stringify(tracks);
     const requestedAt=play&&reset?this.nativePlayRequestedAt||Date.now():0;
     if(reset&&play&&signature===this.nativeQueueSignature&&window.AndroidBridge.selectPlaybackTrack?.(tracks[this.queueIndex]?.id,this.queueIndex,true,Number.isFinite(position)?Math.round(position*1000):0,requestedAt)){
       this.publishNativeArtwork();return;
@@ -385,7 +315,7 @@ export class AudioPlayer {
         const saved = state.tracks?.[index];
         const base=this.library.getTrackById(id)
           || (saved?.uri && [...(this.library.tracks?.values() || [])].find(t => t.nativeUri === saved.uri))
-           || (saved?.uri ? {id, nativeUri:saved.uri, title:saved.title, artist:saved.artist, cloudKey:saved.cloudKey, duration:Math.max(0,state.duration / 1000)} : null);
+           || (saved?.uri ? {id, nativeUri:saved.uri, title:saved.title, artist:saved.artist, duration:Math.max(0,state.duration / 1000)} : null);
         return base&&saved?.queueOrigin==='manual'?{...base,queueOrigin:'manual',queueEntry:saved.queueEntry}:base;
       });
       // Preserve native indices; never replace the playing queue with a partial import.

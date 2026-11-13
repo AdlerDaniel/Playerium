@@ -105,11 +105,11 @@
 .loading-cards{padding:8px 0}.loading-card{min-width:0;padding:12px;display:flex;flex-direction:column;gap:10px}.loading-card-art{aspect-ratio:1;width:100%;margin-bottom:4px}.loading-cards.round .loading-card-art{border-radius:50%}.loading-card .loading-title{width:80%}.loading-card .loading-subtitle{width:55%}
 .loading-feature{display:flex;flex-direction:column;gap:12px;min-width:0}.loading-feature-art{width:92px;height:92px;margin-bottom:8px}.loading-feature .loading-title{width:min(80%,240px);height:24px}.loading-feature .loading-subtitle{width:60%;max-width:160px}
 @media(min-width:769px){
- .interface-refresh .bottom-player{grid-template-columns:minmax(120px,1fr) minmax(220px,1.4fr) auto;gap:16px;padding:8px 20px;min-height:112px;height:112px;border-top:1px solid var(--theme-border);background:var(--sp-dark-900)}
+ /* Equal side columns anchor the transport to the center of the entire bar. */
+ .interface-refresh .bottom-player{grid-template-columns:minmax(0,1fr) minmax(220px,min(44%,560px)) minmax(0,1fr);gap:16px;padding:8px 20px;min-height:112px;height:112px;border-top:1px solid var(--theme-border);background:var(--sp-dark-900)}
  .interface-refresh .player-left{gap:12px}.interface-refresh .now-playing-thumb{width:60px;height:60px;border-radius:12px;box-shadow:none}.interface-refresh .now-playing-info{margin-right:0}.interface-refresh .now-playing-title{font-weight:600;font-size:13px}
  .interface-refresh .player-right{flex-wrap:nowrap;gap:4px;min-width:0;justify-content:flex-end}
  .interface-refresh .player-right>button{flex:0 0 40px;width:40px!important;min-width:40px;height:40px;min-height:40px;padding:0;border-radius:10px}
- .interface-refresh .bottom-player .playback-device-label{display:none}
  .interface-refresh .player-right>button svg{width:20px;height:20px;flex:none}
  .interface-refresh .volume-bar-container{flex:0 0 136px;width:136px;min-width:136px;gap:10px;margin-inline:4px 10px}
  .interface-refresh #btnVolumeIcon{display:grid;place-items:center;flex:0 0 40px;width:40px;min-width:40px;height:44px;min-height:44px;border-radius:10px;padding:0}
@@ -120,6 +120,11 @@
  .interface-refresh .playback-bar{gap:8px;max-width:560px}.interface-refresh .playback-time{min-width:32px;font-size:10px}
  .interface-refresh .progress-slider-bg,.interface-refresh .volume-slider-bg{height:3px;background:var(--theme-border)}
  .interface-refresh .progress-slider-fill,.interface-refresh .volume-slider-fill{background:var(--sp-green)}
+}
+@media(min-width:769px) and (max-width:1279px){
+ /* Keep utilities inside their side column when the desktop window is narrow. */
+ .interface-refresh .player-right{display:grid;grid-template-columns:repeat(4,40px);grid-template-rows:40px 44px;gap:4px;justify-content:end;align-content:center}
+ .interface-refresh .player-right .volume-bar-container{grid-column:1/-1;grid-row:2;justify-self:end}
 }
 @container(max-width:560px){.home-feature{padding:20px;gap:16px;grid-template-columns:minmax(0,1fr) 120px}.home-feature h2{font-size:28px}.home-feature-art{border-radius:12px}.home-feature-open{font-size:11px}.interface-refresh .home-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container(max-width:380px){.home-feature{grid-template-columns:1fr}.home-feature-art{display:none}}

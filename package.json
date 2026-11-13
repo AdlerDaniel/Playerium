@@ -1,6 +1,6 @@
 {
   "name": "playerium",
-  "version": "1.7.53",
+  "version": "1.7.54",
   "description": "Playerium - Modern Spotify-style local music player for PC and Android",
   "main": "main.js",
   "scripts": {
@@ -12,8 +12,7 @@
     "version:sync": "node scripts/sync-version.js",
     "android:assets": "node scripts/sync-assets.js",
     "test:browser": "playwright test",
-    "test:desktop": "node tests/desktop/smoke.cjs",
-    "realtime:build": "node scripts/build-realtime.js"
+    "test:desktop": "node tests/desktop/smoke.cjs"
   },
   "build": {
     "appId": "com.playerium.music",
@@ -37,18 +36,9 @@
       "desktop-update-helper.js",
       "desktop-music.js",
       "desktop-audio.js",
-      "desktop-loudness.js",
-      "desktop-normalization.js",
-      "desktop-original-audio.js",
+      "desktop-retired-features.js",
       "desktop-waveform.js",
-      "desktop-cloud.js",
-      "desktop-cloud-http.js",
-      "desktop-connect.js",
-      "desktop-live.js",
-      "desktop-peer-files.js",
-      "desktop-peer-preview.js",
       "MUSIC-NOTICES.md",
-      "desktop-realtime.js",
       "app-branding.js",
       "desktop-branding.js",
       "desktop-mini.js",
@@ -105,7 +95,6 @@
     "fake-indexeddb": "^6.0.0"
   },
   "dependencies": {
-    "@supabase/realtime-js": "2.118.0",
     "music-metadata": "^11.16.1"
   }
 }

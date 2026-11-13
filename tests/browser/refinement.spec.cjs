@@ -1,9 +1,7 @@
 const {test,expect}=require('@playwright/test');
 async function ready(page,mobile=false){await page.setViewportSize(mobile?{width:390,height:844}:{width:1680,height:1000});await page.addInitScript(()=>localStorage.setItem('playerium_auto_update_check','false'));await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.experience);await page.evaluate(async()=>{const a=window.playerApp;const track={id:'refine',title:'Recording',artist:'Artist',duration:180,dateAdded:Date.now(),liked:false};a.library.tracks.set(track.id,track);await a.library.putInStore('tracks',track);a.player.currentTrack={...track};a.ui.syncPlayerDisplay();a.ui.navigateTo({type:'home'});});}
-test('desktop player omits favorites while keeping local and remote playback',async({page})=>{
+test('desktop player omits favorites while keeping local playback',async({page})=>{
  await ready(page);await expect(page.locator('#btnPlayerLike')).toHaveCount(0);await expect(page.locator('#nowPlayingTitle')).toHaveText('Recording');
- await page.evaluate(()=>{const a=window.playerApp,key='a'.repeat(64);a.cloud.account='test';a.cloud.schedule=()=>{};a.cloud.events=[{version:1,id:'remote-song',device:'phone',clock:1,kind:'track',key,track:{title:'Remote recording',artist:'Artist',audioId:'audio',size:4,ext:'.mp3'}}];a.cloud.outbox=[];a.connect.selected='phone';a.connect.display({id:'phone',seenAt:Date.now(),state:{track:{key,title:'Remote recording'},queue:[key],playing:true,volume:.8,duration:180}});});
- await expect(page.locator('#nowPlayingTitle')).toHaveText('Remote recording');await expect(page.locator('#btnPlayerLike')).toHaveCount(0);
 });
 test('home cards fill desktop width and phone playlist is a continuous canvas with default sections',async({page})=>{
  await ready(page);await expect(page.locator('.home-feature')).toBeVisible();await expect(page.locator('.home-quick-grid')).toHaveCount(0);const gap=await page.locator('.home-filters').evaluate(el=>el.getBoundingClientRect().top-document.querySelector('#mainScrollContainer').getBoundingClientRect().top);expect(gap).toBeLessThan(32);

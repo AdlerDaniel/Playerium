@@ -12,16 +12,7 @@ const {DesktopMusic}=require('../../desktop-music');
     const base=`http://127.0.0.1:${server.address().port}`;
     const engine=new DesktopMusic({app:{isPackaged:false,getPath:()=>root},authorize:async p=>fs.realpath(p)});
     if(process.env.PLAYERIUM_MUSIC_TEST_TOOLS)engine.tools=process.env.PLAYERIUM_MUSIC_TEST_TOOLS;
-    const {LoudnessAnalyzer}=require('../../desktop-loudness');
-    const analyzer=new LoudnessAnalyzer(path.join(engine.tools,'ffmpeg.exe'),path.join(root,'loudness'));
-    const quiet=path.join(root,'quiet.wav'),loud=path.join(root,'loud.wav');
-    const loudData=Buffer.from(wav);for(let i=44;i<loudData.length;i+=2)loudData.writeInt16LE(loudData.readInt16LE(i)*12,i);
-    await fs.writeFile(quiet,wav);await fs.writeFile(loud,loudData);
-    const q=await analyzer.analyze(quiet),l=await analyzer.analyze(loud);
-    assert.ok(Math.abs(q.integrated+20*Math.log10(q.gain)-l.integrated-20*Math.log10(l.gain))<3,'Different input levels should converge within 3 dB');
-    assert.deepEqual(await analyzer.analyze(quiet),q,'Measured gain must persist');
-    assert.equal((await fs.readFile(quiet)).equals(wav),true,'Normalization must not rewrite source audio');
-    console.log('Real FFmpeg loudness analysis, normalized level and cache verified');
+    const quiet=path.join(root,'quiet.wav');await fs.writeFile(quiet,wav);
     const wave=await engine.request('waveform',{filePath:quiet},'waveform-fixture');assert.equal(wave.peaks.length,192);assert.ok(Math.max(...wave.peaks)>.02&&Math.max(...wave.peaks)<.04);assert.deepEqual(await engine.request('waveform',{filePath:quiet},'waveform-cached'),wave);assert.equal((await fs.readFile(quiet)).equals(wav),true);console.log('Real decoded waveform and persistent cache verified');
     const nativeRun=engine.run.bind(engine);const run=async(...args)=>{try{return await nativeRun(...args);}catch(error){console.error(error.message);throw error;}};
     // Control only extractor responses. Audio transfer, conversion and embedding use bundled executables.

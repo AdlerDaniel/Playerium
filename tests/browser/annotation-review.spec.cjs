@@ -34,11 +34,11 @@ for(const width of [320,390,510])test(`annotation layout: aligned header, flat h
  expect((await page.locator('#mobileMiniPlayer').boundingBox()).height).toBe(64);
  await page.screenshot({path:info.outputPath('review-home.png')});expect(errors).toEqual([]);
 });
-test('removed settings stay fixed with old preferences; titles are inside cards and normalization still reports actions',async({page},info)=>{
+test('removed settings stay fixed with old preferences; titles are inside cards without retired audio settings',async({page},info)=>{
  await ready(page);await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings'}));
  await expect(page.locator('#settingsEqToggle,#settingsEqPreset,#settingsTrackDensity,#settingsWaveform,#settingsAutoUpdateToggle,.visual-options')).toHaveCount(0);
  expect(await page.locator('.settings-section-title').evaluateAll(nodes=>nodes.every(n=>n.parentElement.classList.contains('settings-card')))).toBe(true);
- await expect(page.locator('.normalization-settings button')).toHaveCount(2);await expect(page.locator('.normalization-settings p:visible')).toHaveCount(0);
+ await expect(page.locator('.normalization-settings')).toHaveCount(0);await expect(page.locator('.normalization-settings p:visible')).toHaveCount(0);
  expect(await page.evaluate(()=>window.playerApp.ui.updater.autoCheckEnabled)).toBe(true);
  await page.screenshot({path:info.outputPath('review-settings.png')});
  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));

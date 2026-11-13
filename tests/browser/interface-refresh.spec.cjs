@@ -15,7 +15,7 @@ async function ready(page,size){
   a.ui.navigateTo({type:'home',title:'Главная'});a.ui.refreshCurrentView();
  });
 }
-for(const width of [800,1024,1280,1440])test(`desktop controls have separate clickable bounds at ${width}`,async({page},info)=>{
+for(const width of [769,800,1024,1280,1440,1920])test(`desktop transport stays centered with separate clickable controls at ${width}`,async({page},info)=>{
  await ready(page,{width,height:900});await expect(page.locator('.home-feature')).toBeVisible();
  const metrics=await page.evaluate(()=>{
   const nodes=[...document.querySelectorAll('.player-right>button,#btnVolumeIcon,#volumeSliderContainer')].filter(n=>n.getBoundingClientRect().width);
@@ -24,7 +24,14 @@ for(const width of [800,1024,1280,1440])test(`desktop controls have separate cli
  });
  expect(metrics.overflow).toBe(false);
  for(const b of metrics.boxes){expect(b.w,b.id).toBeGreaterThanOrEqual(40);expect(b.hit,b.id).toBe(true);expect(b.x+b.w).toBeLessThanOrEqual(width);}
- for(let i=0;i<metrics.boxes.length;i++)for(let j=i+1;j<metrics.boxes.length;j++){const a=metrics.boxes[i],b=metrics.boxes[j];expect(Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x),a.id+' / '+b.id).toBeLessThanOrEqual(0);}
+ for(let i=0;i<metrics.boxes.length;i++)for(let j=i+1;j<metrics.boxes.length;j++){const a=metrics.boxes[i],b=metrics.boxes[j],overlapX=Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x),overlapY=Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y);expect(overlapX<=0||overlapY<=0,a.id+' / '+b.id).toBe(true);}
+ for(const title of ['','Короткое название','ОченьДлинноеНазваниеБезПробелов'.repeat(16)]){
+  await page.evaluate(title=>{const a=window.playerApp;a.player.currentTrack={...a.library.getTracks()[0],title,artist:title};a.ui.syncPlayerDisplay();},title);
+  const geometry=await page.evaluate(()=>{const rect=s=>document.querySelector(s).getBoundingClientRect().toJSON();return {footer:rect('.bottom-player'),transport:rect('.player-center'),buttons:rect('.playback-controls'),progress:rect('.playback-bar'),left:rect('.player-left'),right:rect('.player-right')};});
+  const center=geometry.footer.x+geometry.footer.width/2;
+  for(const key of ['transport','buttons','progress'])expect(Math.abs(geometry[key].x+geometry[key].width/2-center),key+' / title length '+title.length).toBeLessThan(1);
+  expect(geometry.left.right).toBeLessThanOrEqual(geometry.transport.x);expect(geometry.right.x).toBeGreaterThanOrEqual(geometry.transport.right);expect(geometry.right.bottom).toBeLessThanOrEqual(geometry.footer.bottom);
+ }
  await page.screenshot({path:info.outputPath('home-desktop.png')});
  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));await expect(page.locator('.track-row')).toHaveCount(12);await page.screenshot({path:info.outputPath('collection-desktop.png')});
 });
