@@ -8,7 +8,7 @@ for(const mobile of [false,true])test(`visual experiment resumes, configures hom
   if(mobile){await expect(page.locator('.home-customize')).toHaveCount(0);await page.evaluate(()=>{localStorage.setItem('playerium_visual_home',JSON.stringify({order:['artists','recent'],hidden:['recent']}));window.playerApp.ui.experience.arrangeHome();});await expect(page.locator('[data-home-section="recent"]')).toBeVisible();}
   else {await page.locator('.home-customize').click();await page.getByRole('menuitem',{name:'Недавно добавленные',exact:true}).click();await expect(page.locator('[data-home-section="recent"]')).toBeHidden();}
  await page.evaluate(()=>window.playerApp.ui.experience.openCinema());await expect(page.locator('.cinema-player')).toBeVisible();await expect(page.locator('.cinema-player .audio-waveform')).toBeHidden();await expect(page.locator('.playback-device-button')).toHaveCount(0);
- expect(await page.evaluate(()=>document.querySelector('.cinema-player .audio-waveform').peaks)).toBe(null);
+  await expect(page.locator('.cinema-player .audio-waveform')).toHaveCount(0);
  await page.locator('.cinema-seek').fill('65');await page.locator('.cinema-seek').dispatchEvent('change');expect(await page.evaluate(()=>window.playerApp.player.getCurrentTime())).toBeCloseTo(5.2,1);
  await page.locator('.cinema-volume input').fill('25');await page.locator('.cinema-volume input').dispatchEvent('input');expect(await page.evaluate(()=>window.playerApp.player.volume)).toBe(.25);await page.evaluate(()=>window.playerApp.player.setVolume(.6));await expect(page.locator('.cinema-volume input')).toHaveValue('60');
  await page.locator('.cinema-play').click();await page.waitForFunction(()=>window.playerApp.player.isPlaying);await page.locator('.cinema-player').getByRole('button',{name:'Следующий трек',exact:true}).click();await expect(page.locator('.cinema-meta h1')).toHaveText('Second');
@@ -35,17 +35,18 @@ for(const mobile of [false,true])test(`native shuffle updates the next card and 
   tracks.push({id:'third',title:'Third',artist:'Artist',duration:8});
   tracks.forEach((t,i)=>{t.nativeUri='content://fixture/'+i;app.library.tracks.set(t.id,t);});
   p.audio.pause();p.nativePlayback=true;p.queue=tracks;p.originalQueue=tracks.slice();p.queueIndex=0;p.currentTrack=tracks[0];
-  window.AndroidBridge={playbackCommand:(command)=>{window.lastNativeCommand=command;}};
+   window.AndroidBridge={playbackCommand:(command)=>{window.lastNativeCommand=command;},setPlaybackQueue:json=>{window.lastNativeCommand='select';window.lastNativeIndex=JSON.parse(json).index;}};
   window.nativeFixtureState={id:tracks[0].id,index:0,playing:false,position:0,duration:8000,shuffle:true,repeat:0,playbackOrder:[0,2,1]};
   p.onTrackChange?.(tracks[0]);p.applyNativeState(window.nativeFixtureState);
   if(mobile)app.ui.experience.openCinema();else app.ui.openRightPanel('queue');
  },mobile);
- const host=mobile?'.cinema-upcoming':'#rightPanelContent';
- await expect(page.locator(host+' .next-song-card strong')).toHaveText('Third');
+  const host=mobile?'.lyrics-queue-list':'#rightPanelContent';
+  if(mobile){await page.getByRole('tab',{name:'Очередь',exact:true}).click();await expect(page.locator(host+' .lyrics-queue-row:not(.playing) strong')).toHaveText(['Third','Second']);}
+  else await expect(page.locator(host+' .next-song-card strong')).toHaveText('Third');
  if(!mobile)await expect(page.locator('.queue-list .queue-item-title')).toHaveText(['Third','Second']);
  await page.evaluate(()=>window.playerApp.player.applyNativeState({...window.nativeFixtureState,playbackOrder:[0,1,2]}));
- await expect(page.locator(host+' .next-song-card strong')).toHaveText('Second');
+  if(mobile)await expect(page.locator(host+' .lyrics-queue-row:not(.playing) strong')).toHaveText(['Second','Third']);else await expect(page.locator(host+' .next-song-card strong')).toHaveText('Second');
  if(!mobile)await expect(page.locator('.queue-list .queue-item-title')).toHaveText(['Second','Third']);
- await page.locator(host+' .next-song-card').click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('next');
+  if(mobile){await page.locator(host+' .lyrics-queue-row:not(.playing)').first().click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('select');expect(await page.evaluate(()=>window.lastNativeIndex)).toBe(1);}else{await page.locator(host+' .next-song-card').click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('next');}
  expect(errors).toEqual([]);
 });

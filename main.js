@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { scanDirectory, isInside, AUDIO_EXTS } = require('./desktop-files');
+const { scanDirectory, isInside, AUDIO_EXTS, findRelocatedAudio } = require('./desktop-files');
 const { DesktopUpdater } = require('./desktop-updater');
 const { DesktopMusic, downloadError, createAudioFetcher, createPageFetcher } = require('./desktop-music');
 const {audioResponse}=require('./desktop-audio');
@@ -52,6 +52,12 @@ async function authorize(filePath) {
   const real = await fsp.realpath(filePath);
   if (![...roots].some(root => isInside(root, real))) throw new Error('Select this music folder before accessing its files');
   return real;
+}
+async function recoverAudio(file,identity){
+  if(typeof file!=='string'||![...roots].some(root=>isInside(root,path.resolve(file))))return null;
+  const found=await findRelocatedAudio(file,roots,identity);
+  if(found)await authorize(found.fullPath);
+  return found;
 }
 function trusted(event) {
   if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame || event.senderFrame.url !== pathToFileURL(path.join(__dirname, 'index.html')).href) throw new Error('Untrusted IPC sender');
@@ -137,26 +143,37 @@ app.whenReady().then(async () => {
     await fsp.writeFile(rootsFile, JSON.stringify([...roots]));
     return true;
   });
-  handle('file:source' , async file => {
-    const real = await authorize(file);
+  handle('file:source' , async (file,identity={}) => {
+    let real,recovered;
+    try{real=await authorize(file);}catch(error){
+      if(error.code==='ENOENT'||error.code==='ENOTDIR'){
+        recovered=await recoverAudio(file,identity);
+        if(!recovered)throw Error('Файл перемещён или удалён. Добавьте папку с его новым расположением.');
+        real=recovered.fullPath;
+      }else throw Error('Нет доступа к файлу. Выберите папку с музыкой ещё раз.');
+    }
     if (!AUDIO_EXTS.has(path.extname(real).toLowerCase())) throw new Error('Not an audio file');
     const id = require('node:crypto').randomUUID();
     sources.set(id, {original:real,playable:real});
     if(sources.size>64)sources.delete(sources.keys().next().value);
-    return `playerium-audio://${id}/track`;
+    const url=`playerium-audio://${id}/track`;
+    if(recovered){await music.relocateRecord(file,recovered,identity.downloadId);return {url,file:recovered};}
+    return url;
   });
   handle('file:metadata', async file => {
     const real = await authorize(file);
     if (!AUDIO_EXTS.has(path.extname(real).toLowerCase())) throw new Error('Not an audio file');
     const { parseFile } = await import('music-metadata');
-    const { common, format } = await parseFile(real);
+    const decoded=await parseFile(real),{ common, format }=decoded;
     const picture = common.picture?.[0];
     return { title: common.title, artist: common.artist, album: common.album, genre: common.genre?.join(', '), year: common.year, trackNo: common.track?.no, duration: format.duration || 0,
-      picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null };
+      picture: picture && picture.data.length <= 4 * 1024 * 1024 ? { data: picture.data, type: picture.format } : null,
+      embeddedLyrics: Array.isArray(common.lyrics)?common.lyrics.map(value=>typeof value==='string'?value:value.text||'').join('\n').slice(0,100000):'',
+      embeddedSyncedLyrics:String(Object.values(decoded.native||{}).flat().find(tag=>/^TXXX:lyrics_lrc$/i.test(tag.id))?.value||'').slice(0,100000) };
   });
   handle('shell:openExternal', openExternal);
   const music=new DesktopMusic({app,fetcher:(url,options)=>net.fetch(url,options),audioFetcher:createAudioFetcher(net),pageFetcher:createPageFetcher(net),authorize,
-    onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));},
+    onRoot:async root=>{roots.add(await fsp.realpath(root));await fsp.writeFile(rootsFile,JSON.stringify([...roots]));},resolveFile:recoverAudio,
     onProgress:state=>mainWindow?.webContents.send('music:progress',state)});
   handle('music:request',async(operation,payload,id)=>{
     try{return {ok:true,data:await music.request(operation,payload,id)};}

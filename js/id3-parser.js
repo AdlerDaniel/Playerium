@@ -40,8 +40,9 @@ export class ID3Parser {
     try {
       // Read first 512KB for ID3v2 header and tags
       const headerBlob = file.slice(0, Math.min(file.size, 512 * 1024));
-      const buffer = await headerBlob.arrayBuffer();
-      const view = new DataView(buffer);
+      let buffer = await headerBlob.arrayBuffer();
+      let view = new DataView(buffer);
+      if(view.byteLength>=10&&view.getUint8(0)===73&&view.getUint8(1)===68&&view.getUint8(2)===51){const size=10+this.parseSynchsafe(view,6);if(size>buffer.byteLength&&size<=8*1024*1024){buffer=await file.slice(0,Math.min(file.size,size)).arrayBuffer();view=new DataView(buffer);}}
 
       if (view.byteLength >= 12 && String.fromCharCode(...new Uint8Array(buffer, 4, 4)) === 'ftyp') {
         metadata = {...metadata, ...await readMP4Metadata(file)};
@@ -207,6 +208,12 @@ export class ID3Parser {
         result.year = this.decodeText(data).trim();
       } else if (["TRCK", "TRK"].includes(frameId)) {
         result.trackNo = this.decodeText(data).trim();
+      } else if (["USLT","ULT"].includes(frameId)&&data.length>4) {
+        let at=4;const wide=data[0]===1||data[0]===2,step=wide?2:1;
+        while(at+step<=data.length&&!(data[at]===0&&(!wide||data[at+1]===0)))at+=step;
+        at+=step;if(at<data.length){const content=new Uint8Array(1+data.length-at);content[0]=data[0];content.set(data.subarray(at),1);result.embeddedLyrics=this.decodeText(content).slice(0,100000);}
+      } else if (["TXXX","TXX"].includes(frameId)) {
+        const content=this.decodeText(data),at=content.indexOf('\0');if(at>=0&&content.slice(0,at).toLowerCase()==='lyrics_lrc')result.embeddedSyncedLyrics=content.slice(at+1).slice(0,100000);
       } else if (["APIC", "PIC"].includes(frameId) && !result.pictureBlob) {
         result.pictureBlob = this.decodePicture(data);
       }

@@ -15,7 +15,7 @@ for(const mobile of [false,true])test(`local app has no device or normalization 
  await expect(page.locator('.normalization-settings,.cloud-settings,[data-connect],.playback-device-button')).toHaveCount(0);
  await expect(page.locator('.settings-overlay')).not.toContainText(/Google|нормализац|синхронизац/i);
  await page.locator('.settings-close').click();await page.evaluate(()=>window.playerApp.ui.experience.openCinema());
- await expect(page.locator('.cinema-controls button')).toHaveCount(3);
+ await expect(page.locator('.cinema-controls button')).toHaveCount(5);
  await page.waitForTimeout(1800);
  const result=await page.evaluate(()=>({calls:window.retiredCalls,cloud:!!window.playerApp.cloud,connect:!!window.playerApp.connect,preparation:!!window.playerApp.audioPreparation,device:localStorage.getItem('playerium_cloud_device'),target:localStorage.getItem('playerium_connect_target')}));
  expect(result).toEqual({calls:[],cloud:false,connect:false,preparation:false,device:null,target:null});

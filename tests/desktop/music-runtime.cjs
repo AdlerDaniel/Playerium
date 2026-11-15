@@ -17,20 +17,24 @@ const {DesktopMusic}=require('../../desktop-music');
     const nativeRun=engine.run.bind(engine);const run=async(...args)=>{try{return await nativeRun(...args);}catch(error){console.error(error.message);throw error;}};
     // Control only extractor responses. Audio transfer, conversion and embedding use bundled executables.
     engine.run=(args,...rest)=>args.includes('--dump-single-json')?Promise.resolve(JSON.stringify({id:'fixture',title:args.at(-1).endsWith('/wrong')?'Wrong recording':'Studio song',artist:'Playerium',uploader:'Playerium',duration:2,webpage_url:args.at(-1),ext:'wav',url:base+'/song.wav',thumbnails:[{url:base+(args.at(-1).endsWith('/no-cover')?'/missing.jpg':'/art.png'),id:'cover'}],extractor:'generic',extractor_key:'Generic',formats:[{format_id:'audio',url:base+'/song.wav',ext:'wav',acodec:'pcm_s16le',protocol:'http'}]})):run(args,...rest);
-    const track={id:'song_f1234',title:'Studio song',artist:'Playerium',album:'Studio album',genre:'Electronic',year:2026,trackNo:2,isrc:'XX1234567890',duration:2,sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/wrong'},{provider:'youtubeMusic',url:'https://www.youtube.com/right'}]};
+    const track={id:'song_f1234',title:'Studio song',artist:'Playerium',album:'Studio album',genre:'Electronic',year:2026,trackNo:2,isrc:'XX1234567890',duration:2,lyricsData:{plain:'Первая строка\nВторая строка',synced:'[00:00.00]Первая строка\n[00:01.00]Вторая строка'},sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/wrong'},{provider:'youtubeMusic',url:'https://www.youtube.com/right'}]};
     const result=await engine.request('download',{track,folderSource:root},'fixture-save');
     const {parseFile}=await import('music-metadata');const embedded=await parseFile(result.fullPath);
     assert.equal(embedded.common.title,track.title);assert.equal(embedded.common.artist,track.artist);assert.equal(embedded.common.album,track.album);assert.equal(result.metadata.album,track.album);assert.equal(embedded.common.genre[0],track.genre);assert.equal(embedded.common.year,2026);assert.equal(embedded.common.track.no,2);assert.ok(embedded.common.picture?.[0]?.data.length);assert.ok(embedded.format.duration>1.9);
-    const mp4=await fs.readFile(result.fullPath);
+    assert.equal(path.extname(result.fullPath),'.mp3');assert.equal(embedded.format.codec,'MPEG 2.5 Layer 3');assert.equal(path.dirname(result.fullPath),path.join(root,'Playerium'));
+    await fs.writeFile(path.join(__dirname,'../../build/embedded-tags-diagnostic.json'),JSON.stringify({common:embedded.common,native:embedded.native}));
+    assert.ok(JSON.stringify(embedded.common.lyrics||'').includes('Первая строка'));assert.ok(JSON.stringify(embedded.native).includes('lyrics_lrc'));
+    assert.equal(await fs.stat(result.fullPath+'.jpg').catch(()=>null),null);assert.equal(await fs.stat(result.fullPath+'.playerium.json').catch(()=>null),null);
+    const mp4File=path.join(root,'source.m4a');require('node:child_process').execFileSync(path.join(engine.tools,'ffmpeg.exe'),['-y','-i',quiet,'-c:a','aac',mp4File],{stdio:'ignore',windowsHide:true});const mp4=await fs.readFile(mp4File);
     assert.equal((await engine.request('restore',{},'fixture-restore')).length,1);
     await engine.request('delete',{downloadId:track.id},'fixture-delete');assert.equal(await fs.stat(result.fullPath).catch(()=>null),null);assert.equal((await engine.request('restore',{},'fixture-restored')).length,0);
-    const noCover=await engine.request('download',{track:{...track,id:'song_f5678',sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/no-cover'}]},folderSource:root},'fixture-no-cover');
+    const noCover=await engine.request('download',{track:{...track,id:'song_f5678',sources:[{provider:'youtubeMusic',url:'https://www.youtube.com/no-cover'}]},folderSource:path.join(root,'Playerium')},'fixture-no-cover');assert.equal(await fs.stat(path.join(root,'Playerium','Playerium')).catch(()=>null),null);
     const withoutCover=await parseFile(noCover.fullPath);assert.equal(withoutCover.common.title,track.title);assert.ok(withoutCover.format.duration>1.9);
     await engine.request('delete',{downloadId:'song_f5678'},'fixture-delete-no-cover');
     engine.pageFetcher=async()=>({ok:true,text:async()=>`<meta property="og:title" content="Playerium - Studio song - Скачать бесплатно"><div mp3source="https://cdn.music2019.su//?h=${'a'.repeat(64)}">`});
     engine.audioFetcher=async()=>({ok:true,headers:{get:()=> 'audio/mpeg'},body:[mp4]});
     const mislabeled=await engine.request('download',{track:{...track,id:'song_f9012',sources:[{provider:'hitmusic',url:'https://hit.music2019.su/track/3158',official:false}]},folderSource:root},'fixture-mislabeled');
-    const actual=await parseFile(mislabeled.fullPath);assert.equal(path.extname(mislabeled.fullPath),'.m4a');assert.equal(actual.common.album,'Studio album');assert.equal(mislabeled.metadata.album,'Studio album');assert.ok(actual.format.duration>1.9);
+    const actual=await parseFile(mislabeled.fullPath);assert.equal(path.extname(mislabeled.fullPath),'.mp3');assert.equal(actual.common.album,'Studio album');assert.equal(mislabeled.metadata.album,'Studio album');assert.ok(actual.format.duration>1.9);
     await engine.request('delete',{downloadId:'song_f9012'},'fixture-delete-mislabeled');
     console.log('Bundled audio transfer, fallback, tags, cover, restore and deletion passed');
   }finally{await new Promise(resolve=>server.close(resolve));await fs.rm(root,{recursive:true,force:true});}

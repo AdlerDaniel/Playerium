@@ -130,7 +130,7 @@ export class MusicCatalog {
       const found=await Promise.allSettled(missing.map(async provider=>artistResults([catalogArtists(provider,await this.request('catalog',{provider,query:artist.name}))],[],artist.name).find(a=>a.name.toLocaleLowerCase()===artist.name.toLocaleLowerCase())));
       for(const r of found)if(r.status==='fulfilled'&&r.value)detail={...detail,...r.value};
     }
-    const requests=[['itunes',detail.name],['itunesUA',detail.name],['deezer',`artist:"${detail.name.replaceAll('"','')}"`]];
+    const requests=[['itunes',detail.name],['itunesUA',detail.name],['deezer',`artist:"${detail.name.replace(/"/g,'')}"`]];
     if(detail.deezerId)requests.push(['deezerArtistTop',String(detail.deezerId)]);
     if(detail.itunesId)requests.push(['itunesArtistTracks',String(detail.itunesId)]);
     const responses=await Promise.allSettled(requests.map(async([provider,query])=>catalogTracks(provider,await this.request('catalog',{provider,query})).map(t=>({...t,metadataScore:3}))));
@@ -152,9 +152,10 @@ export class MusicCatalog {
         for(const result of metadata)if(result.status==='fulfilled'&&result.value)for(const field of ['album','year','trackNo','genre','isrc','pictureUrl','duration'])if(!track[field]&&result.value[field])track[field]=result.value[field];
       }
       let sources=[...(track.sources||[]),...recordingSources(`${track.artist} ${track.title}`).filter(t=>sameRecording(track,t)).flatMap(t=>t.sources)],saved,lastError,discoveryError;
+      if(this.lyrics){const data=await this.lyrics.lookup(track).catch(()=>null);if(data)track={...track,lyricsData:{plain:data.plain,synced:data.synced}};}
       const attempted=new Set();
       const priority={audius:0,bandcamp:1,soundcloud:2,youtubeMusic:3,youtubeAudio:4,muzend:5,musify:6,topmusicua:7,miyzvuk:8};
-      const folder=this.library.folders.findLast(f=>!f.source.startsWith('web:') && f.source!=='android-files');
+      const folder=[...this.library.folders].reverse().find(f=>!f.source.startsWith('web:') && f.source!=='android-files');
       const save=async()=>{
         sources=[...new Map(sources.filter(s=>!attempted.has(s.url)).map(s=>[s.url,s])).values()].sort((a,b)=>(priority[a.provider]??9)-(priority[b.provider]??9)||Number(b.official)-Number(a.official));
         if(!sources.length)return;

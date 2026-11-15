@@ -18,6 +18,7 @@ public class TestMusicDocumentProvider extends ContentProvider {
     private File file(Uri uri){String name=uri.getLastPathSegment();if(name==null||!name.matches("[a-zA-Z0-9-]+\\.wav"))throw new SecurityException("Invalid fixture");return new File(root,name);}
     private boolean flag(Uri uri,String name){return getContext().getSharedPreferences("documents",0).getBoolean(uri+":"+name,false);}
     @Override public Bundle call(String method,String arg,Bundle extras){try{
+        if(method.equals("treeFixture"))return getContext().getContentResolver().call(Uri.parse("content://"+TreeMusicProvider.AUTHORITY),"fixture",null,extras);
         if(method.equals("create")){
             File file=new File(root,java.util.UUID.randomUUID()+".wav");try(FileOutputStream out=new FileOutputStream(file)){out.write(extras.getByteArray("bytes"));}
             Uri uri=Uri.parse("content://com.playerium.music.test-documents/document/"+file.getName());boolean readOnly=extras.getBoolean("readOnly");

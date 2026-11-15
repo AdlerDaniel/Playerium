@@ -10,7 +10,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('dialog:openDirectory'),
   watchFolder: path => ipcRenderer.invoke('folder:watch', path),
   unwatchFolder: path => ipcRenderer.invoke('folder:unwatch', path),
-  getAudioSource: path => ipcRenderer.invoke('file:source', path),
+  getAudioSource: async (path,identity) => {
+    try{return await ipcRenderer.invoke('file:source',path,identity);}
+    catch(error){const message=String(error.message||'').replace(/^Error invoking remote method '[^']+': (?:Error: )?/,'');throw Error(/^(Файл|Нет доступа|Папка)/.test(message)?message:'Не удалось открыть аудиофайл. Выберите папку с музыкой ещё раз.');}
+  },
   getMetadata: path => ipcRenderer.invoke('file:metadata', path),
   musicRequest: async (operation,payload,id) => {
     const result=await ipcRenderer.invoke('music:request',operation,payload,id);

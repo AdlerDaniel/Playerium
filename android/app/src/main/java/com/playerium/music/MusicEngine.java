@@ -304,10 +304,11 @@ final class MusicEngine {
                     if(track.has("album")){info.put("album",track.optString("album"));info.put("meta_album",track.optString("album"));}
                     for(String field:new String[]{"title","artist","genre","isrc"})if(!track.optString(field).isEmpty()){info.put(field,track.getString(field));info.put("meta_"+field,track.getString(field));}
                     if(track.has("artist"))info.put("artists",new JSONArray().put(track.getString("artist")));
+                    JSONObject lyrics=track.optJSONObject("lyricsData");if(lyrics!=null){for(String field:new String[]{"plain","synced"}){String value=lyrics.optString(field);if(!value.isEmpty())info.put(field.equals("plain")?"meta_lyrics":"meta_lyrics_lrc",value.substring(0,Math.min(100000,value.length())));}}
                     info.put("track",info.getString("title"));if(!track.optString("year").isEmpty()){info.put("release_year",track.opt("year"));info.put("meta_date",track.optString("year"));info.put("release_date",track.optString("year")+"0101");}if(track.has("trackNo"))info.put("track_number",track.opt("trackNo"));
                     String picture=track.optString("pictureUrl");if(picture.matches("https://(?:[^/]+\\.)?(?:mzstatic\\.com|dzcdn\\.net|ytimg\\.com|ggpht\\.com|googleusercontent\\.com|bcbits\\.com|audius\\.co|sndcdn\\.com)/.*")){info.put("thumbnail",picture);info.put("thumbnails",new JSONArray().put(new JSONObject().put("url",picture).put("id","cover")));}
                     File meta=new File(staging,"recording.json");try(OutputStream out=new FileOutputStream(meta)){out.write(info.toString().getBytes(StandardCharsets.UTF_8));}
-                    String audioFormat=Arrays.asList("wav","aac").contains(info.optString("ext"))?"m4a":"best";
+                    String audioFormat="mp3";
                     List<String> downloadArgs=new ArrayList<>(Arrays.asList("--load-info-json",meta.getAbsolutePath(),"--no-playlist","--quiet","--no-progress","--max-filesize","256M","-f",FULL_AUDIO,"-x","--audio-format",audioFormat,"--audio-quality","0","--embed-metadata","--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail","-o",new File(staging,"audio.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"));
                     if(directHost!=null)downloadArgs.add(0,"--force-generic-extractor");
                     if(Arrays.asList("musify","miyzvuk","hitmusic").contains(candidate.optString("provider")))downloadArgs.add(0,"--enable-file-urls");
@@ -318,6 +319,7 @@ final class MusicEngine {
                         result=run(downloadArgs,requestId,600000);
                     }
                     String[] lines=result.split("\\r?\\n");File audio=new File(lines[lines.length-1]);if(!audio.getCanonicalPath().startsWith(staging.getCanonicalPath()+File.separator)||!audio.getName().matches("audio\\.(m4a|mp3|opus|ogg|flac|aac|wav)"))throw new IOException("Invalid audio");
+                    if(audio.getName().endsWith(".mp3")&&lyrics!=null)Mp3Tags.lyrics(audio,lyrics.optString("plain"));
                     MediaMetadataRetriever decoded=new MediaMetadataRetriever();double actual;
                     try{decoded.setDataSource(audio.getAbsolutePath());actual=Double.parseDouble(decoded.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION))/1000.;}finally{decoded.release();}
                     double expected=track.optDouble("duration",candidate.optDouble("duration",0));
@@ -348,26 +350,21 @@ final class MusicEngine {
             DocumentFile sidecar=null,image=null;
             try {
                 try(InputStream in=new FileInputStream(audio);OutputStream out=context.getContentResolver().openOutputStream(file.getUri())){copy(in,out);}
-                sidecar=root.createFile("application/json",name+".playerium.json");if(sidecar==null)throw new IOException();
-                try(OutputStream out=context.getContentResolver().openOutputStream(sidecar.getUri())){out.write(metadata.toString().getBytes(StandardCharsets.UTF_8));}
-                if(cover!=null){image=root.createFile("image/jpeg",name+".jpg");if(image==null)throw new IOException();try(InputStream in=new FileInputStream(cover);OutputStream out=context.getContentResolver().openOutputStream(image.getUri())){copy(in,out);}}
-                result.put("uri",file.getUri()).put("sidecar",sidecar.getUri()).put("cover",image==null?"":image.getUri()).put("folderSource",destination).put("folderName",selected.getName());
+                result.put("uri",file.getUri()).put("folderSource",destination).put("folderName",selected.getName());
             }catch(Exception e){file.delete();if(sidecar!=null)sidecar.delete();if(image!=null)image.delete();throw e;}
         }else {
             File root=managedDirectory(context);hideDirectory(root);File target=new File(root,name);if(target.exists())throw new IOException("File already exists");
             try {
                 try(InputStream in=new FileInputStream(audio);OutputStream out=new FileOutputStream(target)){copy(in,out);}
-                File sidecar=new File(root,name+".playerium.json");try(OutputStream out=new FileOutputStream(sidecar)){out.write(metadata.toString().getBytes(StandardCharsets.UTF_8));}
-                File image=new File(root,name+".jpg");if(cover!=null)try(InputStream in=new FileInputStream(cover);OutputStream out=new FileOutputStream(image)){copy(in,out);}
-                result.put("uri",Uri.fromFile(target)).put("sidecar",Uri.fromFile(sidecar)).put("cover",cover==null?"":Uri.fromFile(image)).put("folderSource","playerium-music").put("folderName","Playerium");
+                result.put("uri",Uri.fromFile(target)).put("folderSource","playerium-music").put("folderName","Playerium");
             }catch(Exception e){target.delete();new File(root,name+".playerium.json").delete();new File(root,name+".jpg").delete();throw e;}
         }
         return result.put("galleryHidden",true);
     }
     // Exclude only Playerium's downloads, not unrelated media in the selected tree.
     static DocumentFile hiddenDownloadDirectory(DocumentFile selected) throws IOException {
-        DocumentFile root=selected.findFile("Playerium Downloads");
-        if(root==null)root=selected.createDirectory("Playerium Downloads");
+        DocumentFile root="Playerium".equalsIgnoreCase(selected.getName())?selected:selected.findFile("Playerium");
+        if(root==null)root=selected.createDirectory("Playerium");
         if(root==null||!root.isDirectory()||!root.canWrite())throw new IOException("Не удалось создать папку для скачанных треков.");
         DocumentFile marker=root.findFile(".nomedia");
         if(marker==null)marker=root.createFile("application/octet-stream",".nomedia");
@@ -405,6 +402,9 @@ final class MusicEngine {
             copyOwnedTo(old.getString("uri"),audio);
             if(audio.length()==0||(old.optLong("size",0)>0&&audio.length()!=old.getLong("size")))throw new IOException("Не удалось полностью перенести скачанный трек.");
             if(!old.optString("cover").isEmpty()){cover=new File(staging,"audio.jpg");copyOwnedTo(old.getString("cover"),cover);}
+            // Older downloads may rely on separate metadata/artwork. Embed those
+            // into the staging copy before committing or deleting the old files.
+            audio=embedLegacyMetadata(audio,cover,old.getJSONObject("metadata"),key);
             moved=publish(audio,cover,old.getJSONObject("metadata"),old.getString("folderSource"),key);
             // Commit the new location before deleting any existing file.
             moved.put("previousUri",old.getString("uri")).put("legacyMedia",old);
@@ -450,7 +450,30 @@ final class MusicEngine {
             if("file".equals(uri.getScheme())&&!new File(uri.getPath()).getCanonicalPath().startsWith(managedDirectory(context).getCanonicalPath()+File.separator))throw new SecurityException("Invalid cover");
             try(InputStream in=context.getContentResolver().openInputStream(uri)){copy.getJSONObject("metadata").put("pictureBase64",Base64.encodeToString(read(in,4*1024*1024),Base64.NO_WRAP));}
         }catch(IOException ignored){}
+        if(!copy.getJSONObject("metadata").has("pictureBase64")){
+            MediaMetadataRetriever reader=new MediaMetadataRetriever();
+            try{
+                Uri audio=Uri.parse(record.getString("uri"));
+                if(MainActivity.hasMusicPermission(context,audio)){
+                    reader.setDataSource(context,audio);byte[] image=reader.getEmbeddedPicture();
+                    if(image!=null&&image.length>0&&image.length<=4*1024*1024)copy.getJSONObject("metadata").put("pictureBase64",Base64.encodeToString(image,Base64.NO_WRAP));
+                }
+            }catch(Exception ignored){}finally{try{reader.release();}catch(Exception ignored){}}
+        }
+        EmbeddedLyrics.read(context,Uri.parse(record.getString("uri")),copy.getJSONObject("metadata"));
         return copy;
+    }
+    private File embedLegacyMetadata(File audio,File cover,JSONObject metadata,String key)throws Exception{
+        initialize();String extension=audio.getName().substring(audio.getName().lastIndexOf('.')+1);
+        JSONObject info=new JSONObject(metadata.toString()).put("id",key).put("url",audio.toURI().toString()).put("ext",extension).put("extractor","generic").put("extractor_key","Generic");
+        for(String field:new String[]{"title","artist","album","genre","isrc"})if(!metadata.optString(field).isEmpty())info.put("meta_"+field,metadata.getString(field));
+        if(!metadata.optString("artist").isEmpty())info.put("artists",new JSONArray().put(metadata.getString("artist")));
+        if(cover!=null)info.put("thumbnails",new JSONArray().put(new JSONObject().put("url",cover.toURI().toString()).put("id","cover")));
+        File description=new File(audio.getParentFile(),"legacy-tags.json");try(OutputStream out=new FileOutputStream(description)){out.write(info.toString().getBytes(StandardCharsets.UTF_8));}
+        String result=run(Arrays.asList("--enable-file-urls","--load-info-json",description.getAbsolutePath(),"--no-playlist","--quiet","--no-progress","-x","--audio-format","best","--embed-metadata","--embed-thumbnail","-o",new File(audio.getParentFile(),"embedded.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"),"embed-legacy-"+key,600000);
+        String[] lines=result.split("\\r?\\n");File embedded=new File(lines[lines.length-1]);
+        if(!embedded.isFile()||!embedded.getCanonicalPath().startsWith(audio.getParentFile().getCanonicalPath()+File.separator))throw new IOException("Cannot embed saved metadata");
+        return embedded;
     }
     private void deleteOwned(JSONObject record) throws Exception {
         for(String field:new String[]{"uri","sidecar","cover"}) {

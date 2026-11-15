@@ -14,10 +14,12 @@ public class TrackVolumeTest {
  }
  @Test public void manualGainSupportsUnityMuteAttenuationBoostAndLiveChanges()throws Exception{
   TrackVolumeProcessor p=new TrackVolumeProcessor();p.configure(new AudioProcessor.AudioFormat(48000,2,C.ENCODING_PCM_16BIT));p.flush();assertTrue(p.isActive());
+  p.queueInput(AudioProcessor.EMPTY_BUFFER);assertFalse(p.getOutput().hasRemaining());
   short[] original={-32768,-10000,0,10000,32767};assertArrayEquals(original,process(p,original));
   p.setGain(.5);assertArrayEquals(new short[]{-16384,-5000,0,5000,16384},process(p,original));
   p.setGain(2);assertArrayEquals(new short[]{-32768,-20000,0,20000,32767},process(p,original));
   p.setGain(0);assertArrayEquals(new short[5],process(p,original));
+  p.queueInput(AudioProcessor.EMPTY_BUFFER);assertFalse(p.getOutput().hasRemaining());
   p.setGain(1);p.flush();assertArrayEquals(original,process(p,original));
   assertEquals(1f,TrackVolumeProcessor.bounded(Double.NaN),0);assertEquals(1f,TrackVolumeProcessor.bounded(Double.POSITIVE_INFINITY),0);assertEquals(2f,TrackVolumeProcessor.bounded(4),0);assertEquals(0f,TrackVolumeProcessor.bounded(-1),0);
  }

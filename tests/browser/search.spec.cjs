@@ -1,3 +1,4 @@
+require('./lyrics-network.cjs')(require('@playwright/test').test);
 const {test,expect}=require('@playwright/test');
 const fs=require('node:fs');
 async function setup(page,mobile){

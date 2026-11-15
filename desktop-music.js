@@ -1,6 +1,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),{spawn}=require('node:child_process');
 const {constants}=require('node:fs');
 const {isInside}=require('./desktop-files');
+const {embedMp3Lyrics}=require('./desktop-tags');
 const PROVIDERS=new Set(['youtubeMusic','youtubeAudio','soundcloud']);
 const FULL_AUDIO='bestaudio[format_id!*=preview][ext=m4a]/bestaudio[format_id!*=preview]/best[format_id!*=preview]';
 // Electron's request stream also settles errors that can leave net.fetch pending.
@@ -80,8 +81,8 @@ function downloadError(error) {
   return 'Полная версия этой записи недоступна для скачивания. Попробуйте позже.';
 }
 class DesktopMusic {
-  constructor({app,fetcher=fetch,audioFetcher=fetcher,pageFetcher=fetcher,authorize,onRoot=async()=>{},onProgress=()=>{}}) {
-    Object.assign(this,{app,fetcher,audioFetcher,pageFetcher,authorize,onRoot,onProgress});this.active=new Map();this.pending=new Map();this.requests=new Map();
+  constructor({app,fetcher=fetch,audioFetcher=fetcher,pageFetcher=fetcher,authorize,onRoot=async()=>{},onProgress=()=>{},resolveFile=async()=>null}) {
+    Object.assign(this,{app,fetcher,audioFetcher,pageFetcher,authorize,onRoot,onProgress,resolveFile});this.active=new Map();this.pending=new Map();this.requests=new Map();
     this.tools=app.isPackaged?path.join(process.resourcesPath,'music-tools'):path.join(__dirname,'build/music-tools');
     this.manifestFile=path.join(app.getPath('userData'),'music-downloads.json');this.manifest=null;this.storeChain=Promise.resolve();
   }
@@ -195,20 +196,31 @@ class DesktopMusic {
       delete records[payload.downloadId];await this.saveRecords();return true;
     }
     if(operation==='restore') {
-      const result=[];for(const record of Object.values(await this.records()))if(await fs.stat(record.fullPath).catch(()=>null)){await this.onRoot(record.folderSource);await this.cleanSidecar(record);result.push(record);}
+      const result=[];for(const record of Object.values(await this.records())){const file=await this.descriptor(record).catch(()=>null);if(file){await this.onRoot(file.folderSource);result.push(file);}}
       return result;
     }
     throw Error('Недопустимая операция');
   }
   async descriptor(record) {
-    const stat=await fs.stat(record.fullPath);
+    let stat;try{stat=await fs.stat(record.fullPath);}catch(error){
+      if(!['ENOENT','ENOTDIR'].includes(error.code))throw error;
+      const moved=await this.resolveFile(record.fullPath,{downloadId:record.downloadId});if(!moved)throw error;
+      await this.relocateRecord(record.fullPath,moved,record.downloadId);stat=await fs.stat(record.fullPath);
+    }
     return {...record,name:path.basename(record.fullPath),size:stat.size,lastModified:stat.mtimeMs};
+  }
+  async relocateRecord(original,file,downloadId){
+    const record=(await this.records())[downloadId];if(!record||record.fullPath!==original)return;
+    Object.assign(record,{fullPath:file.fullPath,folderSource:file.folderSource,folderName:file.folderName});await this.saveRecords();
   }
   async download({track,folderSource},id) {
     const records=await this.records();
-    if(records[track.id] && await fs.stat(records[track.id].fullPath).catch(()=>null)){await this.onRoot(records[track.id].folderSource);return this.descriptor(records[track.id]);}
-    const root=folderSource?await this.authorize(folderSource):path.join(this.app.getPath('music'),'Playerium');
-    await fs.mkdir(root,{recursive:true});await this.onRoot(root);
+    if(records[track.id]){const saved=await this.descriptor(records[track.id]).catch(()=>null);if(saved){await this.onRoot(saved.folderSource);return saved;}}
+    const selected=folderSource?await this.authorize(folderSource):await fs.realpath(this.app.getPath('music'));
+    const target=path.basename(selected).toLowerCase()==='playerium'?selected:path.join(selected,'Playerium');
+    await fs.mkdir(target,{recursive:true});const root=await fs.realpath(target);
+    if(!isInside(selected,root))throw Error('Папка Playerium находится за пределами выбранной папки. Выберите другую папку музыки.');
+    await this.onRoot(root);
     const staging=await fs.mkdtemp(path.join(this.app.getPath('temp'),'playerium-song-'));
     let committed,lastError;
     try {
@@ -243,10 +255,12 @@ class DesktopMusic {
           // Metadata chosen from the recording catalog is embedded into the audio.
           for(const key of ['title','artist','genre','isrc'])if(track[key]){info[key]=String(track[key]).slice(0,500);info['meta_'+key]=info[key];}
           if(track.artist)info.artists=[info.artist];
+          if(typeof track.lyricsData?.plain==='string')info.meta_lyrics=track.lyricsData.plain.slice(0,100000);
+          if(typeof track.lyricsData?.synced==='string'&&track.lyricsData.synced)info.meta_lyrics_lrc=track.lyricsData.synced.slice(0,100000);
           info.track=info.title;if(track.year){info.release_year=track.year;info.meta_date=String(track.year);info.release_date=String(track.year)+'0101';}if(track.trackNo)info.track_number=track.trackNo;
           if(track.pictureUrl && /^https:\/\/(?:[^/]+\.)?(?:mzstatic\.com|dzcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|bcbits\.com|audius\.co|sndcdn\.com)\//i.test(track.pictureUrl)){info.thumbnail=track.pictureUrl;info.thumbnails=[{url:track.pictureUrl,id:'cover'}];}
           const meta=path.join(staging,'recording.json');await fs.writeFile(meta,JSON.stringify(info));
-          const audioFormat=['wav','aac'].includes(info.ext)?'m4a':'best';
+          const audioFormat='mp3';
           const downloadArgs=['--load-info-json',meta,'--no-playlist','--quiet','--no-progress','--max-filesize','256M','-f',FULL_AUDIO,'-x','--audio-format',audioFormat,'--audio-quality','0','--embed-metadata','--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail','-o',path.join(staging,'audio.%(ext)s'),'--print','after_move:filepath'];
           if(directHosts[source.provider])downloadArgs.unshift('--force-generic-extractor');
           if(['musify','miyzvuk','hitmusic'].includes(source.provider))downloadArgs.unshift('--enable-file-urls');
@@ -256,6 +270,7 @@ class DesktopMusic {
             output=await this.run(downloadArgs.filter(arg=>!['--embed-thumbnail','--convert-thumbnails','jpg','--write-thumbnail'].includes(arg)),id,600000);
           }
           const audio=output.split(/\r?\n/).at(-1);if(!isInside(staging,audio)||!/^audio\.(m4a|mp3|opus|ogg|flac|aac|wav)$/i.test(path.basename(audio)))throw Error('Некорректный файл');
+          if(path.extname(audio).toLowerCase()==='.mp3')await embedMp3Lyrics(audio,track.lyricsData?.plain);
           const {parseFile}=await import('music-metadata');const decoded=await parseFile(audio);
           const expected=track.duration||source.duration;
           if(!(decoded.format.duration>0)||(expected&&Math.abs(decoded.format.duration-expected)>Math.max(8,expected*.04)))throw Error('Полная запись не совпадает с выбранной версией.');
@@ -263,8 +278,6 @@ class DesktopMusic {
           const fullPath=path.join(root,`${name} [${track.id.slice(5)}]${path.extname(audio)}`);
           await fs.copyFile(audio,fullPath,constants.COPYFILE_EXCL);committed=fullPath;
           const metadata={title:info.title,artist:info.artist,album:info.album||'',year:info.release_year||'',trackNo:info.track_number||0,genre:info.genre||'',isrc:info.isrc||'',duration:decoded.format.duration};
-          await fs.writeFile(fullPath+'.playerium.json',JSON.stringify(metadata));
-          const cover=(await fs.readdir(staging)).find(f=>/^audio.*\.jpg$/i.test(f));if(cover)await fs.copyFile(path.join(staging,cover),fullPath+'.jpg',constants.COPYFILE_EXCL);
           records[track.id]={fullPath,folderSource:root,folderName:path.basename(root),downloadId:track.id,metadata};await this.saveRecords();
           return this.descriptor(records[track.id]);
         }catch(error){if(committed)throw error;lastError=error;}

@@ -17,6 +17,9 @@ final class TrackVolumeProcessor extends BaseAudioProcessor {
         return format;
     }
     @Override public void queueInput(ByteBuffer input){
+        // Media3 passes its shared empty buffer while draining the pipeline.
+        // Copying that buffer into itself throws even at unity gain.
+        if(!input.hasRemaining())return;
         ByteBuffer output=replaceOutputBuffer(input.remaining());input.order(ByteOrder.nativeOrder());final float multiplier=gain;
         if(multiplier==1f)output.put(input);
         else while(input.remaining()>=2){int sample=Math.round(input.getShort()*multiplier);output.putShort((short)Math.max(Short.MIN_VALUE,Math.min(Short.MAX_VALUE,sample)));}

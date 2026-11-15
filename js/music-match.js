@@ -10,7 +10,7 @@ const artistAliases=new Map([
   ['океан ельзи','okean elzy']
 ].map(([alias,canonical])=>[normalize(alias),normalize(canonical)]));
 export const normalizeSearch=value=>{
-  let text=normalize(value);for(const [alias,canonical]of artistAliases)text=text.replaceAll(alias,canonical);
+  let text=normalize(value);for(const [alias,canonical]of artistAliases)text=text.split(alias).join(canonical);
   return normalize(text.replace(/[а-яёіїєґ]/gu,c=>cyrillic[c]));
 };
 const presentation = /\s*[\[(]?(?:official\s+(?:audio|lyric(?:s)?(?:\s+video)?)|audio\s+only|visuali[sz]er|lyric(?:s)?(?:\s+video)?|provided to youtube)[\])]?\s*/gi;

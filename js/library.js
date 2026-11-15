@@ -13,6 +13,7 @@ import { ID3Parser } from "./id3-parser.js";
 
 const DB_NAME = "spotify_local_player_db";
 const DB_VERSION = 3;
+const documentKey=value=>{try{const uri=new URL(value),parts=uri.pathname.split('/'),at=parts.indexOf('document');return uri.protocol==='content:'&&at>=0&&parts[at+1]?'document:'+(uri.username?uri.username+'@':'')+uri.host+':'+decodeURIComponent(parts[at+1]):null;}catch{return null;}};
 
 export class Library {
   constructor() {
@@ -212,6 +213,23 @@ export class Library {
     this.importChain=task;return task;
   }
 
+  async relocateTrack(id,file){
+    const task=this.importChain.catch(()=>{}).then(async()=>{
+      const track=this.tracks.get(id);if(!track)return null;
+      const updated={...track,filePath:file.fullPath,fileName:file.name||track.fileName,fileSize:file.size??track.fileSize,lastModified:file.lastModified??track.lastModified,sourceKey:file.fullPath,
+        folderSource:file.folderSource||track.folderSource,folderName:file.folderName||track.folderName,unavailable:false,
+        sourceAliases:[...new Set([...(track.sourceAliases||[]),track.sourceKey,track.filePath].filter(Boolean))]};
+      await this.putInStore('tracks',{...updated,pictureUrl:null});Object.assign(track,updated);this.onLibraryChanged?.();return track;
+    });this.importChain=task;return task;
+  }
+
+  async markFolderUnavailable(source){
+    const task=this.importChain.catch(()=>{}).then(async()=>{
+      for(const track of this.tracks.values())if(track.folderSource===source&&!track.unavailable){track.unavailable=true;await this.putInStore('tracks',{...track,pictureUrl:null});}
+      this.onLibraryChanged?.();
+    });this.importChain=task;return task;
+  }
+
   async mergeDuplicateTracks(keepId,dropId) {
     const keep=this.tracks.get(keepId),drop=this.tracks.get(dropId);if(!keep||!drop||keepId===dropId)return keep;
     const aliases=[...new Set([...(keep.sourceAliases||[]),...(drop.sourceAliases||[]),drop.sourceKey,drop.filePath,drop.nativeUri].filter(Boolean))];
@@ -276,7 +294,7 @@ export class Library {
   async removeTrack(id) {
     await this.importChain.catch(()=>{});
     const track=this.tracks.get(id);if(!track)return;
-    const removed=new Set(this.removedSources);if(track.sourceKey)removed.add(track.sourceKey);
+    const removed=new Set(this.removedSources);if(track.sourceKey)removed.add(track.sourceKey);const canonical=documentKey(track.nativeUri);if(canonical)removed.add(canonical);
     const playlists=this.getPlaylists().map(p=>({...p,trackIds:p.trackIds.filter(t=>t!==id)}));
     const tx=this.db.transaction(['tracks','files','playlists','settings'],'readwrite');
     tx.objectStore('tracks').delete(id);tx.objectStore('files').delete(id);
@@ -554,7 +572,8 @@ export class Library {
       playlist = { id: `pl_fld_${crypto.randomUUID()}`, name: folderName, description: `Авто-плейлист папки: ${folderName}`,
         trackIds: [], createdAt: Date.now(), updatedAt: Date.now(), coverUrl: null, isFolderPlaylist: true, folderSource, isAndroid };
     }
-    const index = new Map();for(const t of this.getTracks())for(const key of [t.sourceKey,t.filePath,t.nativeUri,...(t.sourceAliases||[])].filter(Boolean))index.set(key,t);
+    const index = new Map();for(const t of this.getTracks())for(const key of [t.sourceKey,t.filePath,t.nativeUri,documentKey(t.nativeUri),...(t.sourceAliases||[])].filter(Boolean))index.set(key,t);
+    const removedDocuments=new Set([...this.removedSources].map(value=>typeof value==='string'&&value.startsWith('document:')?value:documentKey(value)).filter(Boolean));
     const legacyIndex = new Map();
     for (const t of this.getTracks()) if (!t.sourceKey && !t.filePath && !t.nativeUri) {
       const legacyKey = `${t.folderName}/${t.fileName}/${t.fileSize}`;
@@ -568,8 +587,13 @@ export class Library {
     for (let i = 0; i < audio.length; i++) {
       const f = audio[i];
       const key = identity(f);
-      if(this.removedSources.has(key))continue;
-      let track = index.get(key);
+      if(this.removedSources.has(key)||removedDocuments.has(documentKey(f.uri)))continue;
+      let track = index.get(key)||index.get(documentKey(f.uri));
+      if(!track){
+        const savedKey=/\[([a-f0-9]+)\]\.[^.]+$/i.exec(f.name)?.[1],downloadId=f.downloadId||(savedKey?'song_'+savedKey:null);
+        const candidates=this.getTracks().filter(t=>downloadId?t.downloadId===downloadId:t.unavailable&&t.fileName===f.name&&t.fileSize===f.size&&Number(t.lastModified)>0&&Math.abs(t.lastModified-f.lastModified)<1);
+        if(candidates.length===1)track=candidates[0];
+      }
       // A native download can move into a gallery-hidden directory after an update.
       // Its download ID stays stable, so likes and playlist references keep their IDs.
       if(!track&&f.downloadId)track=this.getTracks().find(t=>t.downloadId===f.downloadId);
@@ -604,6 +628,7 @@ export class Library {
         const id = track?.id || `trk_${crypto.randomUUID()}`;
         const previous = track;
         track = { ...previous, ...metadata, id, downloadId:f.downloadId || previous?.downloadId || null, fileName: f.name, fileSize: f.size || 0, lastModified: f.lastModified,
+          sourceAliases:[...new Set([...(previous?.sourceAliases||[]),previous?.sourceKey,previous?.filePath,previous?.nativeUri].filter(value=>value&&value!==key))],
           sourceKey: key, folderSource, folderName, filePath: f.fullPath || null, nativeUri: f.uri || null,
           liked: previous?.liked || false, dateAdded: previous?.dateAdded || Date.now(), metadataImported: parsed, metadataVersion: 3, unavailable: false };
         if(previous&&(previous.fileSize!==track.fileSize||previous.lastModified!==track.lastModified)){
@@ -634,7 +659,7 @@ export class Library {
     const importedIds = new Set(ids);
     for (const id of (replaceContents ? playlist.trackIds.filter(id => !importedIds.has(id)) : [])) {
       const t = this.tracks.get(id);
-      if (t) { t.unavailable = true; await this.putInStore("tracks", t); }
+      if (t?.folderSource===folderSource) { t.unavailable = true; await this.putInStore("tracks", t); }
     }
     playlist.trackIds = [...new Set(replaceContents ? ids : [...playlist.trackIds, ...ids])];
     playlist.updatedAt = Date.now();
@@ -657,7 +682,7 @@ export class Library {
           const files = await window.electronAPI.watchFolder(p.folderSource);
           await this.syncFolderToPlaylist(p.name, p.folderSource, files);
         } else if (window.AndroidBridge && p.isAndroid) window.AndroidBridge.rescanFolder(p.folderSource);
-      } catch (error) { this.onAccessError?.(p, error); }
+      } catch (error) { await this.markFolderUnavailable(p.folderSource);this.onAccessError?.(p, error); }
     }
   }
 }

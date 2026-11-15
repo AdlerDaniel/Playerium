@@ -175,7 +175,7 @@ test('decoded short previews are rejected before any download is published',asyn
     };
     const track={id:'song_ab19',title:'Song',artist:'Artist',duration:180,sources:[{provider:'topmusicua',url:'https://topmusicua.com/uploads/files/song.mp3',title:'Song',artist:'Artist',duration:180}]};
     await assert.rejects(engine.request('download',{track,folderSource:path.join(root,'downloads')},'test-preview'),/не совпадает/);
-    assert.deepEqual(await fs.readdir(path.join(root,'downloads')),[]);assert.deepEqual(await engine.records(),{});
+    assert.deepEqual(await fs.readdir(path.join(root,'downloads','Playerium')),[]);assert.deepEqual(await engine.records(),{});
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 

@@ -1,3 +1,4 @@
+require('./lyrics-network.cjs')(require('@playwright/test').test);
 const {test,expect}=require('@playwright/test');
 test('direct catalogs retain exact recordings, durations and reject off-site files and sidebar suggestions',async({page})=>{
   await page.goto('/');

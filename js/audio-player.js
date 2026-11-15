@@ -215,9 +215,13 @@ export class AudioPlayer {
     }
     window.AndroidBridge?.playbackCommand?.("stop", 0);
     try {
-      if (track.unavailable) throw new Error("Файл недоступен. Восстановите доступ к папке через «Добавить папку».");
+      if (track.unavailable&&!track.filePath) throw new Error("Файл недоступен. Восстановите доступ к папке через «Добавить папку».");
       let url,file;
-      if (track.filePath && window.electronAPI?.getAudioSource) url = await window.electronAPI.getAudioSource(track.filePath);
+      if (track.filePath && window.electronAPI?.getAudioSource) {
+        const source=await window.electronAPI.getAudioSource(track.filePath,{fileSize:track.fileSize,lastModified:track.lastModified,downloadId:track.downloadId});
+        if(typeof source==='string')url=source;
+        else{url=source.url;const saved=await this.library.relocateTrack(track.id,source.file);if(saved){Object.assign(track,saved);this.refreshEditedTrack(saved);}}
+      }
       else {
         file = await this.library.getAudioFile(track);
         if (request !== this.playRequest) return;

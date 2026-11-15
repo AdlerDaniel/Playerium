@@ -111,7 +111,12 @@ public class MediaNotificationService extends MediaSessionService {
         player.setWakeMode(C.WAKE_MODE_LOCAL);
         player.addListener(new Player.Listener() {
             @Override public void onPlayerError(PlaybackException exception) {
-                error = "Не удалось воспроизвести файл. Проверьте доступ к папке.";
+                android.util.Log.e("PlayeriumPlayback",exception.getErrorCodeName(),exception);
+                if(exception.errorCode==PlaybackException.ERROR_CODE_IO_NO_PERMISSION)error="Нет доступа к файлу. Выберите папку с музыкой ещё раз.";
+                else if(exception.errorCode==PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)error="Файл перемещён или удалён. Добавьте папку с его новым расположением.";
+                else if(exception.errorCode>=3000&&exception.errorCode<5000)error="Не удалось прочитать аудиозапись. Файл повреждён или его формат не поддерживается.";
+                else if(exception.errorCode>=5000&&exception.errorCode<6000)error="Не удалось запустить вывод звука. Попробуйте снова или смените аудиоустройство.";
+                else error="Не удалось воспроизвести файл. Попробуйте выбрать его снова.";
                 player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
             @Override public void onMediaItemTransition(MediaItem item,int reason){applyTrackVolume();refreshArtwork();}

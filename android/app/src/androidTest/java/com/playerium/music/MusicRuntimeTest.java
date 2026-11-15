@@ -38,9 +38,10 @@ public class MusicRuntimeTest {
         File unrelated=new File(selected,"personal.jpg");assertTrue(unrelated.createNewFile());
         androidx.documentfile.provider.DocumentFile parent=androidx.documentfile.provider.DocumentFile.fromFile(selected);
         androidx.documentfile.provider.DocumentFile downloads=MusicEngine.hiddenDownloadDirectory(parent);
-        assertEquals("Playerium Downloads",downloads.getName());assertTrue(downloads.findFile(".nomedia").isFile());
+        assertEquals("Playerium",downloads.getName());assertTrue(downloads.findFile(".nomedia").isFile());
         assertNull(parent.findFile(".nomedia"));assertTrue(unrelated.exists());
         assertEquals(downloads.getUri(),MusicEngine.hiddenDownloadDirectory(parent).getUri());
+        assertEquals(downloads.getUri(),MusicEngine.hiddenDownloadDirectory(downloads).getUri());assertNull(downloads.findFile("Playerium"));
         downloads.findFile(".nomedia").delete();MusicEngine.hiddenDownloadDirectory(parent);assertTrue(downloads.findFile(".nomedia").isFile());
         downloads.delete();unrelated.delete();assertTrue(selected.delete());
     }
@@ -74,12 +75,13 @@ public class MusicRuntimeTest {
         assertTrue(process.waitFor(60,TimeUnit.SECONDS));assertEquals(new String(log.toByteArray(),StandardCharsets.UTF_8),0,process.exitValue());assertTrue(fixture.length()>1000);
         File picture=new File(context.getCacheDir(),"test-cover.png");try(InputStream in=context.getAssets().open("assets/icon.png");OutputStream out=new FileOutputStream(picture)){while((n=in.read(bytes))!=-1)out.write(bytes,0,n);}
         String audioUrl=android.net.Uri.fromFile(fixture).toString();
-        JSONObject info=new JSONObject().put("id","fixture").put("title","Saved recording").put("artist","Playerium").put("album","Test album").put("meta_title","Saved recording").put("meta_artist","Playerium").put("duration",1).put("ext","m4a").put("url",audioUrl).put("extractor","generic").put("extractor_key","Generic")
+        JSONObject info=new JSONObject().put("id","fixture").put("title","Saved recording").put("artist","Playerium").put("album","Test album").put("meta_title","Saved recording").put("meta_artist","Playerium").put("meta_lyrics_lrc","[00:00.00]Первая строка\n[00:01.00]Вторая строка").put("duration",1).put("ext","m4a").put("url",audioUrl).put("extractor","generic").put("extractor_key","Generic")
             .put("formats",new JSONArray().put(new JSONObject().put("format_id","audio").put("url",audioUrl).put("ext","m4a").put("acodec","aac").put("protocol","file")))
             .put("thumbnails",new JSONArray().put(new JSONObject().put("id","cover").put("url",android.net.Uri.fromFile(picture))));
         File description=new File(context.getCacheDir(),"test-recording.json");try(OutputStream out=new FileOutputStream(description)){out.write(info.toString().getBytes(StandardCharsets.UTF_8));}
-        String output=(String)run.invoke(engine,Arrays.asList("--load-info-json",description.getAbsolutePath(),"--enable-file-urls","-f","bestaudio[ext=m4a]/bestaudio/best","--no-playlist","--quiet","--no-progress","-x","--audio-format","m4a","--embed-metadata","--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail","-o",new File(context.getCacheDir(),"processed-test.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"),"pipeline-test",60000L);
+        String output=(String)run.invoke(engine,Arrays.asList("--load-info-json",description.getAbsolutePath(),"--enable-file-urls","-f","bestaudio[ext=m4a]/bestaudio/best","--no-playlist","--quiet","--no-progress","-x","--audio-format","mp3","--embed-metadata","--embed-thumbnail","--convert-thumbnails","jpg","--write-thumbnail","-o",new File(context.getCacheDir(),"processed-test.%(ext)s").getAbsolutePath(),"--print","after_move:filepath"),"pipeline-test",60000L);
         String[] lines=output.split("\\r?\\n");File processed=new File(lines[lines.length-1]);assertTrue(processed.length()>1000);
+        Mp3Tags.lyrics(processed,"Первая строка\nВторая строка");
         Method publish=MusicEngine.class.getDeclaredMethod("publish",File.class,File.class,JSONObject.class,String.class,String.class);publish.setAccessible(true);
         JSONObject metadata=new JSONObject().put("title","Saved recording").put("artist","Playerium").put("album","Test album").put("duration",1);
         File savedCover=new File(context.getCacheDir(),"processed-test.jpg");assertTrue(savedCover.isFile());
@@ -90,12 +92,15 @@ public class MusicRuntimeTest {
         record.remove("galleryHidden");assertTrue(new File(owned.getParentFile(),".nomedia").delete());
         Method protect=MusicEngine.class.getDeclaredMethod("protectDownloaded",JSONObject.class,String.class);protect.setAccessible(true);
         JSONObject restored=(JSONObject)protect.invoke(engine,record,"song_abcd1234");
-        assertNotNull(engine.savedArtwork(android.net.Uri.fromFile(owned)));
+        assertTrue(owned.getName().endsWith(".mp3"));assertFalse(record.has("sidecar"));assertFalse(record.has("cover"));
+        assertFalse(new File(owned.getAbsolutePath()+".playerium.json").exists());assertFalse(new File(owned.getAbsolutePath()+".jpg").exists());
         assertNotNull(PlaybackArtwork.embedded(context,"saved-sidecar-cover",android.net.Uri.fromFile(owned)));
         assertEquals(record.getString("uri"),restored.getString("uri"));assertTrue(new File(owned.getParentFile(),".nomedia").isFile());
         Method withCover=MusicEngine.class.getDeclaredMethod("withCover",JSONObject.class);withCover.setAccessible(true);
         assertTrue(((JSONObject)withCover.invoke(engine,restored)).getJSONObject("metadata").getString("pictureBase64").length()>0);
-        File coverFile=new File(android.net.Uri.parse(record.getString("cover")).getPath());
+        assertEquals("Первая строка\nВторая строка",((JSONObject)withCover.invoke(engine,restored)).getJSONObject("metadata").getString("embeddedLyrics"));
+        assertTrue(((JSONObject)withCover.invoke(engine,restored)).getJSONObject("metadata").getString("embeddedSyncedLyrics").contains("[00:01.00]"));
+        File coverFile=new File(owned.getAbsolutePath()+".jpg");
         java.util.concurrent.CountDownLatch scanned=new java.util.concurrent.CountDownLatch(1);
         android.media.MediaScannerConnection.scanFile(context,new String[]{coverFile.getAbsolutePath()},null,(path,uri)->scanned.countDown());
         assertTrue(scanned.await(20,TimeUnit.SECONDS));

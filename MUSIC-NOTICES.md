@@ -30,3 +30,13 @@ Source retrieval/build instructions for the Android executables:
 The unmodified Windows FFmpeg archive and corresponding source archives are preserved
 in the [pinned runtime mirror](https://github.com/AdlerDaniel/Playerium/releases/tag/music-runtime-2026-10-06)
 after the upstream rotating autobuild was removed. The original binary checksum is unchanged.
+
+## Lyrics services
+
+Lyrics are requested automatically from [LRCLIB](https://lrclib.net/docs),
+then [Lrcmux](https://lrcmux.dev) and [Lyrics.ovh](https://lyricsovh.docs.apiary.io/)
+when a matching text is unavailable. The lyrics screen names the service which
+returned the text. Availability and timing data depend on each service's catalog;
+Playerium does not generate or invent missing lyrics. Successful results are
+cached locally, and newly downloaded MP3 files include the available lyrics and
+timing data in their ID3 tags.

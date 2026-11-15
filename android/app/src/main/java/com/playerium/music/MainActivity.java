@@ -186,18 +186,16 @@ public class MainActivity extends AppCompatActivity {
             catch(Exception e){return false;}
         }
         if (!"content".equals(uri.getScheme())) return false;
+        if(context.checkUriPermission(uri,android.os.Process.myPid(),android.os.Process.myUid(),Intent.FLAG_GRANT_READ_URI_PERMISSION)==PackageManager.PERMISSION_GRANTED)return true;
         for (UriPermission permission : context.getContentResolver().getPersistedUriPermissions()) {
             if (!permission.isReadPermission()) continue;
             if (uri.equals(permission.getUri())) return true;
             try {
                 if (android.provider.DocumentsContract.getTreeDocumentId(uri).equals(android.provider.DocumentsContract.getTreeDocumentId(permission.getUri()))
                     && uri.getAuthority().equals(permission.getUri().getAuthority())) {
-                    String treeId = android.provider.DocumentsContract.getTreeDocumentId(uri);
-                    if (!android.provider.DocumentsContract.isDocumentUri(context, uri)) return true;
-                    String documentId = android.provider.DocumentsContract.getDocumentId(uri);
-                    if (documentId.equals(treeId) || documentId.startsWith(treeId + "/")) return true;
-                    if (Build.VERSION.SDK_INT >= 29 && android.provider.DocumentsContract.isChildDocument(context.getContentResolver(),
-                        android.provider.DocumentsContract.buildDocumentUriUsingTree(permission.getUri(), treeId), uri)) return true;
+                    // Document IDs are opaque, not filesystem paths. The provider
+                    // enforces the actual descendant relationship when opened.
+                    return true;
                 }
             } catch (Exception ignored) {}
         }
@@ -330,7 +328,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         List<DocumentFile> audioFiles = new ArrayList<>();
-        findAudioFilesRecursively(rootDir, audioFiles);
+        try{findAudioFilesRecursively(rootDir, audioFiles);}catch(RuntimeException error){
+            android.util.Log.w("Playerium","Incomplete music folder scan",error);
+            if(isInitial)runOnUiThread(()->Toast.makeText(this,"Не удалось прочитать все подпапки. Проверьте доступ к выбранной папке.",Toast.LENGTH_LONG).show());
+            return; // Keep the last complete scan instead of removing unseen tracks.
+        }
 
         sendNativeFiles(folderName, treeUri.toString(), audioFiles, isInitial);
     }
@@ -411,16 +413,21 @@ public class MainActivity extends AppCompatActivity {
             }
         } catch (Exception ignored) {}
         finally { try { retriever.release(); } catch (Exception ignored) {} }
+        if(file.getName()!=null&&file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".mp3"))EmbeddedLyrics.read(this,file.getUri(),data);
         return data;
     }
 
     private void findAudioFilesRecursively(DocumentFile dir, List<DocumentFile> results) {
-        DocumentFile[] files = dir.listFiles();
-        if (files == null) return;
-        for (DocumentFile file : files) {
-            if (file.isDirectory()) {
-                findAudioFilesRecursively(file, results);
-            } else if (file.isFile()) {
+        java.util.ArrayDeque<DocumentFile> pending=new java.util.ArrayDeque<>();pending.add(dir);
+        java.util.Set<String> visited=new java.util.HashSet<>(),added=new java.util.HashSet<>();
+        while(!pending.isEmpty()){
+            DocumentFile directory=pending.removeFirst();
+            if(!visited.add(directory.getUri().toString()))continue;
+            if(!directory.canRead())throw new SecurityException("Нет доступа к вложенной папке музыки");
+            DocumentFile[] files=directory.listFiles();if(files==null)continue;
+            for (DocumentFile file : files) {
+            if (file.isDirectory()) pending.addLast(file);
+            else if (file.isFile()&&added.add(file.getUri().toString())) {
                 String name = file.getName();
                 if (name != null) {
                     String lower = name.toLowerCase(java.util.Locale.ROOT);
@@ -431,6 +438,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             }
+        }
         }
     }
 
@@ -479,7 +487,9 @@ public class MainActivity extends AppCompatActivity {
                             : Intent.FLAG_GRANT_READ_URI_PERMISSION
                     );
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    android.util.Log.e("Playerium","Could not persist music folder permission",e);
+                    Toast.makeText(this,"Не удалось сохранить доступ к папке. Выберите её через системное окно «Файлы».",Toast.LENGTH_LONG).show();
+                    return;
                 }
 
                 new Thread(new Runnable() {
