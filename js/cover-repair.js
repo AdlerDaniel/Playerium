@@ -10,7 +10,7 @@ export function verifiedCover(track, candidate) {
 export function installCoverRepair(music, catalogTracks) {
   const pending = new Map();
   music.repairCover = async track => {
-    if (!music.available || !track?.id || !music.library.getTrackById || typeof createImageBitmap !== 'function' || track.catalog || Date.now() - (track.coverUpgradeAttemptAt || 0) < 86400000 || !track.pictureBlob&&Date.now()-(track.coverCheckedAt||0)<86400000) return;
+    if (track?.userEdits?.coverBlob || !music.available || !track?.id || !music.library.getTrackById || typeof createImageBitmap !== 'function' || track.catalog || Date.now() - (track.coverUpgradeAttemptAt || 0) < 86400000 || !track.pictureBlob&&Date.now()-(track.coverCheckedAt||0)<86400000) return;
     if(track.pictureBlob&&track.coverQualityVersion===2)return;
     if (pending.has(track.id)) return pending.get(track.id);
     const job = (async () => {
@@ -32,8 +32,10 @@ export function installCoverRepair(music, catalogTracks) {
               if (!blob.size || blob.size > 4 * 1024 * 1024) continue;
               const bitmap = await createImageBitmap(blob);
               const valid = Math.min(bitmap.width,bitmap.height) >= 32 && Math.min(bitmap.width,bitmap.height)>oldSize; bitmap.close();
-              if (!valid || music.library.getTrackById(track.id) !== track || track.pictureBlob!==oldBlob) continue;
-              track.pictureBlob = await resizeArtwork(blob);
+              if (!valid || track.userEdits?.coverBlob || music.library.getTrackById(track.id) !== track || track.pictureBlob!==oldBlob) continue;
+              const resized=await resizeArtwork(blob);
+              if(track.userEdits?.coverBlob || music.library.getTrackById(track.id)!==track || track.pictureBlob!==oldBlob)continue;
+              track.pictureBlob = resized;
               track.pictureUrl = music.library.coverURL(track.id,track.pictureBlob);
               track.coverCheckedAt = Date.now();
               track.coverQualityVersion=2;

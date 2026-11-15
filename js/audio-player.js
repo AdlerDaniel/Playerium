@@ -4,6 +4,8 @@
  */
 
 
+import {trackVolume} from './track-edits.js';
+
 export class AudioPlayer {
   constructor(library) {
     this.library = library;
@@ -61,7 +63,7 @@ export class AudioPlayer {
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
       this.audioCtx = new AudioCtxClass();
       this.gainNode = this.audioCtx.createGain();
-      this.gainNode.gain.value = this.volume;
+      this.gainNode.gain.value = this.volume*this.currentTrackVolume();
 
       this.audio.volume = 1;
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
@@ -204,6 +206,7 @@ export class AudioPlayer {
     this.currentTrack = track;
 
     this.nativePlayback = !!(track.nativeUri && window.AndroidBridge?.setPlaybackQueue && this.queue.every(t => t.nativeUri));
+    if(!this.nativePlayback)this.applyTrackVolume();
     if (this.nativePlayback) {
       this.syncNativeQueue(true, true);
       this.onTrackChange?.(track);
@@ -243,7 +246,7 @@ export class AudioPlayer {
   syncNativeQueue(play = this.isPlaying, reset = false, position = null) {
     if (!this.nativePlayback) return;
     this.nativeMediaIds=this.queue.map(t=>t.id);
-    const tracks=this.queue.map(t=>({id:t.id,uri:t.nativeUri,title:t.title,artist:t.artist,queueOrigin:t.queueOrigin,queueEntry:t.queueEntry})),signature=JSON.stringify(tracks);
+    const tracks=this.queue.map(t=>({id:t.id,uri:t.nativeUri,title:t.title,artist:t.artist,album:t.album,trackVolume:trackVolume(t),queueOrigin:t.queueOrigin,queueEntry:t.queueEntry})),signature=JSON.stringify(tracks);
     const requestedAt=play&&reset?this.nativePlayRequestedAt||Date.now():0;
     if(reset&&play&&signature===this.nativeQueueSignature&&window.AndroidBridge.selectPlaybackTrack?.(tracks[this.queueIndex]?.id,this.queueIndex,true,Number.isFinite(position)?Math.round(position*1000):0,requestedAt)){
       this.publishNativeArtwork();return;
@@ -315,7 +318,7 @@ export class AudioPlayer {
         const saved = state.tracks?.[index];
         const base=this.library.getTrackById(id)
           || (saved?.uri && [...(this.library.tracks?.values() || [])].find(t => t.nativeUri === saved.uri))
-           || (saved?.uri ? {id, nativeUri:saved.uri, title:saved.title, artist:saved.artist, duration:Math.max(0,state.duration / 1000)} : null);
+           || (saved?.uri ? {id, nativeUri:saved.uri, title:saved.title, artist:saved.artist,album:saved.album,trackVolume:saved.trackVolume, duration:Math.max(0,state.duration / 1000)} : null);
         return base&&saved?.queueOrigin==='manual'?{...base,queueOrigin:'manual',queueEntry:saved.queueEntry}:base;
       });
       // Preserve native indices; never replace the playing queue with a partial import.
@@ -466,6 +469,30 @@ export class AudioPlayer {
     }
   }
 
+  currentTrackVolume() {
+    return this.trackVolumePreview && this.trackVolumePreview.id===this.currentTrack?.id?this.trackVolumePreview.volume/100:trackVolume(this.currentTrack);
+  }
+
+  applyTrackVolume() {
+    const gain=this.currentTrackVolume();
+    if(this.nativePlayback){window.AndroidBridge?.playbackCommand?.('trackVolume',gain);return;}
+    if(this.gainNode)this.gainNode.gain.value=this.volume*gain;
+    else this.audio.volume=Math.min(1,this.volume*gain);
+  }
+
+  previewTrackVolume(id,volume) {
+    this.trackVolumePreview=id?{id,volume:Math.max(0,Math.min(200,Number(volume)||0))}:null;
+    this.applyTrackVolume();
+  }
+
+  refreshEditedTrack(track) {
+    const update=entry=>{if(entry?.id===track.id){const origin=entry.queueOrigin,occurrence=entry.queueEntry;Object.assign(entry,track);if(origin==='manual'){entry.queueOrigin=origin;entry.queueEntry=occurrence;}}return entry;};
+    this.queue=this.queue.map(update);this.originalQueue=this.originalQueue.map(update);
+    if(this.currentTrack?.id===track.id){update(this.currentTrack);this.applyTrackVolume();this.updateMediaSessionMetadata(this.currentTrack);this.onTrackChange?.(this.currentTrack);}
+    if(this.nativePlayback){this.syncNativeQueue(this.isPlaying,false);this.publishNativeArtwork();}
+    this.onQueueChange?.(this.queue,this.queueIndex);
+  }
+
   setVolume(val) {
     const v = Math.max(0, Math.min(1, parseFloat(val)));
     this.volume = Number.isFinite(v) ? v : 0.8;
@@ -473,11 +500,7 @@ export class AudioPlayer {
     this.isMuted = this.volume === 0;
     if (this.volume > 0) this.previousVolume = this.volume;
 
-    if (this.gainNode) {
-      this.gainNode.gain.value = this.volume;
-    } else {
-      this.audio.volume = this.volume;
-    }
+    this.applyTrackVolume();
 
     if (this.onVolumeChange) this.onVolumeChange(this.volume, this.isMuted);
     this.savePreferences();

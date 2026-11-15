@@ -1,6 +1,7 @@
 import {icons} from './design-icons.js';
 import {mountCover} from './artwork.js';
 import {showFormDialog} from './surface-menu.js';
+import {openTrackEditor} from './track-editor.js';
 import {positionFloating,watchFloating} from './floating-surfaces.js';
 import {openPlaylistPicker} from './playlist-actions.js';
 const glyph=path=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
@@ -32,10 +33,11 @@ export function showTrackMenu(ui,track,{mobile=false,x=0,y=0,playlistContext=nul
     button(mobile?'sheetOptQueue':'ctxAddToQueue','Добавить в очередь',moreIcons.queue,async()=>{ui.player.addToQueue(await ui.music.ensureTrack(track));ui.showToast('Добавлено в очередь');});
     button(prefix+'PlayNext','Включить следующим',icons.play,async()=>{ui.player.playNext(await ui.music.ensureTrack(track));ui.showToast('Будет воспроизведено следующим');});
     const divider=document.createElement('div');divider.className='context-divider';panel.append(divider);
+    button(prefix+'Edit','Редактировать',icons.edit,async()=>openTrackEditor(ui,track.catalog?await ui.music.ensureTrack(track):ui.library.getTrackById(track.id)||track));
     button(prefix+'Artist','Перейти к исполнителю',icons.artist,()=>navigate('artist'));
     button(prefix+'Credits','Сведения о треке',moreIcons.credits,credits,true);
     button(prefix+'Share','Поделиться',moreIcons.share,async()=>{const text=`${track.artist} — ${track.title}`,url=track.sources?.[0]?.url;if(mobile&&navigator.share){await navigator.share({title:track.title,text,...(url?{url}:{})});return;}const value=url?text+'\n'+url:text;if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);else {const field=document.createElement('textarea');field.value=value;document.body.append(field);field.select();const copied=document.execCommand('copy');field.remove();if(!copied)throw Error('Не удалось скопировать');}ui.showToast('Скопировано');});
-    button(prefix+'SaveOrRemove',track.catalog?'Скачать':'Удалить трек',moreIcons.download,async()=>{if(track.catalog){await ui.music.ensureTrack(track);ui.refreshCurrentView();ui.showToast('Трек сохранён','success');}else if(await showFormDialog(ui,{title:'Удалить трек?',message:`«${track.title}» будет удалён из медиатеки и синхронизированных устройств.`,confirm:'Удалить',danger:true})){await ui.music.removeTrack(track);ui.showToast('Трек удалён');}});
+    button(prefix+'SaveOrRemove',track.catalog?'Скачать':'Удалить трек',moreIcons.download,async()=>{if(track.catalog){await ui.music.ensureTrack(track);ui.refreshCurrentView();ui.showToast('Трек сохранён','success');}else if(await showFormDialog(ui,{title:'Удалить трек?',message:`«${track.title}» будет удалён из медиатеки.`,confirm:'Удалить',danger:true})){await ui.music.removeTrack(track);ui.showToast('Трек удалён');}});
     if(playlistContext)button(prefix+'RemoveFromPl','Удалить из этого плейлиста',icons.music,async()=>{await ui.library.removeTrackFromPlaylist(playlistContext.id,track.id);ui.refreshCurrentView();});
     if(mobile)button('sheetOptCancel','Закрыть',icons.music,()=>{});
     position();focusFirst();

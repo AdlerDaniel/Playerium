@@ -2,6 +2,7 @@ import {normalizeSearch} from './music-match.js';
 import { normalizeTrackTitle } from "./track-title.js";
 import {isInternalAudioFile} from './internal-audio-files.js';
 import {retireLibraryFeatures} from './local-library.js';
+import {applyTrackEdits,validateTrackEdits} from './track-edits.js';
 /**
  * Spotify Local Player - Library & Database Layer
  * IndexedDB persistence for tracks, playlists, folders, and likes.
@@ -101,7 +102,8 @@ export class Library {
           }
         } catch (error) { console.warn('Stored metadata repair failed', error); }
       }
-      const title = normalizeTrackTitle(t.title);
+      applyTrackEdits(t);
+      const title = t.userEdits?.title || normalizeTrackTitle(t.title);
       if (reparsed || title !== t.title || "lyrics" in t || "lyricsModified" in t) {
         t.title = title; delete t.lyrics; delete t.lyricsModified;
         corrected.push({ ...t, pictureUrl: null });
@@ -198,6 +200,18 @@ export class Library {
     return this.tracks.get(id);
   }
 
+  async editTrack(id,changes) {
+    const edits=validateTrackEdits(changes);
+    const task=this.importChain.catch(()=>{}).then(async()=>{
+      const track=this.tracks.get(id);if(!track||track.catalog)throw Error('Трек больше не находится в медиатеке.');
+      const updated=applyTrackEdits({...track,userEdits:{...track.userEdits,...edits},metadataVersion:3});
+      await this.putInStore('tracks',{...updated,pictureUrl:null});
+      Object.assign(track,updated);track.pictureUrl=track.pictureBlob?this.coverURL(id,track.pictureBlob):null;
+      this.onLibraryChanged?.();return track;
+    });
+    this.importChain=task;return task;
+  }
+
   async mergeDuplicateTracks(keepId,dropId) {
     const keep=this.tracks.get(keepId),drop=this.tracks.get(dropId);if(!keep||!drop||keepId===dropId)return keep;
     const aliases=[...new Set([...(keep.sourceAliases||[]),...(drop.sourceAliases||[]),drop.sourceKey,drop.filePath,drop.nativeUri].filter(Boolean))];
@@ -241,7 +255,8 @@ export class Library {
       // Native restore is also called on every WebView re-entry. Keep existing
       // blobs and URLs when bytes and metadata have not changed.
       for(const [key,value] of Object.entries(file.metadata||{}))if(!['pictureBase64','picture','pictureBlob','pictureUrl','lyrics'].includes(key)&&value!==undefined&&value!==null&&value!==''&&existing[key]!==value){existing[key]=value;changed=true;}
-      const title=normalizeTrackTitle(existing.title);if(title!==existing.title){existing.title=title;changed=true;}
+      applyTrackEdits(existing);
+      const title=existing.userEdits?.title || normalizeTrackTitle(existing.title);if(title!==existing.title){existing.title=title;changed=true;}
       if(file.downloadId&&existing.downloadId!==file.downloadId){existing.downloadId=file.downloadId;changed=true;}
       if(expected&&existing.recordingKey!==`${expected.artist}|${expected.title}`){existing.recordingKey=`${expected.artist}|${expected.title}`;changed=true;}
       if(changed){await this.putInStore('tracks',existing);this.onLibraryChanged?.();}
@@ -252,6 +267,7 @@ export class Library {
     if(!track)throw Error('Не удалось добавить трек');
     const {pictureBase64,...metadata}=file.metadata || {};
     Object.assign(track,metadata,{downloadId:file.downloadId,catalog:false});
+    applyTrackEdits(track);
 
     if(expected)track.recordingKey=`${expected.artist}|${expected.title}`;
     await this.putInStore('tracks',track);this.onLibraryChanged?.();return track;
@@ -595,9 +611,10 @@ export class Library {
           for(const key of ['audioKey','normalization','normalizationStamp','normalizationGain','normalizationKey'])if(metadata[key]===undefined)delete track[key];
         }
         track.title = normalizeTrackTitle(track.title);
+        applyTrackEdits(track);
      delete track.lyrics; delete track.lyricsModified;
         delete track.picture; delete track.pictureBase64;
-        if (track.pictureBlob) { track.pictureBlob = await resizeArtwork(track.pictureBlob); track.pictureUrl = this.coverURL(id, track.pictureBlob); }
+        if (track.pictureBlob) { if(!track.userEdits?.coverBlob)track.pictureBlob = await resizeArtwork(track.pictureBlob); track.pictureUrl = this.coverURL(id, track.pictureBlob); }
         else if(previous?.pictureBlob){track.pictureBlob=previous.pictureBlob;track.pictureUrl=previous.pictureUrl;}
         else track.pictureUrl = null;
         // Never store ephemeral object URLs produced by the parser.
