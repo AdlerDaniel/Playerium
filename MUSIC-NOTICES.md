@@ -40,3 +40,11 @@ returned the text. Availability and timing data depend on each service's catalog
 Playerium does not generate or invent missing lyrics. Successful results are
 cached locally, and newly downloaded MP3 files include the available lyrics and
 timing data in their ID3 tags.
+
+Additional fallback catalogs are [Pisni.in.ua](https://pisni.in.ua) and
+[Tekst-pisni.com](https://tekst-pisni.com). Their public pages are retrieved as
+original HTML through [Jina Reader](https://jina.ai/reader/), using its anonymous
+endpoint without an account or API key. Requests are spaced to stay below its
+published 20 requests/minute limit, and rate-limit responses delay later requests.
+The source song page is linked in the lyrics player. These catalogs supply plain
+lyrics; Playerium does not invent timing data for them.

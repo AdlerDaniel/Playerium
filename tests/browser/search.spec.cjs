@@ -38,6 +38,7 @@ for(const mobile of [false,true])test(`search covers before audio, filters and f
   await page.screenshot({path:testInfo.outputPath('search-menu.png')});
   await page.keyboard.press('Escape');await expect(page.locator('.playlist-picker')).toHaveCount(0);
   // Simulate a blocked primary cover and exercise the merged HTTPS fallback.
+  await page.waitForFunction(()=>window.playerApp.music.searchRequests.size===0);
   await page.evaluate(async()=>{const {mountCover}=await import('/js/artwork.js');mountCover(document.querySelector('.track-mini-thumb'),{pictureUrl:'https://covers.example.test/missing.jpg',pictureUrls:['https://covers.example.test/fallback.jpg']},true);});
   await expect(page.locator('.track-mini-thumb img').first()).toHaveAttribute('src','https://covers.example.test/fallback.jpg');await expect.poll(()=>page.locator('.track-mini-thumb img').first().evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);
   await page.evaluate(async()=>{const p=await window.playerApp.library.createPlaylist('Test playlist');window.testPlaylist=p.id;});

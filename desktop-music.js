@@ -2,6 +2,7 @@ const fs=require('node:fs/promises'),path=require('node:path'),{spawn}=require('
 const {constants}=require('node:fs');
 const {isInside}=require('./desktop-files');
 const {embedMp3Lyrics}=require('./desktop-tags');
+const {fetchLyricsPage}=require('./desktop-lyrics');
 const PROVIDERS=new Set(['youtubeMusic','youtubeAudio','soundcloud']);
 const FULL_AUDIO='bestaudio[format_id!*=preview][ext=m4a]/bestaudio[format_id!*=preview]/best[format_id!*=preview]';
 // Electron's request stream also settles errors that can leave net.fetch pending.
@@ -126,6 +127,10 @@ class DesktopMusic {
   }
   async request(operation,payload,id) {
     if(!/^[\w-]{1,100}$/.test(id))throw Error('Недопустимый запрос');
+    if(operation==='lyricsPage'){
+      const controller=new AbortController();this.requests.set(id,controller);
+      try{return await fetchLyricsPage(payload,{fetcher:this.fetcher,signal:controller.signal});}finally{this.requests.delete(id);}
+    }
     if(operation==='waveform'){const file=await this.authorize(payload.filePath);if(!this.waveforms){const {WaveformAnalyzer}=require('./desktop-waveform');this.waveforms=new WaveformAnalyzer(path.join(this.tools,'ffmpeg.exe'),path.join(this.app.getPath('userData'),'waveforms'));}return this.waveforms.analyze(file);}
     if(operation==='artwork') {
       const valid=value=>{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&['mzstatic.com','dzcdn.net'].some(host=>u.hostname===host||u.hostname.endsWith('.'+host));};

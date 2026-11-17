@@ -41,7 +41,8 @@ export class LyricsPlayer{
   if(data.instrumental&&!data.plain){this.message('Инструментальная композиция','В этой записи нет текста.');return;}
   const rows=data.lines.length?data.lines:data.plain.split('\n').map(text=>({text,time:null}));this.nodes=[];
   for(const row of rows){const line=document.createElement(Number.isFinite(row.time)?'button':'p');line.className='lyric-line';line.textContent=row.text||'♪';if(Number.isFinite(row.time)){line.type='button';line.title='Перейти к строке';line.onclick=()=>{this.player.seekToTime(row.time);this.following=true;this.follow.hidden=true;this.time(row.time);};}this.scroll.append(line);this.nodes.push(line);}
-  const providers={'LRCLIB':'https://lrclib.net','Lyrics.ovh':'https://lyrics.ovh'},label=data.source||'Встроенный текст',url=providers[label]||(label.startsWith('Lrcmux')?'https://lrcmux.dev':null);
+  const providers={'LRCLIB':'https://lrclib.net','Lyrics.ovh':'https://lyrics.ovh','Pisni.in.ua':'https://pisni.in.ua','Tekst-pisni.com':'https://tekst-pisni.com'},label=data.source||'Встроенный текст';let url=providers[label]||(label.startsWith('Lrcmux')?'https://lrcmux.dev':null);
+  if(data.sourceUrl&&url)try{const parsed=new URL(data.sourceUrl);if(parsed.origin===url&&!parsed.username&&!parsed.password)url=parsed.href;}catch{}
   const attribution=document.createElement(url?'a':'span');attribution.textContent=label;if(url){attribution.href=url;attribution.onclick=event=>{event.preventDefault();if(window.electronAPI?.openExternal)window.electronAPI.openExternal(url);else if(window.AndroidBridge?.openExternalUrl)window.AndroidBridge.openExternalUrl(url);else window.open(url,'_blank','noopener');};}this.source.append(attribution);if(!data.lines.length)this.source.append(document.createTextNode(' · Без синхронизации'));
   this.time(this.player.getCurrentTime());
  }

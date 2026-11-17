@@ -1,12 +1,13 @@
-import {normalize,cleanTitle,isVariant,normalizeSearch} from './music-match.js';
+import {normalize,cleanTitle,isVariant} from './music-match.js';
+import {lyricsArtist,lyricsTitlesMatch,lyricsQueryArtist,catalogQuery} from './lyrics-catalogs.js';
 
 const MAX_TEXT=100000;
 const text=value=>typeof value==='string'?value.replace(/\r\n?/g,'\n').replace(/\0/g,'').trim().slice(0,MAX_TEXT):'';
-const artists=value=>[...new Set(String(value||'').split(/\s*[,;&]\s*|\s+(?:feat\.?|ft\.?|featuring)\s+/i).map(normalizeSearch).filter(Boolean))].sort().join('|');
+const artists=lyricsArtist;
 const title=value=>normalize(cleanTitle(value).replace(/\s*[([](?:remaster(?:ed)?(?:\s+\d{4})?|\d{4}\s+remaster(?:ed)?)[)\]]/ig,''));
 export const lyricsKey=track=>JSON.stringify([artists(track?.artist),title(track?.title),Math.round(Number(track?.duration)||0),normalize(track?.album)]);
 export function lyricsMatch(track,candidate){
- if(!candidate||!title(track.title)||title(track.title)!==title(candidate.title)||artists(track.artist)!==artists(candidate.artist)||isVariant(candidate.title,track.title))return false;
+ if(!candidate||!title(track.title)||!lyricsTitlesMatch(track.title,candidate.title)||artists(track.artist)!==artists(candidate.artist)||isVariant(candidate.title,track.title))return false;
  return !track.duration||!candidate.duration||Math.abs(track.duration-candidate.duration)<=Math.max(3,Math.min(6,track.duration*.015));
 }
 export function parseLrc(value){
@@ -30,10 +31,11 @@ export function fromLrcmux(track,data){
 }
 
 export class LyricsService{
- constructor(library,{fetcher=(...args)=>fetch(...args),timeout=5000,spacing=1600}={}){this.library=library;this.fetcher=fetcher;this.timeout=timeout;this.spacing=spacing;this.pending=new Map();this.cache=new Map();this.backoff=new Map();this.chains=new Map();this.lastRequest=new Map();}
+ constructor(library,{fetcher=(...args)=>fetch(...args),timeout=5000,spacing=1600,catalogs=null}={}){this.library=library;this.fetcher=fetcher;this.timeout=timeout;this.spacing=spacing;this.catalogs=catalogs;this.pending=new Map();this.cache=new Map();this.backoff=new Map();this.chains=new Map();this.lastRequest=new Map();}
  async request(provider,url){
   if(Date.now()<(this.backoff.get(provider)||0))throw Error('Provider cooling down');
   const task=(this.chains.get(provider)||Promise.resolve()).catch(()=>{}).then(async()=>{
+   if(Date.now()<(this.backoff.get(provider)||0))throw Error('Provider cooling down');
    const wait=this.spacing-(Date.now()-(this.lastRequest.get(provider)||0));if(wait>0)await new Promise(resolve=>setTimeout(resolve,wait));
    this.lastRequest.set(provider,Date.now());const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),this.timeout);
    try{
@@ -50,24 +52,26 @@ export class LyricsService{
   const key=lyricsKey(track);if(this.pending.has(key))return this.pending.get(key);
   const task=(async()=>{
    const cached=this.cache.get(key)||(await this.library.getFromStore?.('settings','lyrics:'+key).catch(()=>null))?.value;
-   if(!refresh&&cached&&(cached.data||Date.now()-cached.checkedAt<6*3600000)){this.cache.set(key,cached);return cached.data;}
+   if(!refresh&&cached&&(cached.data||(cached.sourcesVersion===2&&Date.now()-cached.checkedAt<6*3600000))){this.cache.set(key,cached);return cached.data;}
    if(typeof navigator!=='undefined'&&navigator.onLine===false)return cached?.data||null;
    let result=null,failed=false;
-   const query=new URLSearchParams({track_name:track.title,artist_name:track.artist});if(track.album)query.set('album_name',track.album);if(track.duration)query.set('duration',Math.round(track.duration));
+   const searchTitle=catalogQuery(track.title),searchArtist=lyricsQueryArtist(track.artist);
+   const query=new URLSearchParams({track_name:searchTitle,artist_name:searchArtist});if(track.album)query.set('album_name',track.album);if(track.duration)query.set('duration',Math.round(track.duration));
    try{
     let record=track.duration&&track.album?await this.request('lrclib','https://lrclib.net/api/get?'+query):null;
     if(!record||!lyricsMatch(track,{title:record.trackName,artist:record.artistName,duration:record.duration})){
-     const search=new URLSearchParams({track_name:track.title,artist_name:track.artist});const rows=await this.request('lrclib','https://lrclib.net/api/search?'+search);
+     const search=new URLSearchParams({track_name:searchTitle,artist_name:searchArtist});const rows=await this.request('lrclib','https://lrclib.net/api/search?'+search);
      record=Array.isArray(rows)?rows.filter(row=>lyricsMatch(track,{title:row.trackName,artist:row.artistName,duration:row.duration})).sort((a,b)=>Math.abs((a.duration||0)-(track.duration||0))-Math.abs((b.duration||0)-(track.duration||0))||Number(!!b.syncedLyrics)-Number(!!a.syncedLyrics))[0]:null;
     }
     if(record&&lyricsMatch(track,{title:record.trackName,artist:record.artistName,duration:record.duration}))result=makeLyrics(record.plainLyrics,record.syncedLyrics,'LRCLIB',record.instrumental);
    }catch{failed=true;}
    if(!result)try{
-    const q=new URLSearchParams({artist:track.artist,title:track.title,format:'json',level:'word'});if(track.album)q.set('album',track.album);if(track.isrc)q.set('isrc',track.isrc);if(track.duration)q.set('duration',Math.round(track.duration));
+    const q=new URLSearchParams({artist:searchArtist,title:searchTitle,format:'json',level:'word'});if(track.album)q.set('album',track.album);if(track.isrc)q.set('isrc',track.isrc);if(track.duration)q.set('duration',Math.round(track.duration));
     result=fromLrcmux(track,await this.request('lrcmux','https://api.lrcmux.dev/get?'+q));
    }catch{failed=true;}
-   if(!result)try{const data=await this.request('ovh','https://api.lyrics.ovh/v1/'+encodeURIComponent(track.artist)+'/'+encodeURIComponent(track.title));if(data?.lyrics)result=makeLyrics(data.lyrics,'','Lyrics.ovh');}catch{failed=true;}
-   if(result||!failed){const saved={data:result,checkedAt:Date.now()};this.cache.set(key,saved);await this.library.putInStore?.('settings',{key:'lyrics:'+key,value:saved}).catch(()=>{});}
+   if(!result)try{const data=await this.request('ovh','https://api.lyrics.ovh/v1/'+encodeURIComponent(searchArtist)+'/'+encodeURIComponent(searchTitle));if(data?.lyrics)result=makeLyrics(data.lyrics,'','Lyrics.ovh');}catch{failed=true;}
+   if(!result&&this.catalogs)try{result=await this.catalogs.lookup(track,{refresh});}catch{failed=true;}
+   if(result||!failed){const saved={data:result,checkedAt:Date.now(),sourcesVersion:2};this.cache.set(key,saved);await this.library.putInStore?.('settings',{key:'lyrics:'+key,value:saved}).catch(()=>{});}
    return result||cached?.data||null;
   })();this.pending.set(key,task);try{return await task;}finally{this.pending.delete(key);}
  }

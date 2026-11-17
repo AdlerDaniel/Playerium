@@ -17,6 +17,7 @@ import {installInterfaceV2} from './interface-v2.js';
 import {installAlbumArtGenerator} from './album-art-generator.js';
 import {installInterfaceRefresh} from './interface-refresh.js';
 import {LyricsService} from './lyrics-service.js';
+import {LyricsCatalogs} from './lyrics-catalogs.js';
 
 class App {
   constructor() {
@@ -24,7 +25,7 @@ class App {
     this.player = new AudioPlayer(this.library);
     this.ui = new UIController(this.library, this.player);
     this.music = new MusicCatalog(this.library, this.ui);
-    this.lyrics=new LyricsService(this.library);this.music.lyrics=this.lyrics;this.ui.lyrics=this.lyrics;
+    this.lyrics=new LyricsService(this.library,{catalogs:this.music.available?new LyricsCatalogs(payload=>this.music.request('lyricsPage',payload)):null});this.music.lyrics=this.lyrics;this.ui.lyrics=this.lyrics;
     this.ui.music = this.music;
     this.shortcuts = new ShortcutsManager(this.player, this.ui);
     this.player.onError = message => this.ui.showToast(message, "error");
