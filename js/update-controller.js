@@ -14,6 +14,9 @@ export function bindUpdateController() {
   const text=document.getElementById('updateStatusText');
   const progress=document.getElementById('updateProgress');
   const fill=document.getElementById('updateProgressBarFill');
+  const pendingKey='playerium_pending_update';
+  const clearPending=()=>{try{localStorage.removeItem(pendingKey);}catch{}};
+  const activeStates=new Set(['preparing','downloading','verifying','installing','permission']);
   let busy=false;
   this.lastUpdateInfo=null;
   this.ui.showUpdateModal=info=>{
@@ -23,30 +26,33 @@ export function bindUpdateController() {
     for(const change of releaseChanges(info.releaseNotes)) {
       const li=document.createElement('li');li.textContent=change;list.append(li);
     }
-    status.hidden=true;button.hidden=false;ignore.hidden=false;button.disabled=false;button.textContent='Обновить';ignore.disabled=false;
+    status.hidden=true;button.hidden=false;ignore.hidden=false;button.disabled=false;button.textContent='Обновить';ignore.disabled=false;ignore.textContent='Игнорировать';
     modal.classList.add('active');
+    button.focus({preventScroll:true});
   };
   this.onUpdateState=data=>{
     if(!data)return;
-    const labels={downloading:'Скачивание',verifying:'Проверка обновления',installing:'Установка',permission:'Подтвердите установку',complete:'Обновление установлено'};
+    const labels={preparing:'Подготовка обновления',downloading:'Скачивание',verifying:'Проверка обновления',installing:'Установка',permission:'Подтвердите установку',complete:'Обновление установлено'};
     status.hidden=false;text.textContent=data.message||labels[data.state]||'';
     const percent=Math.max(0,Math.min(100,Number(data.percent)||0));
     progress.hidden=['failed','complete','permission'].includes(data.state);fill.style.width=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
     const indeterminate=data.state!=='downloading';progress.classList.toggle('indeterminate',indeterminate);
     if(indeterminate)progress.removeAttribute('aria-valuenow');
     if(data.state==='downloading')text.textContent=`Скачивание ${percent}%`;
-    busy=!['failed','complete'].includes(data.state);
+    busy=activeStates.has(data.state);
+    if(busy)modal.classList.add('active');
     button.disabled=busy;ignore.disabled=busy;button.textContent=data.state==='failed'?'Обновить':busy?(labels[data.state]||'Обновление'):'Обновить';
-    button.hidden=busy||data.state==='complete';ignore.hidden=busy;
+    button.hidden=busy||data.state==='complete'||!this.lastUpdateInfo;ignore.hidden=busy;
+    ignore.textContent=button.hidden?'Закрыть':'Игнорировать';
     modal.dataset.busy=String(busy);
-    if(!busy)localStorage.removeItem('playerium_pending_update');
+    if(!busy)clearPending();
   };
   this.onUpdateDownloadFailed=message=>this.onUpdateState({state:'failed',message});
   this.ui.handleDownloadUpdate=async(info=this.lastUpdateInfo)=>{
     if(busy)return;
     if(!info)return;
-    localStorage.setItem('playerium_pending_update',JSON.stringify(info));
-    this.onUpdateState({state:'downloading',percent:0});
+    try{localStorage.setItem(pendingKey,JSON.stringify(info));}catch{}
+    this.onUpdateState({state:'preparing'});
     try {
       const request={latestVersion:info.latestVersion,repo:info.repo||this.ui.updater.repo};
       if(window.electronAPI?.installUpdate)await window.electronAPI.installUpdate(request);
@@ -57,15 +63,15 @@ export function bindUpdateController() {
   button.onclick=()=>this.ui.handleDownloadUpdate();
   ignore.onclick=()=>{
     if(busy)return;
-    if(this.lastUpdateInfo)this.ui.updater.ignoreVersion(this.lastUpdateInfo.latestVersion);
+    if(this.lastUpdateInfo&&!button.hidden)try{this.ui.updater.ignoreVersion(this.lastUpdateInfo.latestVersion);}catch{}
     modal.classList.remove('active');
   };
   window.electronAPI?.onUpdateState?.(data=>this.onUpdateState(data));
   const restore=data=>{
-    if(data?.state==='complete'){localStorage.removeItem('playerium_pending_update');return;}
-    if(data?.state==='failed'){this.ui.showToast(data.message||'Не удалось завершить обновление','error');return;}
-    if(['downloading','verifying','installing','permission'].includes(data?.state)) {
-      try{const info=JSON.parse(localStorage.getItem('playerium_pending_update'));if(info)this.ui.showUpdateModal(info);}catch{}
+    if(data?.state==='complete'){clearPending();return;}
+    if(data?.state==='failed'){clearPending();if(!busy)this.ui.showToast(data.message||'Не удалось завершить обновление','error');return;}
+    if(activeStates.has(data?.state)) {
+      try{const info=JSON.parse(localStorage.getItem(pendingKey));if(info)this.ui.showUpdateModal(info);}catch{}
       this.onUpdateState(data);
     }
   };

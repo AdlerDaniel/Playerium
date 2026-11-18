@@ -34,13 +34,15 @@ public class UpdateInstallReceiver extends BroadcastReceiver {
                         .setContentTitle("Обновление " + context.getString(R.string.app_name)).setContentText(message).setContentIntent(action).setAutoCancel(true).build()); }
                     catch (SecurityException ignored) {}
                 }
+            } else {
+                state = "failed"; message = "Не удалось получить подтверждение установки";
             }
         } else if (status == PackageInstaller.STATUS_SUCCESS) {
             state = "complete";
             new java.io.File(context.getCacheDir(),"Playerium-update.apk").delete();
-        } else { state = "failed"; message = "Обновление не установлено. Попробуйте снова.";
-            context.getSharedPreferences("playerium_update",Context.MODE_PRIVATE).edit().remove("restart_after_update").remove("install_session").apply();
-        }
+        } else { state = "failed"; message = "Обновление не установлено. Попробуйте снова."; }
+        if ("failed".equals(state)) context.getSharedPreferences("playerium_update",Context.MODE_PRIVATE)
+            .edit().remove("restart_after_update").remove("install_session").apply();
         if (!"permission".equals(state)) context.getSharedPreferences("playerium_update",Context.MODE_PRIVATE).edit().remove("confirmation").apply();
         try {
             JSONObject data = new JSONObject().put("state", state).put("message", message);

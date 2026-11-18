@@ -348,7 +348,11 @@ input:checked + .slider-toggle:before {
 }
 /* Updates show only release changes and the action required now. */
 #modalUpdateAvailable:not(.active) { visibility: hidden; }
-.update-notes { margin: 0; padding-left: 20px; max-height: min(45vh, 360px); overflow: auto; color: var(--sp-text-secondary); line-height: 1.6; }
+/* The update dialog can appear above settings or a full-screen player. */
+#modalUpdateAvailable { top: 0; right: 0; bottom: 0; left: 0; }
+#modalUpdateAvailable.active { z-index: 12500 !important; }
+#modalUpdateAvailable .update-card { max-height: calc(100vh - 32px) !important; max-height: calc(100dvh - 32px) !important; }
+.update-notes { margin: 0; padding-left: 20px; max-height: 45vh; max-height: min(45vh, 360px); overflow: auto; color: var(--sp-text-secondary); line-height: 1.6; }
 .update-notes li + li { margin-top: 10px; }
 .update-card .modal-footer button { min-height: 44px; }
 .update-status { margin-top: 16px; font-size: 13px; color: var(--sp-text-secondary); font-variant-numeric: tabular-nums; }

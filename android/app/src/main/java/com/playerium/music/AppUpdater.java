@@ -65,6 +65,7 @@ final class AppUpdater {
     String status() { return prefs.getString("state", "{}"); }
     void detach() { detached = true; handler.removeCallbacksAndMessages(null); }
     void onResume() {
+        if (detached) return;
         String confirmation = prefs.getString("confirmation", "");
         if (!confirmation.isEmpty()) {
             prefs.edit().remove("confirmation").apply();
@@ -74,24 +75,52 @@ final class AppUpdater {
         }
         if (prefs.getBoolean("permission_pending", false)) {
             if (Build.VERSION.SDK_INT < 26 || activity.getPackageManager().canRequestPackageInstalls()) {
-                prefs.edit().remove("permission_pending").remove("permission_opened").apply();
-                if (busy.compareAndSet(false, true)) new Thread(() -> commitInstall()).start();
+                if (busy.compareAndSet(false, true)) {
+                    prefs.edit().remove("permission_pending").remove("permission_opened").apply();
+                    state("installing", 100, "");
+                    new Thread(this::commitInstall).start();
+                }
             } else if (prefs.getBoolean("permission_opened", false)) fail("Разрешите установку обновлений для " + activity.getString(R.string.app_name) + " и попробуйте снова.");
             else requestPermission();
-        } else if (prefs.getLong("download", -1) > 0 && !busy.get()) {
-            handler.removeCallbacks(monitor); handler.post(monitor);
+        } else if (!busy.get()) {
+            if (prefs.getLong("download", -1) > 0) {
+                handler.removeCallbacks(monitor); handler.post(monitor);
+            } else if (!hasInstallSession()) {
+                String saved = "";
+                try { saved = new JSONObject(status()).optString("state"); } catch (Exception ignored) {}
+                if ("preparing".equals(saved) || "downloading".equals(saved) || "verifying".equals(saved)
+                        || "installing".equals(saved) || "permission".equals(saved)) {
+                    fail("Обновление было прервано. Попробуйте снова.");
+                }
+            }
         }
     }
 
     void install(String info) {
-        if (!busy.compareAndSet(false, true)) return;
-        if (prefs.getLong("download", -1) > 0) { busy.set(false); return; }
+        handler.post(() -> startInstall(info));
+    }
+
+    private void startInstall(String info) {
+        if (detached) return;
+        if (busy.get() || prefs.getLong("download", -1) > 0
+                || prefs.getBoolean("permission_pending", false)
+                || !prefs.getString("confirmation", "").isEmpty()) {
+            publishSavedState();
+            if (!busy.get()) onResume();
+            return;
+        }
+        if (hasInstallSession()) {
+            publishSavedState();
+            return;
+        }
+        prefs.edit().remove("install_session").remove("restart_after_update").apply();
+        if (!busy.compareAndSet(false, true)) { publishSavedState(); return; }
+        state("preparing", 0, "");
         new Thread(() -> {
             try {
                 JSONObject request = new JSONObject(info);
                 String version = request.getString("latestVersion");
                 if (!version.matches("[0-9]+\\.[0-9]+\\.[0-9]+") || !"AdlerDaniel/Playerium".equals(request.optString("repo", "AdlerDaniel/Playerium"))) throw new Exception();
-                state("downloading", 0, "");
                 HttpsURLConnection connection = (HttpsURLConnection)new URL("https://api.github.com/repos/AdlerDaniel/Playerium/releases/tags/v" + version).openConnection();
                 connection.setConnectTimeout(15000); connection.setReadTimeout(30000);
                 connection.setRequestProperty("Accept", "application/vnd.github+json");
@@ -115,11 +144,18 @@ final class AppUpdater {
                     .setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, name);
                 long id = dm.enqueue(download);
                 prefs.edit().putLong("download", id).putString("digest", apk.getString("digest").substring(7)).apply();
+                state("downloading", 0, "");
                 busy.set(false);
                 MainActivity current = MainActivity.getInstance();
                 if (current != null) current.resumeUpdateMonitor();
             } catch (Exception e) { fail("Не удалось скачать обновление. Проверьте подключение и попробуйте снова."); }
         }).start();
+    }
+
+    private boolean hasInstallSession() {
+        int session = prefs.getInt("install_session", -1);
+        try { return session >= 0 && activity.getPackageManager().getPackageInstaller().getSessionInfo(session) != null; }
+        catch (RuntimeException ignored) { return false; }
     }
 
     private File apkFile() { return new File(activity.getCacheDir(), "Playerium-update.apk"); }
@@ -141,8 +177,9 @@ final class AppUpdater {
             validateApk();
             prefs.edit().remove("download").apply(); dm.remove(id);
             if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {
-                prefs.edit().putBoolean("permission_pending", true).apply(); busy.set(false);
+                prefs.edit().putBoolean("permission_pending", true).apply();
                 state("permission", 100, "Разрешите установку обновлений для " + activity.getString(R.string.app_name));
+                busy.set(false);
                 MainActivity current = MainActivity.getInstance();
                 if (current != null) current.resumeUpdateMonitor();
             } else commitInstall();
@@ -205,9 +242,18 @@ final class AppUpdater {
             if (current != null) current.sendUpdateState(data);
         } catch (Exception ignored) {}
     }
+    private void publishSavedState() {
+        try { activity.sendUpdateState(new JSONObject(status())); } catch (Exception ignored) {}
+    }
+
     private void fail(String message) {
         long id = prefs.getLong("download", -1);
-        if (id > 0) ((DownloadManager)activity.getSystemService(Context.DOWNLOAD_SERVICE)).remove(id);
-        prefs.edit().remove("download").remove("permission_pending").remove("permission_opened").remove("restart_after_update").remove("install_session").apply();busy.set(false);state("failed", 0, message);
+        if (id > 0) try {
+            ((DownloadManager)activity.getSystemService(Context.DOWNLOAD_SERVICE)).remove(id);
+        } catch (Exception ignored) {}
+        prefs.edit().remove("download").remove("permission_pending").remove("permission_opened")
+            .remove("confirmation").remove("restart_after_update").remove("install_session").apply();
+        state("failed", 0, message);
+        busy.set(false);
     }
 }
