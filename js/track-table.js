@@ -6,6 +6,7 @@ import {changeTrackSort} from './track-sort.js';
 import {attachTrackSelection} from './track-selection.js';
 import {decorateTrackState} from './track-state.js';
 import {installPlaylistDrop} from './playlist-composer.js';
+import {trackRange} from './track-edits.js';
 export function createTrackTable(tracks, playlistContext = null) {
     tracks=tracks.filter(track=>!this.pendingTrackRemoval?.has(track.id));
     this.interfaceTracks||=new Map();for(const track of tracks)if(track.catalog)this.interfaceTracks.set(track.id,track);
@@ -83,7 +84,7 @@ export function createTrackTable(tracks, playlistContext = null) {
         <div class="track-col-date">${this.formatDate(track.dateAdded)}</div>
         <div class="track-col-duration">
           ${track.catalog ? `<button class="track-download-btn" title="Скачать" aria-label="Скачать ${this.escapeHTML(track.title)}"><svg viewBox="0 0 24 24"><path d="M11 3h2v10l3-3 1.4 1.4L12 17l-5.4-5.6L8 10l3 3V3zM5 19h14v2H5z"/></svg></button>` : ''}
-          <span>${this.formatTime(track.duration)}</span>
+          <span>${this.formatTime(trackRange(track).duration)}</span>
           <button class="track-menu-btn" data-track-id="${track.id}" title="Ещё">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>
           </button>

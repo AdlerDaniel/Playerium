@@ -1,6 +1,7 @@
 import {icons} from './design-icons.js';
 import {mountCover} from './artwork.js';
 import {lyricsKey} from './lyrics-service.js';
+import {trackRange} from './track-edits.js';
 
 const svg=path=>'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+path+'" fill="currentColor"/></svg>';
 const previous=svg('M6 5h3v14H6zm13 0v14l-9-7z'),next=svg('M15 5h3v14h-3zM5 5l9 7-9 7z'),volumeIcon=svg('M3 9h4l5-4v14l-5-4H3zm12-3a8 8 0 0 1 0 12l-1-1.6a6 6 0 0 0 0-8.8zm-1 3a4 4 0 0 1 0 6l-1-1.5a2 2 0 0 0 0-3z');
@@ -31,7 +32,7 @@ export class LyricsPlayer{
  close(){if(this.closed)return;this.closed=true;this.generation++;document.removeEventListener('keydown',this.documentKey,true);this.root.remove();for(const [node,inert]of this.inert)if(node.isConnected)node.inert=inert;this.experience.cinema=null;this.experience.lyricsPlayer=null;this.opener?.isConnected&&this.opener.focus({preventScroll:true});}
  async track(track,{refresh=false}={}){
   if(this.closed)return;mountCover(this.root.querySelector('.cinema-art'),track||{},true);mountCover(this.root.querySelector('.lyrics-backdrop'),track||{},true);this.root.querySelector('h1').textContent=track?.title||'Выберите трек';this.root.querySelector('.cinema-meta p').textContent=track?.artist||'';
-  const key=track?lyricsKey(track):null;if(key===this.key&&!refresh)return;this.key=key;const generation=++this.generation;this.active=-1;this.data=null;this.following=true;this.follow.hidden=true;this.scroll.scrollTop=0;this.source.textContent='';
+   const key=track?lyricsKey(track)+JSON.stringify(track.userEdits?.trim||null):null;if(key===this.key&&!refresh)return;this.key=key;const generation=++this.generation;this.active=-1;this.data=null;this.following=true;this.follow.hidden=true;this.scroll.scrollTop=0;this.source.textContent='';
   if(!track){this.message('Выберите песню','Текст появится здесь, когда начнётся воспроизведение.');return;}
   this.scroll.innerHTML='<div class="lyrics-loading" role="status"><span class="lyrics-loading-label">Ищем текст…</span><i></i><i></i><i></i><i></i></div>';
   let data;try{data=await this.ui.lyrics?.lookup(track,{refresh});}catch{}
@@ -40,14 +41,20 @@ export class LyricsPlayer{
   if(!data){this.message('Текст пока не найден','Попробуйте повторить поиск позже.');const retry=button('Повторить поиск текста','',()=>this.track(this.player.currentTrack,{refresh:true}));retry.textContent='Повторить поиск';retry.className='lyrics-retry';this.scroll.firstElementChild.append(retry);return;}
   if(data.instrumental&&!data.plain){this.message('Инструментальная композиция','В этой записи нет текста.');return;}
   const rows=data.lines.length?data.lines:data.plain.split('\n').map(text=>({text,time:null}));this.nodes=[];
-  for(const row of rows){const line=document.createElement(Number.isFinite(row.time)?'button':'p');line.className='lyric-line';line.textContent=row.text||'♪';if(Number.isFinite(row.time)){line.type='button';line.title='Перейти к строке';line.onclick=()=>{this.player.seekToTime(row.time);this.following=true;this.follow.hidden=true;this.time(row.time);};}this.scroll.append(line);this.nodes.push(line);}
+   const range=trackRange(track);
+   for(const row of rows){
+    const seekable=Number.isFinite(row.time)&&(!track.userEdits?.trim||(row.time>=range.start&&row.time<range.end));
+    const line=document.createElement(seekable?'button':'p');line.className='lyric-line';line.textContent=row.text||'♪';
+    if(seekable){line.type='button';line.title='Перейти к строке';line.onclick=()=>{const position=row.time-range.start;this.player.seekToTime(position);this.following=true;this.follow.hidden=true;this.time(position);};}
+    this.scroll.append(line);this.nodes.push(line);
+   }
   const providers={'LRCLIB':'https://lrclib.net','Lyrics.ovh':'https://lyrics.ovh','Pisni.in.ua':'https://pisni.in.ua','Tekst-pisni.com':'https://tekst-pisni.com'},label=data.source||'Встроенный текст';let url=providers[label]||(label.startsWith('Lrcmux')?'https://lrcmux.dev':null);
   if(data.sourceUrl&&url)try{const parsed=new URL(data.sourceUrl);if(parsed.origin===url&&!parsed.username&&!parsed.password)url=parsed.href;}catch{}
   const attribution=document.createElement(url?'a':'span');attribution.textContent=label;if(url){attribution.href=url;attribution.onclick=event=>{event.preventDefault();if(window.electronAPI?.openExternal)window.electronAPI.openExternal(url);else if(window.AndroidBridge?.openExternalUrl)window.AndroidBridge.openExternalUrl(url);else window.open(url,'_blank','noopener');};}this.source.append(attribution);if(!data.lines.length)this.source.append(document.createTextNode(' · Без синхронизации'));
   this.time(this.player.getCurrentTime());
  }
  message(title,description){this.scroll.replaceChildren();const state=document.createElement('div');state.className='lyrics-empty';const heading=document.createElement('h2'),detail=document.createElement('p');heading.textContent=title;detail.textContent=description;state.append(heading,detail);this.scroll.append(state);}
- time(seconds){if(!this.data?.lines?.length||!this.nodes)return;let index=-1;for(let i=0;i<this.data.lines.length;i++){if(this.data.lines[i].time>seconds+.05)break;index=i;}if(index===this.active)return;
+ time(seconds){if(!this.data?.lines?.length||!this.nodes)return;const sourceTime=seconds+trackRange(this.player.currentTrack).start;let index=-1;for(let i=0;i<this.data.lines.length;i++){if(this.data.lines[i].time>sourceTime+.05)break;index=i;}if(index===this.active)return;
   if(this.active>=0){this.nodes[this.active]?.classList.remove('current');this.nodes[this.active]?.removeAttribute('aria-current');}this.active=index;if(index>=0){this.nodes[index]?.classList.add('current');this.nodes[index]?.setAttribute('aria-current','true');}if(this.following)this.scrollActive();
  }
  scrollActive(){const line=this.nodes?.[this.active];if(!line||this.scroll.offsetParent===null)return;const top=Math.max(0,line.offsetTop-this.scroll.offsetTop-this.scroll.clientHeight*.4+line.clientHeight/2);this.scroll.scrollTo({top,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});}

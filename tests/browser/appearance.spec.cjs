@@ -67,7 +67,7 @@ test('desktop long context menus, nested credits and forms stay inside a short r
   await page.evaluate(()=>{window.playerApp.ui.showCreatePlaylistModal();});await expect(page.locator('.form-dialog')).toBeVisible();await within(page,'.form-dialog .modal-card');await page.getByLabel('Название',{exact:true}).fill('Текст'.repeat(100));await expect(page.locator('.form-dialog').getByRole('button',{name:'Сохранить',exact:true})).toBeInViewport();await page.keyboard.press('Escape');
 });
 for(const mobile of [false,true])test(`twelve themes match Sounder surfaces and contrast, and persist (${mobile?'phone':'desktop'})`,async({page},info)=>{
- await page.setViewportSize(mobile?{width:390,height:844}:{width:1280,height:800});await boot(page);await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('.theme-choice')).toHaveCount(6);
+ await page.setViewportSize(mobile?{width:390,height:844}:{width:1280,height:800});await boot(page);await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'settings',title:'Настройки'}));await expect(page.locator('.theme-choice')).toHaveCount(10);
  const backgrounds=[];
  for(const id of ['violet-dark','brown-dark','red-dark','blue-dark','green-dark','yellow-dark','violet-light','brown-light','red-light','blue-light','green-light','yellow-light']){
   await page.locator('[data-scheme="'+id.split('-')[1]+'"]').click();await page.locator(`[data-theme-id="${id}"]`).click();await expect(page.locator('html')).toHaveAttribute('data-theme',id);await expect(page.locator(`[data-theme-id="${id}"]`)).toHaveAttribute('aria-pressed','true');

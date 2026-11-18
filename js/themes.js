@@ -1,5 +1,6 @@
 import {SOUNDER_PALETTES} from './sounder-palettes.js';
-export const THEMES=SOUNDER_PALETTES.map(t=>({...t,colors:[t.tokens.bg,t.tokens.panel,t.tokens.surface,t.tokens.hover,t.tokens.selection,t.tokens.track,t.tokens.border,t.tokens.text,t.tokens.muted,t.tokens.accent,t.tokens.accent_hover,t.tokens.on_accent,t.tokens.selection]}));
+import {PLAYERIUM_PALETTES} from './playerium-palettes.js';
+export const THEMES=[...SOUNDER_PALETTES,...PLAYERIUM_PALETTES].map(t=>({...t,colors:[t.tokens.bg,t.tokens.panel,t.tokens.surface,t.tokens.hover,t.tokens.selection,t.tokens.track,t.tokens.border,t.tokens.text,t.tokens.muted,t.tokens.accent,t.tokens.accent_hover,t.tokens.on_accent,t.tokens.selection]}));
 const legacy={'light-brown':'brown-light','dark-brown':'brown-dark',burgundy:'red-dark',green:'green-dark',blue:'blue-dark',yellow:'yellow-dark',dark:'violet-dark',light:'violet-light'};
 export function currentTheme(){try{const id=localStorage.getItem('playerium_theme');return THEMES.find(t=>t.id===(legacy[id]||id))||THEMES[0];}catch{return THEMES[0];}}
 export function applyTheme(id,persist=true){

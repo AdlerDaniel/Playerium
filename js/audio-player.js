@@ -4,7 +4,8 @@
  */
 
 
-import {trackVolume} from './track-edits.js';
+import {trackRange,trackVolume} from './track-edits.js';
+import {Crossfade} from './crossfade.js';
 
 export class AudioPlayer {
   constructor(library) {
@@ -35,6 +36,8 @@ export class AudioPlayer {
     this.volume = 0.8;
     this.isMuted = false;
     this.previousVolume = 0.8;
+    this.crossfadeSeconds = 0;
+    this.crossfade = new Crossfade(this);
 
     // Queue & Context
     this.queue = [];
@@ -77,32 +80,56 @@ export class AudioPlayer {
   }
 
   setupAudioEvents() {
-    this.audio.addEventListener("play", () => {
+    const audio=this.audio;
+    audio.addEventListener("play", () => {
+      if(audio!==this.audio)return;
       this.isPlaying = true;
+      this.crossfade.watch();
       if (this.onPlayStateChange) this.onPlayStateChange(true);
       if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
       this.notifyAndroidPlayback(true);
     });
 
-    this.audio.addEventListener("pause", () => {
+    audio.addEventListener("pause", () => {
+      if(audio!==this.audio||audio.ended&&this.crossfade.finish())return;
       this.isPlaying = false;
+      this.crossfade.watch();
       if (this.onPlayStateChange) this.onPlayStateChange(false);
       if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
       this.notifyAndroidPlayback(false);
     });
 
-    this.audio.addEventListener("timeupdate", () => {
-      if (this.onTimeUpdate) {
-        this.onTimeUpdate(this.audio.currentTime, this.audio.duration || 0);
-      }
+    audio.addEventListener("timeupdate", () => {
+      if(audio!==this.audio)return;
+      this.publishWebTime();
+      this.crossfade.tick();
     });
 
-    this.audio.addEventListener("ended", () => {
+    audio.addEventListener("ended", () => {
+      if(audio!==this.audio)return;
       this.notifyAndroidPlayback(false);
       this.handleTrackEnded();
     });
 
-    this.audio.addEventListener("error", () => this.handlePlaybackError("Не удалось воспроизвести файл. Проверьте доступ к папке."));
+    audio.addEventListener("error", () => {if(audio===this.audio)this.handlePlaybackError("Не удалось воспроизвести файл. Проверьте доступ к папке.");});
+  }
+
+  webRange(){return trackRange(this.currentTrack,Number.isFinite(this.audio.duration)?this.audio.duration:this.currentTrack?.duration);}
+
+  publishWebTime(){this.onTimeUpdate?.(this.getCurrentTime(),this.getDuration());}
+
+  async resolveAudioURL(track){
+    if(track.unavailable&&!track.filePath)throw Error('Файл недоступен. Восстановите доступ к папке через «Добавить папку».');
+    if(track.filePath&&window.electronAPI?.getAudioSource){
+      const source=await window.electronAPI.getAudioSource(track.filePath,{fileSize:track.fileSize,lastModified:track.lastModified,downloadId:track.downloadId});
+      if(typeof source==='string')return source;
+      const saved=await this.library.relocateTrack(track.id,source.file);
+      if(saved){Object.assign(track,saved);this.refreshEditedTrack(saved);}
+      return source.url;
+    }
+    const file=await this.library.getAudioFile(track);
+    if(!file)throw Error('Нет доступа к файлу. Добавьте папку заново, чтобы восстановить доступ.');
+    return URL.createObjectURL(file);
   }
 
   notifyAndroidPlayback(isPlaying) {
@@ -157,6 +184,7 @@ export class AudioPlayer {
 
   async playTrack(track, queueIndex = 0, newQueue = null, context = null) {
     if (!track) return;
+    this.crossfade.cancel();
     const request = ++this.playRequest;
     this.nativePlayRequestedAt=Date.now();
     this.pendingTrack=track;this.onLoadingChange?.(track);
@@ -215,22 +243,12 @@ export class AudioPlayer {
     }
     window.AndroidBridge?.playbackCommand?.("stop", 0);
     try {
-      if (track.unavailable&&!track.filePath) throw new Error("Файл недоступен. Восстановите доступ к папке через «Добавить папку».");
-      let url,file;
-      if (track.filePath && window.electronAPI?.getAudioSource) {
-        const source=await window.electronAPI.getAudioSource(track.filePath,{fileSize:track.fileSize,lastModified:track.lastModified,downloadId:track.downloadId});
-        if(typeof source==='string')url=source;
-        else{url=source.url;const saved=await this.library.relocateTrack(track.id,source.file);if(saved){Object.assign(track,saved);this.refreshEditedTrack(saved);}}
-      }
-      else {
-        file = await this.library.getAudioFile(track);
-        if (request !== this.playRequest) return;
-        if (!file) throw new Error("Нет доступа к файлу. Добавьте папку заново, чтобы восстановить доступ.");
-        url = URL.createObjectURL(file);
-      }
+      const url=await this.resolveAudioURL(track);
       if (request !== this.playRequest) { if (url?.startsWith("blob:")) URL.revokeObjectURL(url); return; }
       this.sourceUrl = url;
       this.audio.src = url;
+      const {start}=trackRange(track);
+      if(start)this.audio.currentTime=start;
       await this.audio.play();
       if (request !== this.playRequest) return;
       this.failedTracks.clear();
@@ -250,13 +268,13 @@ export class AudioPlayer {
   syncNativeQueue(play = this.isPlaying, reset = false, position = null) {
     if (!this.nativePlayback) return;
     this.nativeMediaIds=this.queue.map(t=>t.id);
-    const tracks=this.queue.map(t=>({id:t.id,uri:t.nativeUri,title:t.title,artist:t.artist,album:t.album,trackVolume:trackVolume(t),queueOrigin:t.queueOrigin,queueEntry:t.queueEntry})),signature=JSON.stringify(tracks);
+    const tracks=this.queue.map(t=>({id:t.id,uri:t.nativeUri,title:t.title,artist:t.artist,album:t.album,trackVolume:trackVolume(t),queueOrigin:t.queueOrigin,queueEntry:t.queueEntry,...(t.userEdits?.trim?{trimStart:Math.round(t.userEdits.trim.start*1000),trimEnd:Math.round(t.userEdits.trim.end*1000)}:{})})),signature=JSON.stringify([tracks,this.crossfadeSeconds]);
     const requestedAt=play&&reset?this.nativePlayRequestedAt||Date.now():0;
     if(reset&&play&&signature===this.nativeQueueSignature&&window.AndroidBridge.selectPlaybackTrack?.(tracks[this.queueIndex]?.id,this.queueIndex,true,Number.isFinite(position)?Math.round(position*1000):0,requestedAt)){
       this.publishNativeArtwork();return;
     }
     window.AndroidBridge.setPlaybackQueue(JSON.stringify({ tracks, index: this.queueIndex, play, reset,requestedAt,
-      repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume,
+      repeat: this.repeatMode, shuffle:this.isShuffle, volume: this.volume, crossfade:this.crossfadeSeconds,
       ...(this.isShuffle&&this.playbackOrder().length===this.queue.length?{playbackOrder:this.playbackOrder()}:{}),
       ...(Number.isFinite(position) ? {position:Math.max(0,Math.round(position * 1000))} : {}) }));
     this.nativeQueueSignature=signature;
@@ -366,9 +384,13 @@ export class AudioPlayer {
     this.onTimeUpdate?.(this.nativeTime, this.nativeDuration);
   }
 
-  getCurrentTime() { return this.nativePlayback ? this.nativeTime || 0 : this.audio.currentTime; }
+  getCurrentTime() {
+    if(this.nativePlayback)return this.nativeTime||0;
+    const range=this.webRange();
+    return Math.max(0,Math.min(range.duration,this.audio.currentTime-range.start));
+  }
 
-  getDuration() { return this.nativePlayback ? this.nativeDuration || this.currentTrack?.duration || 0 : this.audio.duration; }
+  getDuration() { return this.nativePlayback ? this.nativeDuration || trackRange(this.currentTrack).duration : this.webRange().duration; }
 
   handlePlaybackError(message) {
     const id = this.currentTrack?.id;
@@ -397,6 +419,7 @@ export class AudioPlayer {
   play() {
     if (this.nativePlayback) { window.AndroidBridge.playbackCommand("play", 0); return; }
     if (!this.currentTrack || !this.sourceUrl) return;
+    if(this.currentTrack.userEdits?.trim&&this.audio.currentTime>=this.webRange().end)this.seekToTime(0);
     this.initWebAudio();
     if (this.audioCtx && this.audioCtx.state === "suspended") {
       this.audioCtx.resume();
@@ -406,6 +429,7 @@ export class AudioPlayer {
 
   pause() {
     ++this.playRequest;
+    this.crossfade.cancel();
     this.pendingTrack=null;this.onLoadingChange?.(null);
     if (this.nativePlayback) window.AndroidBridge.playbackCommand("pause", 0);
     this.audio.pause();
@@ -435,7 +459,7 @@ export class AudioPlayer {
     if(this.nativePlayback){window.AndroidBridge?.playbackCommand?.('previous',0);return;}
 
     // If more than 3 seconds in, restart current track
-    if ((this.nativePlayback ? this.nativeTime : this.audio.currentTime) > 3) {
+    if (this.getCurrentTime() > 3) {
       this.seek(0);
       return;
     }
@@ -450,6 +474,7 @@ export class AudioPlayer {
   }
 
   handleTrackEnded() {
+    if(this.crossfade.finish())return;
     if (this.repeatMode === "one") {
       this.seek(0);
       this.play();
@@ -459,18 +484,14 @@ export class AudioPlayer {
   }
 
   seek(percent) {
-    if (this.nativePlayback) { this.seekToTime(this.getDuration() * percent / 100); return; }
-    if (this.audio.duration) {
-      const time = (percent / 100) * this.audio.duration;
-      this.audio.currentTime = time;
-    }
+    this.seekToTime(this.getDuration()*percent/100);
   }
 
   seekToTime(seconds) {
     if (this.nativePlayback) { window.AndroidBridge.playbackCommand("seek", Math.max(0, seconds) * 1000); return; }
-    if (this.audio.duration) {
-      this.audio.currentTime = Math.max(0, Math.min(seconds, this.audio.duration));
-    }
+    this.crossfade.cancel();
+    const range=this.webRange();
+    if(range.duration&&Number.isFinite(seconds))this.audio.currentTime=range.start+Math.max(0,Math.min(seconds,range.duration));
   }
 
   currentTrackVolume() {
@@ -480,8 +501,9 @@ export class AudioPlayer {
   applyTrackVolume() {
     const gain=this.currentTrackVolume();
     if(this.nativePlayback){window.AndroidBridge?.playbackCommand?.('trackVolume',gain);return;}
-    if(this.gainNode)this.gainNode.gain.value=this.volume*gain;
-    else this.audio.volume=Math.min(1,this.volume*gain);
+    const level=this.volume*gain*this.crossfade.gains();
+    if(this.gainNode)this.gainNode.gain.value=level;
+    else this.audio.volume=Math.min(1,level);
   }
 
   previewTrackVolume(id,volume) {
@@ -490,9 +512,13 @@ export class AudioPlayer {
   }
 
   refreshEditedTrack(track) {
+    this.crossfade.cancel();
     const update=entry=>{if(entry?.id===track.id){const origin=entry.queueOrigin,occurrence=entry.queueEntry;Object.assign(entry,track);if(origin==='manual'){entry.queueOrigin=origin;entry.queueEntry=occurrence;}}return entry;};
     this.queue=this.queue.map(update);this.originalQueue=this.originalQueue.map(update);
-    if(this.currentTrack?.id===track.id){update(this.currentTrack);this.applyTrackVolume();this.updateMediaSessionMetadata(this.currentTrack);this.onTrackChange?.(this.currentTrack);}
+    if(this.currentTrack?.id===track.id){
+      update(this.currentTrack);this.applyTrackVolume();this.updateMediaSessionMetadata(this.currentTrack);this.onTrackChange?.(this.currentTrack);
+      if(!this.nativePlayback){const range=this.webRange();if(this.audio.currentTime<range.start||this.audio.currentTime>=range.end)this.seekToTime(0);this.publishWebTime();this.crossfade.watch();}
+    }
     if(this.nativePlayback){this.syncNativeQueue(this.isPlaying,false);this.publishNativeArtwork();}
     this.onQueueChange?.(this.queue,this.queueIndex);
   }
@@ -510,6 +536,13 @@ export class AudioPlayer {
     this.savePreferences();
   }
 
+  setCrossfade(seconds){
+    this.crossfadeSeconds=Math.max(0,Math.min(10,Math.round(Number(seconds)||0)));
+    this.crossfade.cancel();this.crossfade.watch();
+    if(this.nativePlayback)window.AndroidBridge?.playbackCommand?.('crossfade',this.crossfadeSeconds);
+    this.savePreferences();
+  }
+
   toggleMute() {
     if (this.isMuted) {
       this.setVolume(this.previousVolume || 0.8);
@@ -523,6 +556,7 @@ export class AudioPlayer {
   }
 
   toggleShuffle() {
+    this.crossfade.cancel();
     this.isShuffle = !this.isShuffle;
     if(this.nativePlayback){
       this.pendingNativeShuffle={value:this.isShuffle,until:Date.now()+2500};
@@ -562,6 +596,7 @@ export class AudioPlayer {
   }
 
   toggleRepeat() {
+    this.crossfade.cancel();
     if (this.repeatMode === "off") {
       this.repeatMode = "all";
     } else if (this.repeatMode === "all") {
@@ -666,7 +701,8 @@ export class AudioPlayer {
       localStorage.setItem("sp_audio_prefs", JSON.stringify({
         volume: this.volume,
         repeatMode: this.repeatMode,
-        isShuffle: this.isShuffle
+        isShuffle: this.isShuffle,
+        ...(this.crossfadeSeconds?{crossfadeSeconds:this.crossfadeSeconds}:{})
       }));
     } catch {}
   }
@@ -679,6 +715,7 @@ export class AudioPlayer {
         if (typeof parsed.volume === "number") this.volume = Math.max(0, Math.min(1, parsed.volume));
         if (["off", "all", "one"].includes(parsed.repeatMode)) this.repeatMode = parsed.repeatMode;
         if (typeof parsed.isShuffle === "boolean") this.isShuffle = parsed.isShuffle;
+        if(Number.isFinite(parsed.crossfadeSeconds))this.crossfadeSeconds=Math.max(0,Math.min(10,Math.round(parsed.crossfadeSeconds)));
       }
     } catch {}
     this.audio.volume = this.volume;

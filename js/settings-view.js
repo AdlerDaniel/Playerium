@@ -67,6 +67,18 @@ export function renderSettingsView(container) {
         </div>
       </div>
 
+      <section class="settings-section">
+        <h2 class="settings-section-title">Воспроизведение</h2>
+        <div class="settings-card">
+          <div class="crossfade-setting">
+            <label for="crossfadeSeconds">Плавный переход</label>
+            <output for="crossfadeSeconds"></output>
+            <input id="crossfadeSeconds" type="range" min="0" max="10" step="1">
+            <span class="settings-desc">Конец песни затухает, пока начинается следующая.</span>
+          </div>
+        </div>
+      </section>
+
       <!-- Keyboard Shortcuts Reference -->
       <div class="settings-section">
         <h2 class="settings-section-title">
@@ -111,6 +123,12 @@ export function renderSettingsView(container) {
     renderThemePicker(settingsDiv.querySelector('.theme-settings-picker'));
     renderProfileSettings(this,settingsDiv);
     organizeSettings(settingsDiv,{mobile:this.isMobile});
+    const crossfade=settingsDiv.querySelector('#crossfadeSeconds');
+    const crossfadeOutput=settingsDiv.querySelector('output[for="crossfadeSeconds"]');
+    crossfade.value=this.player.crossfadeSeconds;
+    const syncCrossfade=()=>{crossfadeOutput.value=Number(crossfade.value)?crossfade.value+' с':'Выкл.';crossfade.setAttribute('aria-valuetext',crossfadeOutput.value);};
+    crossfade.oninput=()=>{this.player.setCrossfade(Number(crossfade.value));syncCrossfade();};
+    syncCrossfade();
 
     // Bind update settings
     const repoInput = document.getElementById("inputSettingsGithubRepo");

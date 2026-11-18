@@ -127,6 +127,11 @@ class DesktopMusic {
   }
   async request(operation,payload,id) {
     if(!/^[\w-]{1,100}$/.test(id))throw Error('Недопустимый запрос');
+    if(operation==='trimSilence'){
+      const file=await this.authorize(payload.filePath);
+      const {analyzeTrim}=require('./desktop-waveform');
+      return analyzeTrim(path.join(this.tools,'ffmpeg.exe'),file);
+    }
     if(operation==='lyricsPage'){
       const controller=new AbortController();this.requests.set(id,controller);
       try{return await fetchLyricsPage(payload,{fetcher:this.fetcher,signal:controller.signal});}finally{this.requests.delete(id);}

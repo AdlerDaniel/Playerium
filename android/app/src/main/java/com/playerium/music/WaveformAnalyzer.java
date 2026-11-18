@@ -13,6 +13,34 @@ import java.util.concurrent.*;
 
 /** Real PCM peaks; analysis and cache live outside the media/gallery folders. */
 final class WaveformAnalyzer {
+ static JSONObject trim(Context context,Uri uri,File runtime)throws Exception{
+  File input=File.createTempFile("trim-",".audio",context.getCacheDir());
+  try{
+   try(InputStream in=context.getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(input)){
+    if(in==null)throw new IOException("Не удалось прочитать аудиофайл.");
+    byte[] buffer=new byte[65536];int n;
+    while((n=in.read(buffer))!=-1){if(Thread.currentThread().isInterrupted())throw new InterruptedException();out.write(buffer,0,n);}
+   }
+   ProcessBuilder builder=new ProcessBuilder(new File(context.getApplicationInfo().nativeLibraryDir,"libffmpeg.so").getAbsolutePath(),"-v","quiet","-nostdin","-i",input.getAbsolutePath(),"-vn","-ac","2","-ar","48000","-f","s16le","pipe:1");
+   builder.environment().put("LD_LIBRARY_PATH",new File(runtime,"python/usr/lib")+":"+new File(runtime,"ffmpeg/usr/lib"));
+   Process process=builder.start();
+   FutureTask<JSONObject> scan=new FutureTask<>(()->{
+    long frame=0,first=-1,last=0;
+    try(DataInputStream pcm=new DataInputStream(new BufferedInputStream(process.getInputStream(),65536))){
+     while(true){
+      short left,right;
+      try{left=Short.reverseBytes(pcm.readShort());right=Short.reverseBytes(pcm.readShort());}catch(EOFException end){break;}
+      if(Math.max(Math.abs((int)left),Math.abs((int)right))>184){if(first<0)first=frame;last=frame+1;}
+      frame++;
+     }
+    }
+    if(process.waitFor()!=0||frame==0)throw new IOException("Не удалось проанализировать звук.");
+    return new JSONObject().put("start",first<0?0:Math.max(0,first-240)/48000.).put("end",first<0?frame/48000.:Math.min(frame,last+240)/48000.).put("duration",frame/48000.);
+   });
+   Thread reader=new Thread(scan,"Playerium trim analysis");reader.setDaemon(true);reader.start();
+   try{return scan.get(75,TimeUnit.SECONDS);}finally{process.destroy();scan.cancel(true);}
+  }finally{input.delete();}
+ }
  static synchronized JSONObject analyze(Context context,Uri uri,File runtime) throws Exception {
   if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Unauthorized URI");
   DocumentFile document=DocumentFile.fromSingleUri(context,uri);long size=document==null?0:document.length(),modified=document==null?0:document.lastModified();if("file".equals(uri.getScheme())){File f=new File(uri.getPath());size=f.length();modified=f.lastModified();}

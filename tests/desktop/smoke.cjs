@@ -8,7 +8,7 @@ function wav() {
   const rate=8000, samples=rate*20, data=Buffer.alloc(44+samples*2);
   data.write('RIFF');data.writeUInt32LE(data.length-8,4);data.write('WAVEfmt ',8);data.writeUInt32LE(16,16);
   data.writeUInt16LE(1,20);data.writeUInt16LE(1,22);data.writeUInt32LE(rate,24);data.writeUInt32LE(rate*2,28);data.writeUInt16LE(2,32);data.writeUInt16LE(16,34);data.write('data',36);data.writeUInt32LE(samples*2,40);
-  for(let i=0;i<samples;i++) data.writeInt16LE(Math.round(Math.sin(i*Math.PI*2*440/rate)*1000),44+i*2);
+  for(let i=rate;i<samples-rate*2;i++) data.writeInt16LE(Math.round(Math.sin(i*Math.PI*2*440/rate)*1000),44+i*2);
   return data;
 }
 const watchdog = setTimeout(() => { console.error('Electron runtime verification timed out'); process.exit(1); }, 90000);
@@ -35,6 +35,9 @@ const watchdog = setTimeout(() => { console.error('Electron runtime verification
     assert.equal(tracks.length,1, `Expected one audio track, got ${tracks.length}; errors: ${errors.join("; ")}`);
     const track=tracks[0];
     assert.equal(track.title,'Song');assert.equal(track.duration,20);assert.equal(track.lyrics,undefined);
+    const trim=await win.evaluate(()=>window.electronAPI.musicRequest('trimSilence',{filePath:window.playerApp.library.getTracks()[0].filePath},'trim-smoke'));
+    assert.ok(Math.abs(trim.start-1)<.025&&Math.abs(trim.end-18)<.025&&Math.abs(trim.duration-20)<.01,JSON.stringify(trim));
+    assert.ok((await fs.readFile(path.join(folder,'Artist - Song.wav'))).equals(wav()),'Analyzing silence must leave the audio file intact');
     const startup=await win.evaluate(async()=>{
       const start=performance.now();
       await Promise.race([

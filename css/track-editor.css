@@ -25,3 +25,13 @@
  .track-editor .modal-card{width:520px!important;max-width:100%!important;max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;border-radius:18px!important}
  .track-editor .modal-header{padding:12px 16px!important}.track-editor .modal-body{padding:0 16px 16px!important}.track-editor .modal-footer{padding:12px 16px!important}
 }
+.track-editor-trim{min-width:0;margin:0;padding:12px;border:1px solid var(--theme-border);border-radius:12px;display:grid;gap:10px}
+.track-editor-trim legend{padding:0 4px;font-weight:600}
+.track-editor-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 24px 14px;padding:3px;border-radius:13px;background:var(--sp-dark-900)}
+.track-editor-tabs button{min-height:44px;flex:1;padding:6px 10px;border:0;border-radius:10px;color:var(--sp-text-secondary);background:transparent;font:inherit}
+.track-editor-tabs button[aria-selected="true"]{color:var(--sp-text-primary);background:var(--surface-selected)}
+.track-editor [role="tabpanel"]{display:grid;gap:14px;min-width:0}
+@media(max-width:768px){.track-editor-tabs{margin-inline:16px}}
+.trim-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.trim-actions{display:flex;flex-wrap:wrap;gap:8px}
+.trim-actions button{min-height:44px}

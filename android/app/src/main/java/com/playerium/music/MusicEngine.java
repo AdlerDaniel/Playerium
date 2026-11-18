@@ -79,6 +79,11 @@ final class MusicEngine {
     }
     private Object execute(String operation,JSONObject payload,String id) throws Exception {
         if(operation.equals("lyricsPage"))return LyricsCatalogPage.fetch(payload);
+        if(operation.equals("trimSilence")){
+            Uri uri=Uri.parse(payload.getString("uri"));
+            if(!MainActivity.hasMusicPermission(context,uri))throw new SecurityException("Нет доступа к аудиофайлу.");
+            initialize();return WaveformAnalyzer.trim(context,uri,runtime);
+        }
         if(operation.equals("artwork")) {
             URL url=new URL(payload.getString("url"));
             for(int redirects=0;redirects<5;redirects++) {

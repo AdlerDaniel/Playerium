@@ -12,6 +12,7 @@ import { renderSettingsView } from "./settings-view.js";
 import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, showMobileAddSheet, triggerMobileFileImport } from "./mobile-controls.js";
 import { renderRightQueue } from "./queue-view.js";
 import { createTrackTable } from "./track-table.js";
+import {trackRange} from './track-edits.js';
 /**
  * Playerium - UI Controller & DOM Coordinator
  */
@@ -355,6 +356,7 @@ export class UIController {
       // Update Mobile Fullscreen Player
       const fsArtwork = document.getElementById("mobileFsArtwork");
       if(fsArtwork)mountCover(fsArtwork,track,true);
+      mountCover(document.querySelector('.mobile-fs-backdrop'),track,true);
       document.getElementById("mobileFsTitle").textContent = track.title || "Неизвестный трек";
       document.getElementById("mobileFsArtist").textContent = track.artist || "Неизвестный исполнитель";
       document.getElementById("mobileFsContextTitle").textContent = this.player.playbackContext?.title || "Добавленные";
@@ -652,7 +654,7 @@ export class UIController {
   renderRightNowPlaying(track) {
     const container = document.getElementById("rightPanelContent");
     delete container.dataset.queueSignature;
-    const signature=JSON.stringify(track?[track.id,track.title,track.artist,track.pictureUrl,track.pictureUrls,track.year,track.duration,track.fileName,track.fileSize,track.folderName]:null);
+    const signature=JSON.stringify(track?[track.id,track.title,track.artist,track.pictureUrl,track.pictureUrls,track.year,trackRange(track).duration,track.fileName,track.fileSize,track.folderName]:null);
     if(container.dataset.nowPlayingSignature===signature&&container.childElementCount)return;
     container.dataset.nowPlayingSignature=signature;
     if (!track) {
@@ -676,7 +678,7 @@ export class UIController {
         </div>` : ""}
         <div class="panel-card-row">
           <span class="panel-card-label">Длительность</span>
-          <span class="panel-card-val">${this.formatTime(track.duration)}</span>
+          <span class="panel-card-val">${this.formatTime(trackRange(track).duration)}</span>
         </div>
         <div class="panel-card-row">
           <span class="panel-card-label">Файл</span>

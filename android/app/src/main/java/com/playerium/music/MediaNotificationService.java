@@ -49,6 +49,7 @@ public class MediaNotificationService extends MediaSessionService {
         context.startService(new Intent(context, MediaNotificationService.class).setAction("playerium.SET_QUEUE"));
     }
     private ExoPlayer player;
+    private PlaybackCrossfade crossfade;
     private final TrackVolumeProcessor trackVolumeProcessor=new TrackVolumeProcessor();
     private final java.util.Random shuffleRandom=new java.security.SecureRandom();
     private MediaSession session;
@@ -94,12 +95,12 @@ public class MediaNotificationService extends MediaSessionService {
 
         androidx.media3.datasource.DataSource.Factory source=()->new LocalAudioDataSource(this,new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource());
         androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(5000,20000,150,300).setPrioritizeTimeOverSizeThresholds(true).build();
-        androidx.media3.exoplayer.DefaultRenderersFactory renderers=new androidx.media3.exoplayer.DefaultRenderersFactory(this){
-            @Override protected androidx.media3.exoplayer.audio.AudioSink buildAudioSink(Context context,boolean floatOutput,boolean playbackParams){
-                return new androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context).setEnableFloatOutput(false).setEnableAudioTrackPlaybackParams(playbackParams).setAudioProcessors(new androidx.media3.common.audio.AudioProcessor[]{trackVolumeProcessor}).build();
-            }
-        };
-        player = new ExoPlayer.Builder(this,renderers).setLoadControl(loadControl).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
+        player = new ExoPlayer.Builder(this,renderers(trackVolumeProcessor)).setLoadControl(loadControl).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
+        crossfade=new PlaybackCrossfade(player,handler,item->{
+            TrackVolumeProcessor gain=new TrackVolumeProcessor();gain.setGain(trackGain(item));
+            ExoPlayer deck=new ExoPlayer.Builder(this,renderers(gain)).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
+            deck.setAudioAttributes(player.getAudioAttributes(),false);deck.setVolume(0);deck.setMediaItem(item);deck.prepare();return deck;
+        });
         player.addAnalyticsListener(new androidx.media3.exoplayer.analytics.AnalyticsListener(){
             @Override public void onAudioPositionAdvancing(EventTime time,long playoutStartSystemTimeMs){
                 String id=time.timeline.isEmpty()?"":time.timeline.getWindow(time.windowIndex,new androidx.media3.common.Timeline.Window()).mediaItem.mediaId;
@@ -120,7 +121,13 @@ public class MediaNotificationService extends MediaSessionService {
                 player.pause(); // An unreadable playlist must not create an endless retry loop.
             }
             @Override public void onMediaItemTransition(MediaItem item,int reason){applyTrackVolume();refreshArtwork();}
+            @Override public void onPositionDiscontinuity(Player.PositionInfo old,Player.PositionInfo next,int reason){crossfade.discontinuity(old,next,reason);}
+            @Override public void onPlayWhenReadyChanged(boolean play,int reason){if(!play)crossfade.cancel();crossfade.wake();}
+            @Override public void onPlaybackSuppressionReasonChanged(int reason){if(reason!=Player.PLAYBACK_SUPPRESSION_REASON_NONE)crossfade.cancel();crossfade.wake();}
+            @Override public void onRepeatModeChanged(int mode){crossfade.wake();}
+            @Override public void onShuffleModeEnabledChanged(boolean enabled){crossfade.wake();}
             @Override public void onEvents(Player ignored,Player.Events events) {
+                if(events.size()==1&&events.contains(Player.EVENT_VOLUME_CHANGED))return;
                 updateMediaButtons();
                 savePlayback();JSONObject data=state();stateSnapshot=data.toString();
                 MainActivity activity=MainActivity.getInstance();if(activity!=null&&activity.isForeground())activity.sendPlayerState(data);
@@ -158,6 +165,14 @@ public class MediaNotificationService extends MediaSessionService {
         handler.post(publishState);
     }
 
+    private androidx.media3.exoplayer.DefaultRenderersFactory renderers(TrackVolumeProcessor processor){
+        return new androidx.media3.exoplayer.DefaultRenderersFactory(this){
+            @Override protected androidx.media3.exoplayer.audio.AudioSink buildAudioSink(Context context,boolean floatOutput,boolean playbackParams){
+                return new androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context).setEnableFloatOutput(false).setEnableAudioTrackPlaybackParams(playbackParams).setAudioProcessors(new androidx.media3.common.audio.AudioProcessor[]{processor}).build();
+            }
+        };
+    }
+
     @Nullable @Override public MediaSession onGetSession(MediaSession.ControllerInfo controller) { return session; }
 
     @Override public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
@@ -175,6 +190,7 @@ public class MediaNotificationService extends MediaSessionService {
     }
 
     private void setQueue(JSONObject data) throws Exception {
+        crossfade.cancel();
         JSONArray tracks = data.getJSONArray("tracks");
         int selectedIndex=Math.max(0,Math.min(tracks.length()-1,data.optInt("index")));
         if(data.optBoolean("play")&&data.optBoolean("reset")){requestedStartAt=data.optLong("requestedAt",System.currentTimeMillis());if(requestedStartAt<=0)requestedStartAt=System.currentTimeMillis();startLatencyMs=-1;}
@@ -186,7 +202,10 @@ public class MediaNotificationService extends MediaSessionService {
             android.os.Bundle extras=new android.os.Bundle();extras.putFloat("trackVolume",TrackVolumeProcessor.bounded(t.optDouble("trackVolume",1)));extras.putString("queueOrigin","manual".equals(t.optString("queueOrigin"))?"manual":"collection");extras.putString("queueEntry",t.optString("queueEntry").substring(0,Math.min(160,t.optString("queueEntry").length())));
             MediaMetadata metadata = PlaybackArtwork.metadata(this,t.getString("id"),new MediaMetadata.Builder().setTitle(t.optString("title"))
                 .setArtist(t.optString("artist")).setAlbumTitle(t.optString("album")).setExtras(extras),i==selectedIndex).build();
-            items.add(new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata).build());
+            MediaItem.Builder item=new MediaItem.Builder().setMediaId(t.getString("id")).setUri(uri).setMediaMetadata(metadata);
+            long start=Math.max(0,t.optLong("trimStart")),end=t.optLong("trimEnd");
+            if(end>start&&end-start>=10)item.setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder().setStartPositionMs(start).setEndPositionMs(end).build());
+            items.add(item.build());
             indices.put(t.getString("id"),i);
         }
         selectionIndices=java.util.Collections.unmodifiableMap(indices);
@@ -198,10 +217,13 @@ public class MediaNotificationService extends MediaSessionService {
         MediaItem current = player.getCurrentMediaItem();
         boolean preserve = !data.optBoolean("reset") && current != null
             && items.get(index).mediaId.equals(currentId)
-            && java.util.Objects.equals(items.get(index).localConfiguration, current.localConfiguration);
+            && java.util.Objects.equals(items.get(index).localConfiguration, current.localConfiguration)
+            && items.get(index).clippingConfiguration.equals(current.clippingConfiguration);
         boolean sameQueue=items.size()==player.getMediaItemCount();
         for(int i=0;sameQueue&&i<items.size();i++){MediaItem before=player.getMediaItemAt(i),after=items.get(i);sameQueue=before.mediaId.equals(after.mediaId)&&trackGain(before)==trackGain(after)&&java.util.Objects.equals(before.mediaMetadata.albumTitle,after.mediaMetadata.albumTitle)&&java.util.Objects.equals(before.localConfiguration,after.localConfiguration)&&java.util.Objects.equals(before.mediaMetadata.title,after.mediaMetadata.title)&&java.util.Objects.equals(before.mediaMetadata.artist,after.mediaMetadata.artist)&&java.util.Objects.equals(before.mediaMetadata.extras==null?"collection":before.mediaMetadata.extras.getString("queueOrigin","collection"),after.mediaMetadata.extras.getString("queueOrigin","collection"))&&java.util.Objects.equals(before.mediaMetadata.extras==null?"":before.mediaMetadata.extras.getString("queueEntry",""),after.mediaMetadata.extras.getString("queueEntry",""));}
-        if(sameQueue){
+         if(sameQueue&&current!=null&&!items.get(index).clippingConfiguration.equals(current.clippingConfiguration))sameQueue=false;
+         for(int i=0;sameQueue&&i<items.size();i++)sameQueue=items.get(i).clippingConfiguration.equals(player.getMediaItemAt(i).clippingConfiguration);
+         if(sameQueue){
             // A song selection in the existing queue reuses prepared media sources.
             if(data.optBoolean("reset")||index!=player.getCurrentMediaItemIndex()||data.has("position"))
                 player.seekTo(index,data.has("position")?Math.max(0,data.optLong("position")):0);
@@ -217,12 +239,18 @@ public class MediaNotificationService extends MediaSessionService {
             player.replaceMediaItem(index, items.get(index));
         } else {
             long position=data.has("position")?Math.max(0,data.optLong("position")):retainedPosition(data.optBoolean("reset"),currentId,items.get(index).mediaId,player.getCurrentPosition());
+            if(!data.has("position")&&!data.optBoolean("reset")&&current!=null&&currentId.equals(items.get(index).mediaId)){
+                MediaItem.ClippingConfiguration range=items.get(index).clippingConfiguration;
+                position=Math.max(0,position+current.clippingConfiguration.startPositionMs-range.startPositionMs);
+                if(range.endPositionMs!=C.TIME_END_OF_SOURCE&&position>=range.endPositionMs-range.startPositionMs)position=0;
+            }
             player.setMediaItems(items, index, position);
             player.prepare();
             player.setPlayWhenReady(play);
         }
         player.setRepeatMode("one".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ONE : "all".equals(data.optString("repeat")) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
-        player.setVolume((float)data.optDouble("volume", 0.8));
+        crossfade.setVolume(data.optDouble("volume", 0.8));
+        crossfade.configure(data.optInt("crossfade"));
         boolean suppliedValid=false;
         JSONArray suppliedOrder=data.optJSONArray("playbackOrder");
         if(suppliedOrder!=null&&suppliedOrder.length()==player.getMediaItemCount()){
@@ -294,11 +322,11 @@ public class MediaNotificationService extends MediaSessionService {
                 tracks.put(new JSONObject().put("id",item.mediaId).put("uri",item.localConfiguration.uri.toString())
                     .put("title",String.valueOf(item.mediaMetadata.title==null?"":item.mediaMetadata.title))
                     .put("artist",String.valueOf(item.mediaMetadata.artist==null?"":item.mediaMetadata.artist)).put("album",String.valueOf(item.mediaMetadata.albumTitle==null?"":item.mediaMetadata.albumTitle)).put("trackVolume",trackGain(item)).put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection")).put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""))
-                    );
+                     .put("trimStart",item.clippingConfiguration.startPositionMs).put("trimEnd",item.clippingConfiguration.endPositionMs));
             }
             JSONObject data=new JSONObject().put("tracks",tracks).put("index",player.getCurrentMediaItemIndex())
                 .put("play",player.getPlayWhenReady()).put("position",Math.max(0,player.getCurrentPosition()))
-                .put("volume",player.getVolume()).put("shuffle",player.getShuffleModeEnabled()).put("repeat",player.getRepeatMode()==Player.REPEAT_MODE_ONE?"one":player.getRepeatMode()==Player.REPEAT_MODE_ALL?"all":"off");
+                 .put("volume",crossfade.volume()).put("crossfade",crossfade.seconds()).put("shuffle",player.getShuffleModeEnabled()).put("repeat",player.getRepeatMode()==Player.REPEAT_MODE_ONE?"one":player.getRepeatMode()==Player.REPEAT_MODE_ALL?"all":"off");
             if(player.getShuffleModeEnabled())data.put("playbackOrder",playbackOrder());
             playbackPrefs.edit().putString("queue",data.toString()).apply();lastSaved=SystemClock.elapsedRealtime();
         }catch(Exception ignored){}
@@ -324,14 +352,17 @@ public class MediaNotificationService extends MediaSessionService {
             case "play": player.play(); break;
             case "pause": player.pause(); break;
             case "stop": player.stop(); player.clearMediaItems(); stopSelf(); break;
-            case "seek": player.seekTo(Math.max(0, (long)value)); break;
-            case "volume": player.setVolume((float)Math.max(0, Math.min(1, value))); break;
+            case "seek": crossfade.cancel();player.seekTo(Math.max(0, (long)value)); break;
+            case "volume": crossfade.setVolume(value); break;
+            case "crossfade": crossfade.configure((int)value);savePlayback();break;
             case "trackVolume": trackVolumeProcessor.setGain(value); break;
             case "repeat": player.setRepeatMode((int)value); break;
             case "shuffle": setShuffle(value!=0); break;
             case "next":
+                crossfade.cancel();
                 int next=player.getNextMediaItemIndex();if(next==C.INDEX_UNSET)player.pause();else player.seekTo(next,0);break;
             case "previous":
+                crossfade.cancel();
                 int previous=player.getPreviousMediaItemIndex();
                 if(player.getCurrentPosition()>3000||previous==C.INDEX_UNSET)player.seekTo(0);else player.seekTo(previous,0);break;
         }
@@ -361,6 +392,7 @@ public class MediaNotificationService extends MediaSessionService {
                 track.put("artist", item.mediaMetadata.artist == null ? "" : item.mediaMetadata.artist.toString());
                 track.put("album",item.mediaMetadata.albumTitle==null?"":item.mediaMetadata.albumTitle.toString());track.put("trackVolume",trackGain(item));
                 track.put("queueOrigin",item.mediaMetadata.extras==null?"collection":item.mediaMetadata.extras.getString("queueOrigin","collection"));track.put("queueEntry",item.mediaMetadata.extras==null?"":item.mediaMetadata.extras.getString("queueEntry",""));
+                track.put("trimStart",item.clippingConfiguration.startPositionMs).put("trimEnd",item.clippingConfiguration.endPositionMs);
                 tracks.put(track);
             }
             data.put("queue", queue);
@@ -370,7 +402,7 @@ public class MediaNotificationService extends MediaSessionService {
             data.put("repeat", player.getRepeatMode());
             data.put("shuffle",player.getShuffleModeEnabled());
             data.put("playing", player.isPlaying()); data.put("position", player.getCurrentPosition());
-            data.put("duration", Math.max(0, player.getDuration()));data.put("volume",player.getVolume());
+            data.put("duration", Math.max(0, player.getDuration()));data.put("volume",crossfade.volume());
             if(startLatencyMs>=0)data.put("startLatencyMs",startLatencyMs);
             if (error != null) data.put("error", error);
         } catch (Exception ignored) {}
@@ -387,7 +419,7 @@ public class MediaNotificationService extends MediaSessionService {
         savePlayback();
         handler.removeCallbacksAndMessages(null);
         artworkWorker.shutdownNow();if(instance==this)instance=null;
-        session.release(); player.release(); stateSnapshot = "{}";
+        crossfade.release();session.release(); player.release(); stateSnapshot = "{}";
         super.onDestroy();
     }
 }

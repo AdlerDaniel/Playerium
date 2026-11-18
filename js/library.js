@@ -2,7 +2,7 @@ import {normalizeSearch} from './music-match.js';
 import { normalizeTrackTitle } from "./track-title.js";
 import {isInternalAudioFile} from './internal-audio-files.js';
 import {retireLibraryFeatures} from './local-library.js';
-import {applyTrackEdits,validateTrackEdits} from './track-edits.js';
+import {applyTrackEdits,trackRange,validateTrackEdits} from './track-edits.js';
 /**
  * Spotify Local Player - Library & Database Layer
  * IndexedDB persistence for tracks, playlists, folders, and likes.
@@ -205,6 +205,7 @@ export class Library {
     const edits=validateTrackEdits(changes);
     const task=this.importChain.catch(()=>{}).then(async()=>{
       const track=this.tracks.get(id);if(!track||track.catalog)throw Error('Трек больше не находится в медиатеке.');
+       if(edits.trim&&track.duration>0&&edits.trim.end>track.duration+.05)throw Error('Конец выходит за длительность записи.');
       const updated=applyTrackEdits({...track,userEdits:{...track.userEdits,...edits},metadataVersion:3});
       await this.putInStore('tracks',{...updated,pictureUrl:null});
       Object.assign(track,updated);track.pictureUrl=track.pictureBlob?this.coverURL(id,track.pictureBlob):null;
@@ -439,8 +440,8 @@ export class Library {
           valB = (b.artist || "").toLowerCase();
           break;
         case "duration":
-          valA = a.duration || 0;
-          valB = b.duration || 0;
+          valA = trackRange(a).duration;
+          valB = trackRange(b).duration;
           break;
         case "dateAdded":
         default:

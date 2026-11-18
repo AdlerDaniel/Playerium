@@ -5,6 +5,7 @@ export function organizeSettings(container,{mobile=false}={}){
  const groups=[
   ['settings-account','Профиль',container.querySelector('.account-settings')],
   ['settings-appearance','Оформление',container.querySelector('.theme-picker')?.closest('.settings-section')],
+  ['settings-playback','Воспроизведение',container.querySelector('#crossfadeSeconds')?.closest('.settings-section')],
   ['settings-files','Файлы',container.querySelector('#settingsFolderList')?.closest('.settings-section')],
   ['settings-updates','Обновления',container.querySelector('#btnCheckUpdatesManual')?.closest('.settings-section')],
   ['settings-shortcuts','Горячие клавиши',container.querySelector('.shortcuts-grid')?.closest('.settings-section')]
