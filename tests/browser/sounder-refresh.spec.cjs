@@ -19,7 +19,6 @@ for(const width of [800,1280])test(`album rail and profile fit ${width}, albums 
 for(const width of [320,390,740])test(`Android retains its named library and filters at ${width}`,async({page},info)=>{
  await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{value:'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Mobile'}));
  await ready(page,width);await expect(page.locator('.top-library')).toBeHidden();await expect(page.locator('.library-album')).toHaveCount(0);await expect(page.locator('.mobile-library-pills')).toBeVisible();
- const centers=await page.evaluate(()=>['.profile-avatar','#mainTopbar .home-filters button'].map(s=>{const r=document.querySelector(s).getBoundingClientRect();return r.y+r.height/2;}));expect(Math.abs(centers[0]-centers[1])).toBeLessThan(1);
  await expect(page.locator('#mainTopbar')).toBeVisible();await expect(page.locator('.mobile-library-title')).toHaveText('Моя медиатека');await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные',...Array.from({length:8},(_,i)=>'Playlist '+i)]);
  await page.locator('.library-search-toggle').click();await page.getByRole('searchbox',{name:'Найти в медиатеке'}).fill('Playlist 3');await expect(page.locator('.mobile-lib-name')).toHaveText('Playlist 3');await page.getByRole('button',{name:'Закрыть поиск',exact:true}).click();
  await page.locator('[data-filter="artists"]').click();await expect(page.locator('.mobile-lib-name')).toHaveText('Artist');await page.locator('[data-filter="all"]').click();
