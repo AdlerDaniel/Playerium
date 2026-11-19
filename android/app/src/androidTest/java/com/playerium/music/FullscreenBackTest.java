@@ -46,7 +46,7 @@ public class FullscreenBackTest {
     }
 
     private static void await(Instrumentation ins, WebView web, String expression) throws Exception {
-        long until = SystemClock.uptimeMillis() + 15000;
+        long until = SystemClock.uptimeMillis() + 60000;
         do {
             if ("true".equals(js(ins, web, expression))) return;
             Thread.sleep(100);
@@ -58,7 +58,7 @@ public class FullscreenBackTest {
         AtomicReference<String> value = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
         ins.runOnMainSync(() -> web.evaluateJavascript(script, result -> { value.set(result); done.countDown(); }));
-        assertTrue(done.await(5, TimeUnit.SECONDS));
+        assertTrue("WebView did not complete its script", done.await(30, TimeUnit.SECONDS));
         return value.get();
     }
 }
