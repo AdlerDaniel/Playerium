@@ -1,4 +1,8 @@
 const fs = require('node:fs/promises');
+const {createWriteStream}=require('node:fs');
+const {Transform}=require('node:stream');
+const {pipeline}=require('node:stream/promises');
+const {performance}=require('node:perf_hooks');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
@@ -18,10 +22,10 @@ function safeURL(value, api = false) {
       || ['release-assets.githubusercontent.com','objects.githubusercontent.com'].includes(u.hostname);
   if(!valid)throw Error('Недопустимый источник обновления');return u.href;
 }
-async function request(fetcher,url,api=false) {
+async function request(fetcher,url,api=false,signal=AbortSignal.timeout(30000)) {
   for(let i=0;i<6;i++) {
     safeURL(url,api);
-    const response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(api?30000:600000),headers:api?{Accept:'application/vnd.github+json'}:{}});
+    const response=await fetcher(url,{redirect:'manual',signal,headers:api?{Accept:'application/vnd.github+json'}:{}});
     if([301,302,303,307,308].includes(response.status)) {
       const next=new URL(response.headers.get('location'),url).href;await response.body?.cancel();url=next;continue;
     }
@@ -53,27 +57,40 @@ class DesktopUpdater {
     if(this.busy)return {started:true};
     if(repo!==REPO||!newer(latestVersion,this.app.getVersion()))throw Error('Это обновление недоступно');
     if(!this.app.isPackaged||process.platform!=='win32')throw Error('Обновление доступно в установленной версии Playerium для Windows');
-    this.busy=true;let source;
+    this.busy=true;let source,folder;
     try {
-      this.publish({state:'downloading',percent:0});
+      this.publish({state:'preparing',message:'Подключение к GitHub'});
       const release=await (await request(this.fetcher,`https://api.github.com/repos/${REPO}/releases/tags/v${latestVersion}`,true)).json();
       if(release.draft||release.prerelease||release.tag_name!==`v${latestVersion}`)throw Error('Обновление ещё не опубликовано');
       const portable=Boolean(this.env.PORTABLE_EXECUTABLE_FILE);
       const asset=release.assets?.find(a=>a.name.toLowerCase().endsWith('.exe') && (/setup/i.test(a.name)!==portable));
       if(!asset||asset.size<=0||asset.size>1024*1024*1024||!/^sha256:[a-f0-9]{64}$/i.test(asset.digest||''))throw Error('Файл обновления не найден или не прошёл проверку');
       const digest=asset.digest.slice(7).toLowerCase();
-      const folder=await fs.mkdtemp(path.join(this.app.getPath('temp'),'playerium-update-'));
+      folder=await fs.mkdtemp(path.join(this.app.getPath('temp'),'playerium-update-'));
       source=path.join(folder,'Playerium-update.exe');
-      const response=await request(this.fetcher,asset.browser_download_url);
-      const file=await fs.open(source,'wx');let size=0,last=-1;const hash=createHash('sha256');
-      try {
-        for await(const chunk of response.body) {
-          size+=chunk.length;if(size>asset.size)throw Error('Некорректный размер обновления');
-          hash.update(chunk);await file.writeFile(chunk);
-          const percent=Math.floor(size*100/asset.size);
-          if(percent!==last){last=percent;this.publish({state:'downloading',percent});}
-        }
-      }finally{await file.close();}
+      const controller=new AbortController();
+      let timer,size=0,last=performance.now(),sampleSize=0,rate=0;
+      const hash=createHash('sha256');
+      const armTimeout=()=>{clearTimeout(timer);timer=setTimeout(()=>controller.abort(),45000);};
+      const emit=()=>this.publish({state:'downloading',percent:Math.floor(size*100/asset.size),bytes:size,totalBytes:asset.size,bytesPerSecond:rate});
+      armTimeout();
+      try{
+        const response=await request(this.fetcher,asset.browser_download_url,false,controller.signal);
+        emit();
+        const verify=new Transform({highWaterMark:256*1024,transform:(chunk,_encoding,done)=>{
+          armTimeout();size+=chunk.length;
+          if(size>asset.size)return done(Error('Некорректный размер обновления'));
+          hash.update(chunk);
+          const now=performance.now(),elapsed=now-last;
+          if(elapsed>=1000||size===asset.size){
+            if(elapsed>=500){const sample=(size-sampleSize)*1000/elapsed;rate=rate?rate*.65+sample*.35:sample;}
+            last=now;sampleSize=size;emit();
+          }
+          done(null,chunk);
+        }});
+        await pipeline(response.body,verify,createWriteStream(source,{flags:'wx',highWaterMark:256*1024}),{signal:controller.signal});
+      }catch(error){if(controller.signal.aborted)throw Error('GitHub не передавал данные 45 секунд. Проверьте подключение и попробуйте снова.');throw error;}
+      finally{clearTimeout(timer);}
       if(size!==asset.size||hash.digest('hex')!==digest)throw Error('Файл обновления повреждён. Попробуйте снова.');
       const result=path.join(this.app.getPath('userData'),'update-result.json');
       const target=portable?this.env.PORTABLE_EXECUTABLE_FILE:this.app.getPath('exe');
@@ -88,7 +105,7 @@ class DesktopUpdater {
       child.unref();await this.waitReady(config);this.publish({state:'installing'});
       setTimeout(()=>this.app.quit(),200);
       return {started:true};
-    }catch(error){this.busy=false;if(source)await fs.rm(source,{force:true}).catch(()=>{});this.publish({state:'failed',message:error.message});throw error;}
+    }catch(error){this.busy=false;if(folder)await fs.rm(folder,{recursive:true,force:true}).catch(()=>{});this.publish({state:'failed',message:error.message});throw error;}
   }
 }
 module.exports={DesktopUpdater,safeURL,newer,request};

@@ -44,7 +44,7 @@ public class CrossfadePlaybackTest {
    JSONObject second=new JSONObject(first.toString()).put("id","crossfade-second").put("title","Second");
    JSONObject queue=new JSONObject().put("tracks",new JSONArray().put(first).put(second)).put("index",0).put("position",0).put("play",true).put("reset",true).put("crossfade",2).put("volume",.56);
    MediaNotificationService.submitQueue(context,queue.toString());
-   long deadline=System.currentTimeMillis()+18000;boolean mixed=false,background=false;JSONObject state=new JSONObject();
+   long deadline=System.currentTimeMillis()+18000;boolean mixed=false,background=false,heldAcrossHandoff=false;JSONObject state=new JSONObject();
    while(System.currentTimeMillis()<deadline){
     state=new JSONObject(MediaNotificationService.currentState());
     if("crossfade-first".equals(state.optString("id"))&&state.optBoolean("playing")){
@@ -61,10 +61,25 @@ public class CrossfadePlaybackTest {
       mixed=both.get();
      }
     }
-    if("crossfade-second".equals(state.optString("id"))&&state.optBoolean("playing"))break;
-    Thread.sleep(50);
+    if("crossfade-second".equals(state.optString("id"))&&state.optBoolean("playing")){
+     AtomicBoolean held=new AtomicBoolean(),settled=new AtomicBoolean();
+     instrumentation.runOnMainSync(()->{try{
+      Object service=field(MediaNotificationService.class,null,"instance");
+      Object fade=field(MediaNotificationService.class,service,"crossfade");
+      ExoPlayer main=(ExoPlayer)field(MediaNotificationService.class,service,"player"),incoming=(ExoPlayer)field(PlaybackCrossfade.class,fade,"incoming");
+      if(main.getCurrentMediaItemIndex()==1){
+       held.set(incoming!=null&&incoming.isPlaying()&&incoming.getVolume()>=.27f
+           &&Math.abs(main.getVolume()+incoming.getVolume()-.56f)<.01f);
+       settled.set(incoming==null&&main.isPlaying()&&Math.abs(main.getVolume()-.56f)<.01f);
+      }
+     }catch(Exception error){throw new AssertionError(error);}});
+     heldAcrossHandoff|=held.get();
+     if(settled.get())break;
+    }
+    Thread.sleep(15);
    }
    assertTrue("Both decoded tracks should overlap with a balanced volume. Last state: "+state,mixed);
+   assertTrue("The incoming player stays audible across the media item change",heldAcrossHandoff);
    assertEquals("crossfade-second",state.optString("id"));assertTrue(state.toString(),state.optBoolean("playing"));
    assertTrue(state.toString(),state.optLong("position")>=1100);assertEquals(.56,state.optDouble("volume"),.001);
   }finally{

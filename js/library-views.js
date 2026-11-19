@@ -110,15 +110,14 @@ function renderMobileAlbum(ui,container,tracks,playlist=null){
  const heading=document.createElement('header');
  heading.className='view-header mobile-album-header';
  const name=playlist?.name||'Добавленные',duration=tracks.reduce((sum,t)=>sum+trackRange(t).duration,0);
- heading.innerHTML=`<div class="mobile-album-heading"><button type="button" class="mobile-album-back" aria-label="Назад">${icons.arrowRight}</button><h1 class="view-title">${ui.escapeHTML(name)}</h1></div><div class="view-header-cover"></div><div class="mobile-album-controls"><button type="button" class="collection-more" aria-label="Действия с коллекцией">${icons.more}</button><div class="mobile-album-stats"><span>${new Intl.NumberFormat('ru').format(tracks.length)} треков</span><span>${ui.formatDurationHours(duration)}</span></div><div class="mobile-album-playback"><button type="button" class="collection-shuffle" aria-label="Перемешать">${icons.shuffle}</button><button type="button" id="btnHeroPlay" class="mobile-album-play" aria-label="Воспроизвести">${icons.play}</button></div></div>`;
- heading.querySelector('.mobile-album-back').onclick=()=>{if(ui.historyIndex>0)ui.navigateBack();else ui.navigateTo({type:'home',title:'Главная'});};
+ heading.innerHTML=`<div class="mobile-album-heading"><h1 class="view-title">${ui.escapeHTML(name)}</h1><button type="button" class="collection-more" aria-label="Действия с коллекцией">${icons.more}</button></div><div class="view-header-cover"></div><div class="mobile-album-controls"><div class="mobile-album-stats"><span>${new Intl.NumberFormat('ru').format(tracks.length)} треков</span><span>${ui.formatDurationHours(duration)}</span></div><div class="mobile-album-playback"><button type="button" class="collection-shuffle" aria-label="Перемешать">${icons.shuffle}</button><button type="button" id="btnHeroPlay" class="mobile-album-play" aria-label="Воспроизвести">${icons.play}</button></div></div>`;
  heading.querySelector('.collection-more').onclick=e=>collectionMenu(ui,{tracks,playlist,anchor:e.currentTarget});
  const cover=heading.querySelector('.view-header-cover'),art=playlist||addedArtwork(ui.library);
  mountPlaylistArt(cover,art,playlist?tracks:ui.library.getTracks());bindPlaylistCover(ui,cover,art);
  const shuffle=heading.querySelector('.collection-shuffle');shuffle.disabled=!tracks.length;shuffle.onclick=()=>ui.player.toggleShuffle();
  bindCollectionPlay(ui,heading.querySelector('#btnHeroPlay'),tracks,{...ui.currentView});
- const tools=document.createElement('div');tools.className='mobile-album-tools';tools.append(makeSortControls(ui,true));
- container.append(heading,tools,ui.createTrackTable(tracks,playlist));
+ const tools=makeSortControls(ui,true);tools.classList.add('mobile-album-tools');heading.querySelector('.mobile-album-controls').prepend(tools);
+ container.append(heading,ui.createTrackTable(tracks,playlist));
 }
 
 const trackSortLabels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',duration:'По длительности'};

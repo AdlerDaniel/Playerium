@@ -1,6 +1,7 @@
 package com.playerium.music;
 
 import android.os.Handler;
+import android.os.SystemClock;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
@@ -19,7 +20,10 @@ final class PlaybackCrossfade {
  private ExoPlayer incoming;
  private MediaItem nextItem;
  private int fromIndex=C.INDEX_UNSET, nextIndex=C.INDEX_UNSET;
- private long overlap, incomingStart;
+ private static final long HANDOFF_PREROLL_MS=100, HANDOFF_BLEND_MS=90, HANDOFF_TIMEOUT_MS=4000;
+ private long overlap, incomingStart, handoffPosition, handoffDeadline, handoffBlendStart;
+ private float mainMix;
+ private boolean issuingSeek;
  private boolean started, handingOff, failed;
  private int seconds;
  private float volume=.8f;
@@ -54,11 +58,14 @@ final class PlaybackCrossfade {
 
  private void clearDeck(){
   if(incoming!=null){incoming.release();incoming=null;}
-  nextItem=null;nextIndex=C.INDEX_UNSET;started=false;handingOff=false;
+  nextItem=null;nextIndex=C.INDEX_UNSET;started=false;handingOff=false;issuingSeek=false;
+  handoffPosition=C.TIME_UNSET;handoffBlendStart=C.TIME_UNSET;mainMix=0;
  }
 
  void discontinuity(Player.PositionInfo old,Player.PositionInfo next,int reason){
-  if(handingOff&&next.mediaItemIndex==nextIndex&&(old.mediaItemIndex==fromIndex||old.mediaItemIndex==nextIndex))return;
+  if(handingOff&&next.mediaItemIndex==nextIndex&&(issuingSeek
+      ||reason==Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT
+      ||reason==Player.DISCONTINUITY_REASON_AUTO_TRANSITION&&old.mediaItemIndex==fromIndex))return;
   if(reason==Player.DISCONTINUITY_REASON_AUTO_TRANSITION&&started&&next.mediaItemIndex==nextIndex&&incoming.isPlaying()){
    // Media3 can advance on its own before the last mixing tick runs.
    handOff();return;
@@ -67,17 +74,21 @@ final class PlaybackCrossfade {
  }
 
  private void handOff(){
-  handingOff=true;applyVolume();
+  if(handingOff)return;
+  handingOff=true;mainMix=0;handoffPosition=C.TIME_UNSET;handoffBlendStart=C.TIME_UNSET;
+  handoffDeadline=SystemClock.elapsedRealtime()+HANDOFF_TIMEOUT_MS;applyVolume();
   handler.post(()->{
    if(!handingOff)return;
-   main.seekTo(nextIndex,incoming.getCurrentPosition());
+   handoffPosition=incoming.getCurrentPosition();
+   issuingSeek=true;
+   try{main.seekTo(nextIndex,handoffPosition);}finally{issuingSeek=false;}
    wake();
   });
  }
 
  private void applyVolume(){
   if(incoming==null||!started){main.setVolume(volume);return;}
-  float fraction=handingOff?1f:(float)Math.max(0,Math.min(1,(incoming.getCurrentPosition()-incomingStart)/(double)overlap));
+  float fraction=handingOff?1f-mainMix:(float)Math.max(0,Math.min(1,(incoming.getCurrentPosition()-incomingStart)/(double)overlap));
   main.setVolume(volume*(1-fraction));incoming.setVolume(volume*fraction);
  }
 
@@ -87,8 +98,18 @@ final class PlaybackCrossfade {
   if(seconds<=0||!main.getPlayWhenReady())return;
   if(main.getPlaybackSuppressionReason()!=Player.PLAYBACK_SUPPRESSION_REASON_NONE){cancel();handler.postDelayed(clock,200);return;}
   if(handingOff){
-   if(main.isPlaying()||incoming==null||incoming.getPlaybackState()==Player.STATE_ENDED){cancel();wake();}
-   else handler.postDelayed(clock,30);
+   // READY can be reported before the new AudioTrack has presented a sample.
+   // Keep the already audible deck until the destination playhead progresses.
+   if(incoming==null||incoming.getPlayerError()!=null||incoming.getPlaybackState()==Player.STATE_ENDED
+       ||SystemClock.elapsedRealtime()>=handoffDeadline){cancel();wake();return;}
+   long position=main.getCurrentPosition();
+   if(handoffPosition!=C.TIME_UNSET&&main.getCurrentMediaItemIndex()==nextIndex
+       &&main.isPlaying()&&position>=handoffPosition+HANDOFF_PREROLL_MS){
+    if(handoffBlendStart==C.TIME_UNSET)handoffBlendStart=position;
+    mainMix=Math.min(1,(position-handoffBlendStart)/(float)HANDOFF_BLEND_MS);
+   }else{handoffBlendStart=C.TIME_UNSET;mainMix=0;}
+   applyVolume();
+   if(mainMix>=1){cancel();wake();}else handler.postDelayed(clock,15);
    return;
   }
   int current=main.getCurrentMediaItemIndex(),next=main.getNextMediaItemIndex();
@@ -99,7 +120,8 @@ final class PlaybackCrossfade {
   long duration=main.getDuration();
   long left=duration==C.TIME_UNSET?Long.MAX_VALUE:duration-main.getCurrentPosition();
   if(!main.isPlaying()){
-   if(started){fail();}
+   if(started&&incoming.isPlaying()&&left<=65)handOff();
+   else if(started){applyVolume();}
   }else if(!failed&&left>0&&left<=seconds*1000L+5500){
    if(incoming==null){
     try{incoming=factory.create(item);nextItem=item;nextIndex=next;fromIndex=current;}

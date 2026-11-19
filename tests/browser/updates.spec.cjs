@@ -30,8 +30,8 @@ for(const android of [false,true])test(`one update button uses the native ${andr
   await expect(page.locator('#btnDownloadUpdate')).toBeDisabled();
   await expect(page.locator('#btnDownloadUpdate')).toBeHidden();
   await expect(page.locator('#btnUpdateLater')).toBeHidden();
-  await page.evaluate(()=>window.playerApp.onUpdateState({state:'downloading',percent:47}));
-  await expect(page.locator('#updateStatusText')).toHaveText('Скачивание 47%');
+  await page.evaluate(()=>window.playerApp.onUpdateState({state:'downloading',percent:47,bytes:47000000,totalBytes:100000000,bytesPerSecond:750000}));
+  await expect(page.locator('#updateStatusText')).toHaveText('Скачивание 47% · 47 из 100 МБ · 0,8 МБ/с');
   await page.evaluate(()=>window.playerApp.onUpdateState({state:'installing'}));
   await expect(page.locator('#updateStatusText')).toHaveText('Установка');
   await expect(page.locator('#updateProgress')).toBeVisible();

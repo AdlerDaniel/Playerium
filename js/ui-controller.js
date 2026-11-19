@@ -70,14 +70,20 @@ export class UIController {
 
   initMobileState() {
     this.isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
-    if (this.isMobile) {
-      document.body.classList.add("is-mobile");
-    }
+    const profile=document.getElementById('btnOpenSettings'), desktopHost=profile.parentElement, dock=document.getElementById('mobileNavBar');
+    const placeProfile=()=>{
+      document.body.classList.toggle('is-mobile',this.isMobile);
+      profile.classList.toggle('mobile-nav-item',this.isMobile);
+      profile.setAttribute('aria-label',this.isMobile?'Профиль':'Настройки');
+      if(this.isMobile)profile.removeAttribute('data-tooltip');else profile.dataset.tooltip='Настройки';
+      (this.isMobile?dock:desktopHost).append(profile);
+    };
+    placeProfile();
     window.addEventListener("resize", () => {
       const mobileNow = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
       if (mobileNow !== this.isMobile) {
         this.isMobile = mobileNow;
-        document.body.classList.toggle("is-mobile", this.isMobile);
+        placeProfile();
         this.refreshCurrentView();
       }
     });

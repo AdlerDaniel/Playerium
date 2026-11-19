@@ -177,15 +177,13 @@ for (const mobile of [false, true]) {
   });
 }
 
-test('imports go to Added without polluting the default library; explicit filters remain usable',async({page})=>{
+test('imports go to Added without polluting the default library; the library shows albums directly',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.locator('#mobileNavHome').click();
   await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные']);
-  await page.locator('.mobile-lib-pill[data-filter="artists"]').click();
-  await expect(page.locator('.mobile-lib-name')).toHaveText('Artist');
-  await page.locator('.mobile-lib-pill[data-filter="all"]').click();
+  await expect(page.locator('.mobile-lib-pill')).toHaveCount(0);
   await page.locator('.mobile-lib-row').filter({hasText:'Добавленные'}).click();
   await expect(page.locator('.track-name')).toHaveText('Song');
 });
@@ -193,14 +191,14 @@ test('imports go to Added without polluting the default library; explicit filter
 test('scrollbars stay hidden even during scrolling while content remains scrollable',async({page})=>{
   await page.setViewportSize({width:320,height:640});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  const filters=page.locator('.mobile-library-pills');
+  const filters=page.locator('#mainScrollContainer');
   expect(await filters.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
   await filters.evaluate(el=>el.scrollLeft=100);
   expect(await filters.evaluate(el=>el.scrollLeft)).toBeGreaterThanOrEqual(0);
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
   await page.locator('#mobileNavHome').click();
-  expect(await page.locator('.mobile-library-pills').evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
+  expect(await page.locator('#mainScrollContainer').evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
 });
 
 test('seek preview survives time updates and dragging commits once; volume supports keyboard',async({page})=>{
@@ -264,12 +262,12 @@ test('refresh and back navigation preserve scroll position in large collections'
   await page.locator('.settings-close').click();
   expect(await scroll.evaluate(el=>el.scrollTop)).toBe(1500);
 });
-test('mobile home filters remain visible and search keeps focus while typing',async({page})=>{
+test('mobile library toolbar remains visible and search keeps focus while typing',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  await expect(page.locator('.mobile-library-pills')).toBeVisible();
-  const box=await page.locator('.mobile-library-pills').boundingBox();
+  await expect(page.locator('.mobile-library-actions')).toBeVisible();
+  const box=await page.locator('.mobile-library-actions').boundingBox();
   expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(200);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.locator('#mobileNavSearch').click();

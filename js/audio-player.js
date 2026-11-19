@@ -106,7 +106,7 @@ export class AudioPlayer {
     });
 
     audio.addEventListener("ended", () => {
-      if(audio!==this.audio)return;
+      if(audio!==this.audio||this.crossfade.finish())return;
       this.notifyAndroidPlayback(false);
       this.handleTrackEnded();
     });

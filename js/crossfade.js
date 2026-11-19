@@ -68,8 +68,8 @@ export class Crossfade {
   this.deck=null;
   p.audio=deck.audio;p.sourceNode=deck.source||null;p.gainNode=deck.gain||null;p.sourceUrl=deck.url;
   p.currentTrack=deck.track;p.queueIndex=next.index;
-  p.setupAudioEvents();dispose(old);
-  p.applyTrackVolume();p.updateMediaSessionMetadata(deck.track);p.failedTracks.clear();
+  p.setupAudioEvents();p.applyTrackVolume();dispose(old);
+  p.updateMediaSessionMetadata(deck.track);p.failedTracks.clear();
   p.onTrackChange?.(deck.track);p.onQueueChange?.(p.queue,p.queueIndex);p.publishWebTime();
   return true;
  }

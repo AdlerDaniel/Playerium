@@ -1,6 +1,6 @@
 {
   "name": "playerium",
-  "version": "1.7.60",
+  "version": "1.7.61",
   "description": "Playerium - Modern Spotify-style local music player for PC and Android",
   "main": "main.js",
   "scripts": {

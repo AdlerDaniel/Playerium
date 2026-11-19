@@ -38,7 +38,12 @@ export function bindUpdateController() {
     progress.hidden=['failed','complete','permission'].includes(data.state);fill.style.width=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
     const indeterminate=data.state!=='downloading';progress.classList.toggle('indeterminate',indeterminate);
     if(indeterminate)progress.removeAttribute('aria-valuenow');
-    if(data.state==='downloading')text.textContent=`Скачивание ${percent}%`;
+    if(data.state==='downloading'){
+      const mb=value=>(value/1e6).toLocaleString('ru',{maximumFractionDigits:1});
+      const size=Number.isFinite(data.bytes)&&data.totalBytes>0?` · ${mb(data.bytes)} из ${mb(data.totalBytes)} МБ`:'';
+      const speed=data.bytesPerSecond>0?` · ${mb(data.bytesPerSecond)} МБ/с`:'';
+      text.textContent=`Скачивание ${percent}%${size}${speed}`;
+    }
     busy=activeStates.has(data.state);
     if(busy)modal.classList.add('active');
     button.disabled=busy;ignore.disabled=busy;button.textContent=data.state==='failed'?'Обновить':busy?(labels[data.state]||'Обновление'):'Обновить';

@@ -23,7 +23,7 @@ test('mobile home has continuous surfaces and search stays minimal in every pale
  for(const id of ['violet-dark','brown-dark','red-dark','blue-dark','green-dark','yellow-dark','violet-light','brown-light','red-light','blue-light','green-light','yellow-light']){
   await page.evaluate(async id=>{(await import('/js/themes.js')).applyTheme(id);window.playerApp.ui.navigateTo({type:'home'});},id);
   const home=await page.evaluate(()=>({child:getComputedStyle(document.querySelector('.mobile-library-view')).backgroundImage,parent:getComputedStyle(document.querySelector('.main-view-container')).backgroundImage,top:getComputedStyle(document.querySelector('.topbar')).backgroundColor}));
-  expect(home.child).toBe('none');expect(home.parent).toBe('none');await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.topbar')).backgroundColor===getComputedStyle(document.documentElement).getPropertyValue('--sounder-bg').trim().replace(/.*/,()=>{const x=document.createElement('span');x.style.color=getComputedStyle(document.documentElement).getPropertyValue('--sounder-bg');document.body.append(x);const c=getComputedStyle(x).color;x.remove();return c;}))).toBe(true);
+  expect(home.child).toBe('none');expect(home.parent).toBe('none');await expect(page.locator('#mainTopbar')).toBeHidden();
   await page.screenshot({path:info.outputPath(id+'-home.png')});
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'search'}));
   await expect(page.locator('.search-recent-query,.history-art,.mobile-search-title')).toHaveCount(0);await expect(page.locator('.search-voice')).toBeVisible();
