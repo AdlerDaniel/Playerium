@@ -95,6 +95,7 @@ test('mobile repeat and shuffle have an accent surface in all palettes',async({p
  const values=await page.evaluate(async()=>{
   const {THEMES,applyTheme}=await import('/js/themes.js');
   const p=window.playerApp.player, buttons=['btnMobileFsShuffle','btnMobileFsRepeat'].map(id=>document.getElementById(id));
+  for(const b of buttons)b.style.transition='none';
   const rgb=color=>{const span=document.createElement('span');span.style.color=color;document.body.append(span);const v=getComputedStyle(span).color;span.remove();return v;};
   return THEMES.map(theme=>{
    applyTheme(theme.id,false);
