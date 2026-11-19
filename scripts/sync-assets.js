@@ -3,6 +3,7 @@ const {transformSync} = require('esbuild');
 const target = 'android/app/src/main/assets';
 fs.mkdirSync(target, { recursive: true });
 const retiredAssets = [
+  "js/mini-window.js",
   "js/lyrics.js",
   "css/lyrics.css",
   "js/equalizer.js",
