@@ -84,28 +84,19 @@ body[data-view="artist"] .view-header-details { z-index: 1; }
 .view-actions-right { display: flex; gap: 8px; }
 .collection-shuffle[aria-pressed="true"] { color: var(--sp-green); }
 .queue-section-title { font-size: 16px; font-weight: 700; color: var(--sp-text-primary); text-transform: none; letter-spacing: 0; }
-.queue-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-top: 24px; }
-.queue-heading h3 { margin: 0; }
-.queue-heading button { color: var(--sp-text-secondary); font-size: 13px; padding: 8px; }
 .queue-item { min-height: 64px; padding: 8px 0; }
 .queue-item-title { font-size: 15px; }
 .queue-item-artist { font-size: 13px; margin-top: 4px; }
 .queue-item.current { background: transparent; }
-.queue-select { flex: 0 0 18px; width: 18px; height: 18px; accent-color: var(--sp-green); cursor: pointer; }
-.queue-item.selected { background: var(--sp-text-primary)12; }
 .queue-drag, .queue-current-toggle { width: 32px; flex: 0 0 32px; height: 44px; display: grid; place-items: center; color: var(--sp-text-secondary); }
 .queue-drag { touch-action: none; cursor: grab; }
 .queue-drag svg, .queue-current-toggle svg { width: 20px; height: 20px; fill: currentColor; }
 .queue-item-remove { opacity: 1; font-size: 24px; width: 24px; }
-.queue-item.dragging { z-index: 5; background: var(--sp-dark-500); box-shadow: 0 4px 16px var(--sp-black)8; }
-.queue-item.drop-target { box-shadow: inset 0 2px var(--sp-green); }
 .queue-empty { color: var(--sp-text-secondary); font-size: 14px; line-height: 1.5; margin-top: 16px; }
 .queue-controls { position: sticky; bottom: 0; display: flex; gap: 8px; flex-wrap: wrap; padding: 16px 0 8px; background: var(--sp-dark-900); margin-top: 16px; }
-.queue-controls button { display: flex; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 8px; min-height: 64px; border-radius: 8px; padding: 10px; background: var(--sp-dark-700); color: var(--sp-text-secondary); font-size: 12px; }
+.queue-controls button { display: flex; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 8px; min-height: 64px; border-radius: 8px; padding: 10px; background: var(--sp-dark-800); color: var(--sp-text-secondary); font-size: 12px; }
 .queue-controls svg { width: 24px; height: 24px; fill: currentColor; }
 .queue-controls [aria-pressed="true"] { color: var(--sp-green); }
-.queue-controls [data-repeat="one"] span::after { content: ' · 1'; }
-.queue-controls .queue-remove-selected { flex-basis: 100%; background: var(--sp-green); color: var(--sp-dark-900); font-weight: 700; min-height: 44px; }
 .settings-card { padding: 0; background: transparent; border-radius: 0; }
 .settings-section { margin-bottom: 32px; }
 .settings-section-title { font-size: 20px; margin-bottom: 16px; }

@@ -1,6 +1,7 @@
 // AI Horde supports anonymous generation. Persist the job to resume after restart.
 import {addedArtwork,collectionTracks,persistCollectionArtwork} from './visual-art.js';
 const API='https://aihorde.net/api/v2/generate';
+const manualCover=playlist=>['custom','text','mosaic'].includes(playlist.coverType);
 const headers={'Content-Type':'application/json',apikey:'0000000000','Client-Agent':'Playerium:1.7.54:local-music-player'};
 export function albumPrompt(playlist,tracks){
  const clean=value=>String(value||'').replace(/[\r\n#]/g,' ').slice(0,90);
@@ -19,14 +20,14 @@ export function installAlbumArtGenerator(ui){
    if(playlist.isFolderPlaylist)continue;
    const tracks=collectionTracks(library,playlist);if(!tracks.length){mark(playlist,false);continue;}
    const key='album-generation:'+playlist.id,saved=await library.getFromStore('settings',key)||{key};
-   if(['custom','text'].includes(playlist.coverType)&&!saved.regenerate)continue;
+   if(manualCover(playlist)&&!saved.regenerate)continue;
    if(playlist.coverUrl&&!saved.regenerate)continue;
    // Older versions delayed even completed jobs for 30 minutes after a single network error.
    if(saved.retryAt>Date.now()&&saved.failures){mark(playlist,!saved.permanent,saved.permanent?'':'Связь прервалась. Повторяем автоматически…');continue;}
    try{
     if(!saved.job&&submitted)continue;
     mark(playlist,true,playlist.generationNote);
-    if(!saved.job){submitted=true;const result=await request('/async',{method:'POST',body:JSON.stringify({prompt:albumPrompt(playlist,tracks),params:{width:512,height:512,steps:20,n:1},nsfw:false,censor_nsfw:true,r2:false,shared:false})});if(!result.id)throw Error('Missing cover job');saved.job=result.id;saved.started=Date.now();saved.failures=0;delete saved.retryAt;delete saved.permanent;await library.putInStore('settings',saved);continue;}
+    if(!saved.job){submitted=true;const result=await request('/async',{method:'POST',body:JSON.stringify({prompt:albumPrompt(playlist,tracks),params:{width:512,height:512,steps:20,n:1},nsfw:false,censor_nsfw:true,r2:false,shared:false})});if(!result.id)throw Error('Missing cover job');if(manualCover(playlist)&&!(await library.getFromStore('settings',key))?.regenerate){mark(playlist,false);continue;}saved.job=result.id;saved.started=Date.now();saved.failures=0;delete saved.retryAt;delete saved.permanent;await library.putInStore('settings',saved);continue;}
     const state=await request('/check/'+encodeURIComponent(saved.job));
     if(state.faulted||Date.now()-(saved.started||Date.now())>24*60*60*1000){await request('/status/'+encodeURIComponent(saved.job),{method:'DELETE'}).catch(()=>{});delete saved.job;throw Object.assign(Error('Cover job expired'),{status:410});}
     if(!state.done){mark(playlist,true,'Обложка генерируется…'+(state.queue_position>0?' Место в очереди: '+state.queue_position+'.':''));continue;}
@@ -35,16 +36,17 @@ export function installAlbumArtGenerator(ui){
     const coverUrl=await generatedCover(image.img);
     const current=await library.getFromStore('settings',key);
     if(current?.job!==saved.job)continue;
-    const live=playlist.special==='added'?addedArtwork(library):library.getPlaylistById(playlist.id);if(live&&(!['custom','text'].includes(live.coverType)||saved.regenerate)&&(!live.coverUrl||saved.regenerate)){live.coverType='generated';live.coverUrl=coverUrl;live.updatedAt=Date.now();live.generating=false;live.generationNote='';await persistCollectionArtwork(library,live);library.onLibraryChanged?.();refresh();}
+    const live=playlist.special==='added'?addedArtwork(library):library.getPlaylistById(playlist.id);if(live&&(!manualCover(live)||saved.regenerate)&&(!live.coverUrl||saved.regenerate)){live.coverType='generated';live.coverUrl=coverUrl;live.updatedAt=Date.now();live.generating=false;live.generationNote='';await persistCollectionArtwork(library,live);library.onLibraryChanged?.();refresh();}
     mark(playlist,false);if(priority===playlist.id)priority=null;delete saved.regenerate;
     await library.putInStore('settings',{key});
    }catch(error){
+    if(manualCover(playlist)&&!(await library.getFromStore('settings',key))?.regenerate){mark(playlist,false);continue;}
     const expired=[404,410].includes(error.status);if(expired)delete saved.job;
     saved.failures=(saved.failures||0)+1;saved.permanent=[400,401,403,422].includes(error.status);
     saved.retryAt=Date.now()+(expired?1000:saved.permanent?1800000:error.retryAfter||Math.min(15000*2**Math.min(saved.failures-1,5),300000));
     saved.lastError=String(error.message).slice(0,200);await library.putInStore('settings',saved);
     mark(playlist,!saved.permanent,saved.permanent?'':'Связь прервалась. Повторяем автоматически…');
-    if(saved.permanent&&playlist.special==='added')ui.showToast('Сервис не смог создать обложку. Нажмите на неё, чтобы выбрать новый вариант.','error');
+    if(saved.permanent&&playlist.special==='added')ui.showToast('Сервис не смог создать обложку. Повторите попытку в меню альбома.','error');
     console.warn('Automatic album artwork retry scheduled',error.message);
    }
   }}finally{busy=false;}

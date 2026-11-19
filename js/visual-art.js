@@ -33,6 +33,7 @@ export function choosePlaylistFile(ui,playlist){const input=document.createEleme
 export function bindPlaylistCover(ui,host,playlist){
  host.tabIndex=0;host.setAttribute('role','button');host.setAttribute('aria-label','Изменить обложку: '+playlist.name);host.title='Загрузить свою обложку';
  if(playlist.special==='added'){
+  if(ui.isMobile){host.removeAttribute('role');host.removeAttribute('tabindex');host.removeAttribute('aria-label');host.removeAttribute('title');return;}
   host.title=playlist.generating?'Обложка генерируется':'Сгенерировать другую обложку';host.setAttribute('aria-label',host.title);host.setAttribute('aria-disabled',String(!!playlist.generating));
   host.onclick=()=>{if(!playlist.generating)ui.albumArt?.regenerate(playlist).catch(e=>ui.showToast(e.message,'error'));};
   host.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();host.click();}};return;

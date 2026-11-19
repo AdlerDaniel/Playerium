@@ -48,7 +48,6 @@ jobs:
         run: node --test tests/audio-range.test.cjs tests/local-only.test.cjs
       - run: npm run test:desktop
       - run: node tests/desktop/background.cjs
-      - run: node tests/desktop/mini-player.cjs
       - run: node tests/desktop/update-window.cjs
       - run: node tests/desktop/music-runtime.cjs
       - run: npm run build:win

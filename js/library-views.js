@@ -8,7 +8,8 @@ import { renderHomeDashboard } from "./home-view.js";
 import { icons } from "./design-icons.js";
 import { viewFingerprint } from './view-stability.js';
 import {addedArtwork,bindPlaylistCover,mountPlaylistArt,mountArtistPortrait} from './visual-art.js';
-import {changeTrackSort} from './track-sort.js';
+import {changeTrackSort,updateSortDirection} from './track-sort.js';
+import {trackRange} from './track-edits.js';
 export function renderSidebar() {
  const list=document.getElementById('sidebarList');
  if(this.isMobile){retainArtwork(list);list.replaceChildren();this.sidebarSignature=null;return;}
@@ -30,8 +31,8 @@ export function renderAllTracksView(container) {
     let tracks = this.library.getTracks();
     if (this.searchQuery) tracks = this.library.search(this.searchQuery);
     tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
-    // Standard desktop home view
-    const totalDur = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
+    if(this.isMobile)return renderMobileAlbum(this,container,tracks);
+    const totalDur = tracks.reduce((acc, t) => acc + (trackRange(t).duration), 0);
 
     const header = document.createElement("div");
     header.className = "view-header";
@@ -43,8 +44,6 @@ export function renderAllTracksView(container) {
         <span class="view-type-badge">ЛОКАЛЬНАЯ МЕДИАТЕКА</span>
         <h1 class="view-title">${this.searchQuery ? `Поиск: "${this.escapeHTML(this.searchQuery)}"` : "Добавленные"}</h1>
         <div class="view-metadata">
-          <strong>Ваш компьютер</strong>
-          <span class="dot">•</span>
           <span>${tracks.length} треков</span>
           <span class="dot">•</span>
           <span>${this.formatDurationHours(totalDur)}</span>
@@ -77,8 +76,8 @@ export function renderPlaylistView(container, playlistId) {
     }
     if(!pl.manualOrder||this.tableSortExplicit)tracks = this.library.sortTracks(tracks, this.sortBy, this.sortAsc);
 
-    const totalDur = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
-    const playlistCover = tracks.find(t => t.pictureUrl)?.pictureUrl;
+    const totalDur = tracks.reduce((acc, t) => acc + (trackRange(t).duration), 0);
+    if(this.isMobile)return renderMobileAlbum(this,container,tracks,pl);
 
     const header = document.createElement("div");
     header.className = "view-header";
@@ -107,18 +106,44 @@ export function renderPlaylistView(container, playlistId) {
     container.appendChild(this.createTrackTable(tracks, pl));
 }
 
+function renderMobileAlbum(ui,container,tracks,playlist=null){
+ const heading=document.createElement('header');
+ heading.className='view-header mobile-album-header';
+ const name=playlist?.name||'Добавленные',duration=tracks.reduce((sum,t)=>sum+trackRange(t).duration,0);
+ heading.innerHTML=`<div class="mobile-album-heading"><button type="button" class="mobile-album-back" aria-label="Назад">${icons.arrowRight}</button><h1 class="view-title">${ui.escapeHTML(name)}</h1></div><div class="view-header-cover"></div><div class="mobile-album-controls"><button type="button" class="collection-more" aria-label="Действия с коллекцией">${icons.more}</button><div class="mobile-album-stats"><span>${new Intl.NumberFormat('ru').format(tracks.length)} треков</span><span>${ui.formatDurationHours(duration)}</span></div><div class="mobile-album-playback"><button type="button" class="collection-shuffle" aria-label="Перемешать">${icons.shuffle}</button><button type="button" id="btnHeroPlay" class="mobile-album-play" aria-label="Воспроизвести">${icons.play}</button></div></div>`;
+ heading.querySelector('.mobile-album-back').onclick=()=>{if(ui.historyIndex>0)ui.navigateBack();else ui.navigateTo({type:'home',title:'Главная'});};
+ heading.querySelector('.collection-more').onclick=e=>collectionMenu(ui,{tracks,playlist,anchor:e.currentTarget});
+ const cover=heading.querySelector('.view-header-cover'),art=playlist||addedArtwork(ui.library);
+ mountPlaylistArt(cover,art,playlist?tracks:ui.library.getTracks());bindPlaylistCover(ui,cover,art);
+ const shuffle=heading.querySelector('.collection-shuffle');shuffle.disabled=!tracks.length;shuffle.onclick=()=>ui.player.toggleShuffle();
+ bindCollectionPlay(ui,heading.querySelector('#btnHeroPlay'),tracks,{...ui.currentView});
+ const tools=document.createElement('div');tools.className='mobile-album-tools';tools.append(makeSortControls(ui,true));
+ container.append(heading,tools,ui.createTrackTable(tracks,playlist));
+}
+
+const trackSortLabels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',duration:'По длительности'};
+function makeSortControls(ui,mobile){
+ const group=document.createElement('div');group.className='sort-controls';
+ const sort=document.createElement('button');sort.className='collection-tool collection-sort';sort.innerHTML=icons.sort+(mobile?'':'Сортировать');sort.title=trackSortLabels[ui.sortBy];sort.setAttribute('aria-label','Сортировка треков');
+ sort.onclick=e=>showSurfaceMenu(ui,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(trackSortLabels).map(([value,label])=>({label,selected:ui.sortBy===value,icon:icons.sort,action:()=>changeTrackSort(ui,value,false,value===ui.sortBy?ui.sortAsc:undefined)}))});
+ group.append(sort);
+ if(mobile){const direction=document.createElement('button');direction.type='button';direction.className='sort-direction';
+  updateSortDirection(direction,ui.sortAsc,ui.sortBy==='dateAdded'?(ui.sortAsc?'Сначала старые — изменить порядок':'Сначала новые — изменить порядок'):(ui.sortAsc?'По возрастанию — изменить порядок':'По убыванию — изменить порядок'));
+  direction.onclick=()=>{changeTrackSort(ui,ui.sortBy);document.querySelector('.mobile-album-tools .sort-direction')?.focus({preventScroll:true});};group.append(direction);}
+ return group;
+}
+
 export function renderArtistView(container, artistName) {
     return renderArtistProfile.call(this,container,artistName);
 }
 
 export function createActionBar(tracks, playlist = null) {
     const bar=document.createElement('div');bar.className='view-actions';
-    bar.innerHTML=`<div class="view-actions-left"><button class="btn-primary-play" id="btnHeroPlay" title="Воспроизвести все">${icons.play}</button><button class="action-icon-btn collection-shuffle" aria-label="Перемешать" aria-pressed="${this.player.isShuffle}">${icons.shuffle}</button><button class="action-icon-btn collection-more" aria-label="Действия с коллекцией">${icons.more}</button></div><div class="view-actions-right">${playlist?`<button class="collection-tool collection-add">${icons.plus}Добавить</button><button class="collection-tool collection-edit">${icons.edit}Изменить</button>`:''}<button class="collection-tool collection-sort">${icons.sort}Сортировать</button></div>`;
+    bar.innerHTML=`<div class="view-actions-left"><button class="btn-primary-play" id="btnHeroPlay" title="Воспроизвести все">${icons.play}</button><button class="action-icon-btn collection-shuffle" aria-label="Перемешать" aria-pressed="${this.player.isShuffle}">${icons.shuffle}</button><button class="action-icon-btn collection-more" aria-label="Действия с коллекцией">${icons.more}</button></div><div class="view-actions-right">${playlist?`<button class="collection-tool collection-add">${icons.plus}Добавить</button><button class="collection-tool collection-edit">${icons.edit}Изменить</button>`:''}</div>`;
     bindCollectionPlay(this,bar.querySelector('#btnHeroPlay'),tracks,{...this.currentView});
     bar.querySelector('.collection-shuffle').onclick=()=>{this.player.toggleShuffle();};
     bar.querySelector('.collection-more').onclick=e=>collectionMenu(this,{tracks,playlist,anchor:e.currentTarget});
     if(playlist){bar.querySelector('.collection-add').onclick=()=>this.navigateTo({type:'search',title:'Поиск'});bar.querySelector('.collection-edit').onclick=()=>editPlaylist(this,playlist);}
-    const labels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',duration:'По длительности'};
-    bar.querySelector('.collection-sort').onclick=e=>showSurfaceMenu(this,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(labels).map(([value,label])=>({label,selected:this.sortBy===value,icon:icons.sort,action:()=>changeTrackSort(this,value,false)}))});
+    bar.querySelector('.view-actions-right').append(makeSortControls(this,false));
     return bar;
 }

@@ -31,8 +31,7 @@ for(const mobile of [false,true])test(`search covers before audio, filters and f
   await page.getByRole('tab',{name:'Песни',exact:true}).click();await expect(page.locator('.song-search-results .track-row')).toHaveCount(6);
   await page.locator('.track-row .track-menu-btn').first().click();
   const menu=page.locator(mobile?'.track-options-sheet':'#appContextMenu');await expect(menu).toBeVisible();
-  await page.locator(mobile?'#sheetOptCredits':'#ctxCredits').click();await expect(menu).toContainText('2019');await expect(menu).toContainText('747');
-  await page.locator('#trackMenuBack').click();
+  await expect(menu.getByText(/Поделиться|Сведения о треке|^Закрыть$/)).toHaveCount(0);
   await page.locator(mobile?'#sheetOptAddToPlaylist':'#ctxAddToPlaylist').click();await expect(page.locator('.playlist-picker')).toBeVisible();
   await expect(page.getByLabel('Название нового плейлиста')).toBeVisible();
   await page.screenshot({path:testInfo.outputPath('search-menu.png')});

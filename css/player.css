@@ -180,8 +180,6 @@
 .progress-slider-container:focus-visible .progress-slider-handle,
 .volume-slider-container[data-dragging] .volume-slider-handle,
 .volume-slider-container:focus-visible .volume-slider-handle { display: block; }
-[data-repeat="one"] { position: relative; }
-[data-repeat="one"]::before { content: '1'; position: absolute; top: 0; right: 0; font-size: 10px; font-weight: 700; }
 .playback-bar {
   display: flex;
   align-items: center;

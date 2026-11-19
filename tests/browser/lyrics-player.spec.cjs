@@ -14,7 +14,7 @@ for(const mobile of [false,true])test(`immersive lyrics follow audio, seek on cl
  await page.evaluate(()=>window.playerApp.player.seekToTime(12.5));await expect(page.locator('.lyric-line.current')).toHaveText('Вторая тестовая строка');
  const lyrics=page.locator('.lyrics-player');const b=await lyrics.boundingBox();expect(b.width).toBe(mobile?390:1920);
  if(mobile)await page.getByRole('tab',{name:'Очередь',exact:true}).click();
- await expect(page.locator('.lyrics-queue-row')).toHaveCount(2);await page.locator('.lyrics-queue-row:not(.playing)').click();await expect(page.locator('.cinema-meta h1')).toHaveText('Second');
+ await expect(page.locator('.lyrics-queue-row,.lyrics-queue-list .queue-list .queue-item')).toHaveCount(2);await page.locator('.lyrics-queue-list .queue-item-info').click();await expect(page.locator('.cinema-meta h1')).toHaveText('Second');
  if(mobile)await page.getByRole('tab',{name:'Текст',exact:true}).click();
  await expect(page.locator('.lyric-line')).toHaveCount(3);await page.screenshot({path:mobile?'build/lyrics-phone.png':'build/lyrics-desktop.png'});
  await page.keyboard.press('Escape');await expect(lyrics).toHaveCount(0);await context.setOffline(true);
@@ -23,7 +23,7 @@ for(const mobile of [false,true])test(`immersive lyrics follow audio, seek on cl
 });
 test('phone tabs and playback controls remain reachable at small and landscape sizes',async({page})=>{
  await setup(page,true);
- for(const size of [{width:320,height:480},{width:740,height:360}]){await page.setViewportSize(size);await page.getByRole('tab',{name:'Очередь',exact:true}).click();await expect(page.locator('.lyrics-queue-row')).toHaveCount(2);const play=await page.locator('.cinema-play').boundingBox();expect(play.y+play.height).toBeLessThanOrEqual(size.height);expect(play.x).toBeGreaterThanOrEqual(0);expect(play.width).toBeGreaterThanOrEqual(44);await page.getByRole('tab',{name:'Текст',exact:true}).click();expect(await page.locator('.lyrics-layout').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);}
+ for(const size of [{width:320,height:480},{width:740,height:360}]){await page.setViewportSize(size);await page.getByRole('tab',{name:'Очередь',exact:true}).click();await expect(page.locator('.lyrics-queue-row,.lyrics-queue-list .queue-list .queue-item')).toHaveCount(2);const play=await page.locator('.cinema-play').boundingBox();expect(play.y+play.height).toBeLessThanOrEqual(size.height);expect(play.x).toBeGreaterThanOrEqual(0);expect(play.width).toBeGreaterThanOrEqual(44);await page.getByRole('tab',{name:'Текст',exact:true}).click();expect(await page.locator('.lyrics-layout').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);}
 });
 test('desktop controls fit the cover column at narrow and regular window widths',async({page})=>{
  await setup(page,false);

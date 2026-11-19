@@ -10,18 +10,18 @@ for(const mobile of [false,true])test(`added collection generates, replaces and 
  const image=await setup(page,mobile),replacement=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='red';ctx.fillRect(0,0,128,128);return c.toDataURL('image/webp').split(',')[1];});let posts=0,done=false;
  await page.unroute('https://aihorde.net/**');await page.route('https://aihorde.net/**',async route=>{const r=route.request();if(r.method()==='POST'){expect(r.postDataJSON().prompt).toContain('Sunrise');posts++;return route.fulfill({json:{id:'added-job-'+posts}});}return route.fulfill({json:r.url().includes('/check/')?{done}:{generations:[{img:posts===1?image:replacement,censored:false}]}});});
  await page.evaluate(()=>window.playerApp.albumArt.step());
- const cover=page.locator('.view-header-cover');await expect(cover).toHaveAttribute('aria-busy','true');await expect(cover).toHaveAttribute('aria-disabled','true');
+ const cover=page.locator('.view-header-cover');await expect(cover).toHaveAttribute('aria-busy','true');if(!mobile)await expect(cover).toHaveAttribute('aria-disabled','true');
  await cover.click({force:true});expect(posts).toBe(1);
  done=true;await page.evaluate(()=>window.playerApp.albumArt.step());await expect(cover.locator('img')).toBeVisible();await expect(cover).toHaveAttribute('aria-busy','false');
  const first=await page.evaluate(()=>window.playerApp.library.addedArtwork.coverUrl);
- done=false;await cover.press('Enter');await expect(cover).toHaveAttribute('aria-busy','true');await expect(cover.locator('img')).toBeVisible();await expect.poll(()=>posts).toBe(2);
+ done=false;if(mobile){await page.locator('.collection-more').click();await page.getByText('Сгенерировать обложку',{exact:true}).click();}else await cover.press('Enter');await expect(cover).toHaveAttribute('aria-busy','true');await expect(cover.locator('img')).toBeVisible();await expect.poll(()=>posts).toBe(2);
  await page.screenshot({path:info.outputPath('generating.png')});
  await page.reload();await page.waitForFunction(()=>window.playerApp?.albumArt);await page.evaluate(()=>{const a=window.playerApp;a.albumArt.stop();a.ui.navigateTo({type:'allTracks',title:'Добавленные'});});
  await expect(cover).toHaveAttribute('aria-busy','true');done=true;await page.evaluate(()=>window.playerApp.albumArt.step());
  await expect(cover).toHaveAttribute('aria-busy','false');expect(posts).toBe(2);
  expect(await page.evaluate(()=>window.playerApp.library.addedArtwork.coverUrl)).not.toBe(first);
  await page.screenshot({path:info.outputPath('ready.png')});
- await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'home',title:'Главная'}));await expect(page.locator('.home-feature-art img')).toBeVisible();
+ await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'home',title:'Главная'}));if(!mobile)await expect(page.locator('.home-feature-art img')).toBeVisible();
  await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'library',title:'Моя медиатека'}));await expect(page.locator('.mobile-lib-row').filter({hasText:'Добавленные'}).locator('img')).toBeVisible();
 });
 test('temporary outage keeps previous cover and retries replacement automatically',async({page})=>{

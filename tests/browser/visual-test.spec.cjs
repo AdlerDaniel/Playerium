@@ -41,12 +41,12 @@ for(const mobile of [false,true])test(`native shuffle updates the next card and 
   if(mobile)app.ui.experience.openCinema();else app.ui.openRightPanel('queue');
  },mobile);
   const host=mobile?'.lyrics-queue-list':'#rightPanelContent';
-  if(mobile){await page.getByRole('tab',{name:'Очередь',exact:true}).click();await expect(page.locator(host+' .lyrics-queue-row:not(.playing) strong')).toHaveText(['Third','Second']);}
+  if(mobile){await page.getByRole('tab',{name:'Очередь',exact:true}).click();await expect(page.locator(host+' .queue-list .queue-item-title')).toHaveText(['Third','Second']);}
   else await expect(page.locator(host+' .next-song-card strong')).toHaveText('Third');
  if(!mobile)await expect(page.locator('.queue-list .queue-item-title')).toHaveText(['Third','Second']);
  await page.evaluate(()=>window.playerApp.player.applyNativeState({...window.nativeFixtureState,playbackOrder:[0,1,2]}));
-  if(mobile)await expect(page.locator(host+' .lyrics-queue-row:not(.playing) strong')).toHaveText(['Second','Third']);else await expect(page.locator(host+' .next-song-card strong')).toHaveText('Second');
+  if(mobile)await expect(page.locator(host+' .queue-list .queue-item-title')).toHaveText(['Second','Third']);else await expect(page.locator(host+' .next-song-card strong')).toHaveText('Second');
  if(!mobile)await expect(page.locator('.queue-list .queue-item-title')).toHaveText(['Second','Third']);
-  if(mobile){await page.locator(host+' .lyrics-queue-row:not(.playing)').first().click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('select');expect(await page.evaluate(()=>window.lastNativeIndex)).toBe(1);}else{await page.locator(host+' .next-song-card').click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('next');}
+  if(mobile){await page.locator(host+' .queue-list .queue-item-info').first().click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('select');expect(await page.evaluate(()=>window.lastNativeIndex)).toBe(1);}else{await page.locator(host+' .next-song-card').click();expect(await page.evaluate(()=>window.lastNativeCommand)).toBe('next');}
  expect(errors).toEqual([]);
 });

@@ -57,12 +57,6 @@ export function renderSettingsView(container) {
           Оформление
         </h2>
         <div class="settings-card">
-          <div class="settings-row">
-            <div class="settings-label-wrap">
-              <span class="settings-label">Цветовая тема</span>
-              <span class="settings-desc">Цвета фонов, панелей, карточек, меню и элементов управления.</span>
-            </div>
-          </div>
           <div class="theme-settings-picker"></div>
         </div>
       </div>
@@ -74,7 +68,6 @@ export function renderSettingsView(container) {
             <label for="crossfadeSeconds">Плавный переход</label>
             <output for="crossfadeSeconds"></output>
             <input id="crossfadeSeconds" type="range" min="0" max="10" step="1">
-            <span class="settings-desc">Конец песни затухает, пока начинается следующая.</span>
           </div>
         </div>
       </section>

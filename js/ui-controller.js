@@ -13,6 +13,7 @@ import { bindMobileEvents, updateMobileNavActive, showMobileTrackOptionsSheet, s
 import { renderRightQueue } from "./queue-view.js";
 import { createTrackTable } from "./track-table.js";
 import {trackRange} from './track-edits.js';
+import {icons} from './design-icons.js';
 /**
  * Playerium - UI Controller & DOM Coordinator
  */
@@ -85,6 +86,7 @@ export class UIController {
   // --- DOM Binding ---
 
   bindDOM() {
+    for(const id of ['btnRepeat','btnMobileFsRepeat'])document.getElementById(id).innerHTML=icons.repeat;
     for (const id of ["btnGlobalHome"]) document.getElementById(id).addEventListener("click", () => {
       this.searchQuery = ""; document.getElementById("mainSearchInput").value = "";
       document.getElementById("searchClearBtn").classList.remove("visible");
@@ -500,6 +502,10 @@ export class UIController {
   handleBack() {
     if(this.dismissTrackMenu){this.dismissTrackMenu();return true;}
     if(this.dismissSurface){this.dismissSurface();return true;}
+    if(this.experience?.lyricsPlayer){this.experience.lyricsPlayer.close();return true;}
+    const update=document.getElementById('modalUpdateAvailable');
+    if(update?.classList.contains('active')){if(update.dataset.busy!=='true')update.classList.remove('active');return true;}
+    if(this.settingsOverlay?.isConnected){this.closeSettings();return true;}
     const fullscreen=document.getElementById('mobileFullscreenPlayer');
     if(fullscreen.classList.contains('active')){fullscreen.classList.remove('active');return true;}
     if(this.isRightPanelOpen){this.closeRightPanel();return true;}
@@ -545,8 +551,7 @@ export class UIController {
     document.getElementById("btnGlobalHome").classList.toggle("active",view.type === "home");
     if (view.type === "home") this.updateMobileNavActive("home");
     else if (view.type === "search") this.updateMobileNavActive("search");
-    else if (view.type === "library") this.updateMobileNavActive("library");
-    else this.updateMobileNavActive("");
+    else this.updateMobileNavActive("home");
 
     const focusedSearch = document.activeElement?.classList.contains("mobile-search-input");
     const caret = focusedSearch ? document.activeElement.selectionStart : null;
@@ -559,7 +564,7 @@ export class UIController {
         renderAllTracksView.call(this,container);
         break;
       case "home":
-        this.renderHomeView(container);
+        if(this.isMobile)this.renderLibraryView(container);else this.renderHomeView(container);
         break;
       case "search":
         this.renderSearchView(container);

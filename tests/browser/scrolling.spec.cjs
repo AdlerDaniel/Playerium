@@ -46,7 +46,7 @@ test('virtual rows respect zoom, viewport resizing and the bottom of a collectio
   await expect(page.locator('.track-row').last().locator('.track-name')).toHaveText('Song 599');
 });
 
-test('repeated player updates retain the right cover, queue selection and control icons',async({page})=>{
+test('repeated player updates retain the right cover, queue rows and control icons',async({page})=>{
   await library(page,false,183);
   const result=await page.evaluate(async()=>{
     const a=window.playerApp,p=a.player,ui=a.ui,tracks=a.library.getTracks();
@@ -56,12 +56,12 @@ test('repeated player updates retain the right cover, queue selection and contro
     const icon=document.querySelector('.track-row-play svg');
     for(let i=0;i<20;i++)ui.syncPlayerDisplay();
     const retainedCover=cover===document.querySelector('.now-playing-panel-cover img'),retainedIcon=icon===document.querySelector('.track-row-play svg');
-    ui.switchRightTab('queue');const checkbox=document.querySelector('.queue-select');checkbox.click();
+    ui.switchRightTab('queue');const row=document.querySelector('.queue-list .queue-item');
     const panel=document.getElementById('rightPanelContent');panel.scrollTop=200;
     for(let i=0;i<20;i++)ui.syncPlayerDisplay();
-    const selected=checkbox===document.querySelector('.queue-select')&&checkbox.checked,scroll=panel.scrollTop;
+    const retainedRow=row===document.querySelector('.queue-list .queue-item'),scroll=panel.scrollTop;
     ui.switchRightTab('nowPlaying');const restored=!!document.querySelector('.now-playing-panel-cover');
-    return {retainedCover,retainedIcon,selected,scroll,restored};
+    return {retainedCover,retainedIcon,retainedRow,scroll,restored};
   });
-  expect(result).toEqual({retainedCover:true,retainedIcon:true,selected:true,scroll:200,restored:true});
+  expect(result).toEqual({retainedCover:true,retainedIcon:true,retainedRow:true,scroll:200,restored:true});
 });

@@ -5,7 +5,6 @@ export function bindMobileEvents() {
     // 1. Mobile Navigation Bar Tabs
     const navHome = document.getElementById("mobileNavHome");
     const navSearch = document.getElementById("mobileNavSearch");
-    const navLibrary = document.getElementById("mobileNavLibrary");
 
     if (navHome) {
       navHome.addEventListener("click", () => {
@@ -21,12 +20,6 @@ export function bindMobileEvents() {
         this.updateMobileNavActive("search");
         this.navigateTo({ type: "search", title: "Поиск" });
         setTimeout(() => document.querySelector(".mobile-search-input")?.focus(), 100);
-      });
-    }
-    if (navLibrary) {
-      navLibrary.addEventListener("click", () => {
-        this.updateMobileNavActive("library");
-        this.navigateTo({ type: "library", title: "Моя медиатека" });
       });
     }
 
@@ -114,7 +107,6 @@ export function bindMobileEvents() {
       this.toggleRightPanel("queue");
     });
 
-    document.getElementById('btnMobileFsShare').onclick=()=>{if(this.player.currentTrack){showTrackMenu(this,this.player.currentTrack,{mobile:true});document.getElementById('sheetOptShare')?.click();}};
     document.getElementById('btnMobileFsArtist').onclick=()=>{const t=this.player.currentTrack;if(!t)return;fsPlayer.classList.remove('active');this.navigateTo({type:'artist',id:t.artist,title:t.artist});};
     let swipeStart=null,delta=0;
     const header=fsPlayer.querySelector('.mobile-fs-header');header.onpointerdown=e=>{if(e.target.closest('button'))return;swipeStart=e.clientY;delta=0;header.setPointerCapture(e.pointerId);};
@@ -138,7 +130,6 @@ export function updateMobileNavActive(tab) {
     document.querySelectorAll(".mobile-nav-item").forEach((btn) => btn.classList.remove("active"));
     if (tab === "home") document.getElementById("mobileNavHome")?.classList.add("active");
     if (tab === "search") document.getElementById("mobileNavSearch")?.classList.add("active");
-    if (tab === "library") document.getElementById("mobileNavLibrary")?.classList.add("active");
 }
 
 export function showMobileTrackOptionsSheet(track, index, tracks, playlistContext = null) {

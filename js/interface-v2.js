@@ -9,15 +9,15 @@ export const INTERFACE_ITEMS=[1,2,6,7,8,9,10,11,12,13,14,16,17,18,19,20];
 const read=()=>{try{return JSON.parse(localStorage.getItem('playerium_interface_sidebar')||'{}');}catch{return {};}};
 const makeButton=(label,icon,action)=>{const b=document.createElement('button');b.type='button';b.setAttribute('aria-label',label);b.title=label;b.innerHTML=icon;b.onclick=action;return b;};
 export class InterfaceV2{
-  constructor(ui){this.ui=ui;this.suggestions=new SearchSuggestions(ui);this.covers=new CoverTransition();this.sidebar=read();this.viewGeneration=0;this.trackGeneration=0;this.lastMiniAt=0;}
+  constructor(ui){this.ui=ui;this.suggestions=new SearchSuggestions(ui);this.covers=new CoverTransition();this.sidebar=read();this.viewGeneration=0;this.trackGeneration=0;}
   init(){
     const ui=this.ui;document.body.classList.add('interface-v2');
     const after=(host,name,callback)=>{const original=host[name].bind(host);host[name]=(...args)=>{const result=original(...args);callback(...args);return result;};};
     after(ui,'loadView',()=>this.enhance());after(ui,'openRightPanel',()=>this.saveSidebar());after(ui,'closeRightPanel',()=>this.saveSidebar());after(ui,'switchRightTab',()=>this.saveSidebar());
-    for(const name of ['onTrackChange','onPlayStateChange','onQueueChange','onVolumeChange','onTimeUpdate']){const original=ui.player[name];ui.player[name]=(...args)=>{original?.(...args);if(name==='onTrackChange'){this.covers.cancel();this.tintPlaying(args[0]);}this.publishMini();};}
+    for(const name of ['onTrackChange','onPlayStateChange','onQueueChange','onVolumeChange','onTimeUpdate']){const original=ui.player[name];ui.player[name]=(...args)=>{original?.(...args);if(name==='onTrackChange'){this.covers.cancel();this.tintPlaying(args[0]);}};}
     const ensure=ui.music.ensureTrack.bind(ui.music);ui.trackDownloadErrors=new Map();ui.music.ensureTrack=async track=>{ui.trackDownloadErrors.delete(track.id);const task=ensure(track);refreshTrackStates(ui);try{return await task;}catch(error){ui.trackDownloadErrors.set(track.id,error.message);throw error;}finally{refreshTrackStates(ui);}};
     after(ui.experience,'openCinema',()=>this.cinema());
-    this.mobilePlayer();this.resizableSidebar();this.miniPlayer();this.enhance();this.tintPlaying(ui.player.currentTrack);
+    this.mobilePlayer();this.resizableSidebar();this.enhance();this.tintPlaying(ui.player.currentTrack);
     if(this.sidebar.open&&!ui.isMobile)ui.openRightPanel(this.sidebar.tab==='queue'?'queue':'nowPlaying');
     this.timer=setInterval(()=>{if(!document.hidden)refreshTrackStates(ui);},1000);
   }
@@ -33,7 +33,6 @@ export class InterfaceV2{
     const ui=this.ui,mini=document.getElementById('mobileMiniPlayer'),full=document.getElementById('mobileFullscreenPlayer');
     const next=makeButton('Следующий трек',icons.next,e=>{e.stopPropagation();ui.player.next();});next.id='mobileMiniNext';next.className='mobile-mini-btn';mini.querySelector('.mobile-mini-actions').append(next);
 
-    const output=document.createElement('div');output.className='mobile-output-row';full.querySelector('.mobile-fs-controls').after(output);output.append(document.getElementById('btnMobileFsQueue'));
     bindSeekRange(ui,document.getElementById('mobileFsSlider'),value=>{document.getElementById('mobileFsTimeCurrent').textContent=ui.formatTime(value/100*ui.player.getDuration());});
     let active=full.classList.contains('active');new MutationObserver(()=>{const open=full.classList.contains('active');if(open===active)return;active=open;this.covers.move(document.getElementById(open?'mobileMiniCover':'mobileFsArtwork'),document.getElementById(open?'mobileFsArtwork':'mobileMiniCover'));}).observe(full,{attributes:true,attributeFilter:['class']});
   }
@@ -52,19 +51,6 @@ export class InterfaceV2{
     const finish=()=>{if(!start)return;start=null;document.body.classList.remove('resizing-task-panel');this.sidebar.width=Number(grip.getAttribute('aria-valuenow'));this.saveSidebar();};grip.onpointerup=finish;grip.onpointercancel=finish;grip.onlostpointercapture=finish;
     grip.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const value=Number(grip.getAttribute('aria-valuenow'))||320;this.sidebar.width=e.key==='Home'?260:e.key==='End'?480:value+(e.key==='ArrowLeft'?10:-10);apply(this.sidebar.width);this.saveSidebar();};
     window.addEventListener('resize',()=>{if(!this.ui.isMobile)apply(this.sidebar.width||320);});apply(this.sidebar.width||320);
-  }
-  miniPlayer(){
-    const api=window.electronAPI;if(!api?.openMiniPlayer)return;const button=makeButton('Открыть мини-плеер',icons.miniPlayer,async()=>{try{await api.openMiniPlayer();this.miniActive=true;await this.publishMini(true);}catch(error){this.ui.showToast(error.message,'error');}});button.id='btnMiniWindow';document.querySelector('.player-right').append(button);
-    api.onMiniClosed?.(()=>{this.miniActive=false;});
-    api.onMiniCommand?.(async({command,value})=>{try{const p=this.ui.player;if(command==='toggle')p.togglePlay();else if(command==='next')p.next();else if(command==='previous')p.prev();else if(command==='seek')p.seekToTime(value);else if(command==='volume')p.setVolume(value);else if(command==='queue')this.ui.openRightPanel('queue');this.publishMini(true);}catch(error){this.ui.showToast(error.message,'error');}});
-    new MutationObserver(()=>{this.miniTheme=null;this.publishMini(true);}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
-  }
-  async publishMini(force=false){
-    const api=window.electronAPI;if(!this.miniActive||!api?.publishMiniState||!force&&Date.now()-this.lastMiniAt<250)return;this.lastMiniAt=Date.now();const ui=this.ui,p=ui.player,track=p.currentTrack;
-    if(!this.miniTheme){const styles=getComputedStyle(document.documentElement);this.miniTheme=Object.fromEntries(Object.entries({background:'--sp-dark-900',foreground:'--sp-text-primary',muted:'--sp-text-secondary',accent:'--sp-green',control:'--sp-dark-700',onAccent:'--sp-on-accent'}).map(([key,token])=>[key,styles.getPropertyValue(token).trim()]));}
-    const state={appName:document.title,title:track?.title,artist:track?.artist,playing:p.isPlaying,position:p.getCurrentTime(),duration:p.getDuration(),volume:p.volume,theme:this.miniTheme,queue:p.getUpcomingQueue().slice(0,6).map(({track:t})=>({title:t.title,artist:t.artist}))};
-    const key=track?.pictureBlob||track?.pictureUrl||null;if(key!==this.miniArtKey){this.miniArtKey=key;state.artwork='';if(track?.pictureBlob&&/image\/(jpeg|png|webp)/.test(track.pictureBlob.type)){const reader=new FileReader();reader.onload=()=>{if(this.miniArtKey===key)api.publishMiniState({artwork:reader.result}).catch(()=>{});};reader.readAsDataURL(track.pictureBlob);}else if(/^(https:\/\/|data:image\/(jpeg|png|webp);base64,)/.test(track?.pictureUrl||''))state.artwork=track.pictureUrl;}
-    try{await api.publishMiniState(state);}catch{/* Mini window closure must never affect the audio session. */}
   }
 }
 export function installInterfaceV2(ui){ui.interfaceV2=new InterfaceV2(ui);ui.interfaceV2.init();return ui.interfaceV2;}

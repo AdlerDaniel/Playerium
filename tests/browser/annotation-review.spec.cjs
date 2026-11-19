@@ -16,16 +16,15 @@ async function ready(page,width=390){
   a.ui.renderSidebar();a.ui.refreshCurrentView();
  });
 }
-for(const width of [320,390,510])test(`annotation layout: aligned header, flat home and isolated dock at ${width}`,async({page},info)=>{
+for(const width of [320,390,510])test(`annotation layout: library home and isolated dock at ${width}`,async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));await ready(page,width);
  await expect(page.locator('.home-heading,.home-quick-section')).toHaveCount(0);
  await expect(page.locator('.shelf-heading')).not.toContainText(['Ваши исполнители']);
  const layout=await page.evaluate(()=>{
-  const rect=n=>n.getBoundingClientRect(),avatar=rect(document.querySelector('.profile-avatar')),pill=rect(document.querySelector('#mainTopbar .home-filters button')),feature=document.querySelector('.home-feature'),nav=document.querySelector('.mobile-nav-bar');
-  return {centers:[avatar.y+avatar.height/2,pill.y+pill.height/2],backgrounds:['.main-view-container','.main-view','.home-dashboard'].map(s=>getComputedStyle(document.querySelector(s)).backgroundColor),feature:{gradient:getComputedStyle(feature).backgroundImage,border:getComputedStyle(feature).borderTopWidth,radius:getComputedStyle(feature).borderRadius},dock:{...rect(nav).toJSON(),gradient:getComputedStyle(nav).backgroundImage,radius:parseFloat(getComputedStyle(nav).borderRadius),mask:getComputedStyle(nav).maskImage},targets:[...nav.querySelectorAll('button')].map(b=>({w:rect(b).width,h:rect(b).height,opacity:getComputedStyle(b).opacity})),overflow:document.documentElement.scrollWidth>innerWidth};
+  const rect=n=>n.getBoundingClientRect(),nav=document.querySelector('.mobile-nav-bar');
+  return {backgrounds:['.main-view-container','.main-view'].map(s=>getComputedStyle(document.querySelector(s)).backgroundColor),dock:{...rect(nav).toJSON(),gradient:getComputedStyle(nav).backgroundImage,radius:parseFloat(getComputedStyle(nav).borderRadius),mask:getComputedStyle(nav).maskImage},targets:[...nav.querySelectorAll('button')].map(b=>({w:rect(b).width,h:rect(b).height,opacity:getComputedStyle(b).opacity})),overflow:document.documentElement.scrollWidth>innerWidth};
  });
- expect(Math.abs(layout.centers[0]-layout.centers[1])).toBeLessThan(1);
- expect(new Set(layout.backgrounds).size).toBe(1);expect(layout.feature).toEqual({gradient:'none',border:'0px',radius:'0px'});
+ expect(new Set(layout.backgrounds).size).toBe(1);expect(layout.targets).toHaveLength(3);
  expect(layout.dock.gradient).toBe('none');expect(layout.dock.mask).toBe('none');expect(layout.dock.radius).toBeGreaterThan(16);expect(layout.dock.x).toBe(12);expect(layout.dock.right).toBe(width-12);expect(layout.overflow).toBe(false);
  for(const t of layout.targets){expect(t.w).toBeGreaterThanOrEqual(44);expect(t.h).toBeGreaterThanOrEqual(44);expect(t.opacity).toBe('1');}
  await page.evaluate(()=>{const a=window.playerApp;a.player.currentTrack=a.library.getTracks()[0];a.ui.syncPlayerDisplay();});

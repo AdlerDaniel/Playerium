@@ -22,7 +22,7 @@ test('mobile home has continuous surfaces and search stays minimal in every pale
  });
  for(const id of ['violet-dark','brown-dark','red-dark','blue-dark','green-dark','yellow-dark','violet-light','brown-light','red-light','blue-light','green-light','yellow-light']){
   await page.evaluate(async id=>{(await import('/js/themes.js')).applyTheme(id);window.playerApp.ui.navigateTo({type:'home'});},id);
-  const home=await page.evaluate(()=>({child:getComputedStyle(document.querySelector('.home-dashboard')).backgroundImage,parent:getComputedStyle(document.querySelector('.main-view-container')).backgroundImage,top:getComputedStyle(document.querySelector('.topbar')).backgroundColor}));
+  const home=await page.evaluate(()=>({child:getComputedStyle(document.querySelector('.mobile-library-view')).backgroundImage,parent:getComputedStyle(document.querySelector('.main-view-container')).backgroundImage,top:getComputedStyle(document.querySelector('.topbar')).backgroundColor}));
   expect(home.child).toBe('none');expect(home.parent).toBe('none');await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.querySelector('.topbar')).backgroundColor===getComputedStyle(document.documentElement).getPropertyValue('--sounder-bg').trim().replace(/.*/,()=>{const x=document.createElement('span');x.style.color=getComputedStyle(document.documentElement).getPropertyValue('--sounder-bg');document.body.append(x);const c=getComputedStyle(x).color;x.remove();return c;}))).toBe(true);
   await page.screenshot({path:info.outputPath(id+'-home.png')});
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'search'}));
@@ -56,13 +56,13 @@ test('desktop tooltips flip at top, clamp at sides, show on keyboard focus and d
  await page.mouse.move(500,400);await expect(page.locator('.app-tooltip')).toBeHidden();
  await page.locator('#btnShuffle').focus();await page.keyboard.press('Tab');await expect(page.locator('.app-tooltip')).toBeVisible();await within(page,'.app-tooltip');await page.keyboard.press('Escape');await expect(page.locator('.app-tooltip')).toBeHidden();
 });
-test('desktop long context menus, nested credits and forms stay inside a short resized window',async({page})=>{
+test('desktop long context menus, track menus and forms stay inside a short resized window',async({page})=>{
  await page.setViewportSize({width:1000,height:360});await boot(page);
  await page.evaluate(async()=>{const a=window.playerApp;for(let i=0;i<25;i++)await a.library.createPlaylist('ОченьДлинноеНазваниеБезПробелов'.repeat(8)+i);a.ui.showTrackContextMenu(995,355,{id:'fixture',title:'Название'.repeat(100),artist:'Исполнитель'.repeat(100),album:'Альбом'.repeat(100),sources:[]});});
  await within(page,'#appContextMenu');await page.locator('#ctxAddToPlaylist').click();await within(page,'.playlist-picker');
  expect(await page.locator('.playlist-picker-list').evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
  await page.setViewportSize({width:800,height:320});await within(page,'.playlist-picker');
- await page.keyboard.press('Escape');await page.evaluate(()=>window.playerApp.ui.showTrackContextMenu(795,315,{id:'fixture',title:'Название'.repeat(100),artist:'Исполнитель'.repeat(100),sources:[]}));await page.locator('#ctxCredits').click();await within(page,'#appContextMenu');
+ await page.keyboard.press('Escape');await page.evaluate(()=>window.playerApp.ui.showTrackContextMenu(795,315,{id:'fixture',title:'Название'.repeat(100),artist:'Исполнитель'.repeat(100),sources:[]}));await expect(page.locator('#ctxCredits,#ctxShare')).toHaveCount(0);await within(page,'#appContextMenu');
  expect(await page.locator('#appContextMenu').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);await page.keyboard.press('Escape');await page.keyboard.press('Escape');await expect(page.locator('#appContextMenu')).toBeHidden();
   await page.evaluate(()=>{window.playerApp.ui.showCreatePlaylistModal();});await expect(page.locator('.form-dialog')).toBeVisible();await within(page,'.form-dialog .modal-card');await page.getByLabel('Название',{exact:true}).fill('Текст'.repeat(100));await expect(page.locator('.form-dialog').getByRole('button',{name:'Сохранить',exact:true})).toBeInViewport();await page.keyboard.press('Escape');
 });

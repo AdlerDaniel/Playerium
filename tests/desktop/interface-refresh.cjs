@@ -20,6 +20,6 @@ const {_electron:electron}=require('playwright'),fs=require('node:fs/promises'),
   for(const b of buttons){assert.ok(b.w>=40,b.id);assert.ok(b.hit,b.id+' is covered');assert.ok(b.x+b.w<=width,b.id+' overflows');}
   for(let i=0;i<buttons.length;i++)for(let j=i+1;j<buttons.length;j++){const a=buttons[i],b=buttons[j];assert.ok(Math.min(a.x+a.w,b.x+b.w)<=Math.max(a.x,b.x),a.id+' overlaps '+b.id);}
  }
- const miniReady=app.waitForEvent('window',{timeout:15000});await win.locator('#btnMiniWindow').click();const mini=await miniReady;await mini.waitForLoadState();assert.equal((await win.locator('#btnMiniWindow svg').boundingBox()).width,20);
- await win.screenshot({path:'build/interface150-packaged.png'});assert.deepEqual(errors,[]);console.log('Packaged 1.7.50: '+(liveJob?'real service':'fixture')+' cover recovered and retained after restart; volume, device, queue, cinema and mini-player controls do not overlap; mini window opened.');
+ assert.equal(await win.locator('#btnMiniWindow').count(),0);assert.equal(app.windows().length,1);
+ await win.screenshot({path:'build/interface150-packaged.png'});assert.deepEqual(errors,[]);console.log('Packaged 1.7.50: '+(liveJob?'real service':'fixture')+' cover recovered and retained after restart; volume, queue and lyrics controls do not overlap.');
  }finally{if(app)await app.close();await fs.rm(root,{recursive:true,force:true,maxRetries:10,retryDelay:200}).catch(e=>console.warn('Temporary test profile cleanup:',e.code));}})().catch(e=>{console.error(e);process.exitCode=1;});

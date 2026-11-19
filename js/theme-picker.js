@@ -3,7 +3,7 @@ export function renderThemePicker(host){
  if(!host)return;
  const active=currentTheme();
  host.innerHTML='<div class="theme-mode" role="group" aria-label="Режим оформления"><button data-scheme="dark">Тёмный</button><button data-scheme="light">Светлый</button></div><div class="theme-picker" aria-label="Цветовая тема"></div>';
- for(const theme of THEMES.filter(t=>t.scheme===active.scheme)){
+ for(const theme of THEMES.filter(t=>t.scheme===active.scheme).sort((a,b)=>Number(b.accent==='neutral')-Number(a.accent==='neutral'))){
   const button=document.createElement('button'),p=theme.tokens;
   button.className='theme-choice';button.dataset.themeId=theme.id;button.setAttribute('aria-pressed',String(theme.id===active.id));
   button.style.cssText=`--preview-bg:${p.bg};--preview-panel:${p.panel};--preview-raised:${p.surface};--preview-accent:${p.accent};--preview-text:${p.text};--preview-on-accent:${p.on_accent}`;

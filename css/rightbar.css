@@ -142,16 +142,13 @@
   padding: 8px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+  transition: background-color 0.15s var(--ease-out);
   position: relative;
 }
 @media (hover: hover) and (pointer: fine) {
   .queue-item:hover {
     background-color: var(--sp-dark-700);
   }
-}
-.queue-item:active {
-  transform: scale(0.98);
 }
 .queue-item.current {
   background-color: rgba(255, 255, 255, 0.08);

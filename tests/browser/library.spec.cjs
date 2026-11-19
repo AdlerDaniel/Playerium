@@ -143,7 +143,8 @@ for (const mobile of [false, true]) {
       {name:'Artist - First.wav',mimeType:'audio/wav',buffer:wav(60)},
       {name:'Other - Second.wav',mimeType:'audio/wav',buffer:wav(60)}
     ]);
-    await expect(page.locator('.home-shelf').first().locator('.shelf-title')).toHaveCount(2);
+    if(mobile)await expect(page.locator('.mobile-lib-sub').first()).toHaveText('2 треков');
+    else await expect(page.locator('.home-shelf').first().locator('.shelf-title')).toHaveCount(2);
     const id=await page.evaluate(async()=>{
       const app=window.playerApp, pl=await app.library.createPlaylist('Test playlist');
       for(const t of app.library.getTracks()) await app.library.addTrackToPlaylist(pl.id,t.id);
@@ -180,7 +181,7 @@ test('imports go to Added without polluting the default library; explicit filter
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
-  await page.locator('#mobileNavLibrary').click();
+  await page.locator('#mobileNavHome').click();
   await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные']);
   await page.locator('.mobile-lib-pill[data-filter="artists"]').click();
   await expect(page.locator('.mobile-lib-name')).toHaveText('Artist');
@@ -192,13 +193,13 @@ test('imports go to Added without polluting the default library; explicit filter
 test('scrollbars stay hidden even during scrolling while content remains scrollable',async({page})=>{
   await page.setViewportSize({width:320,height:640});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  const filters=page.locator('#mainTopbar .home-filters');
+  const filters=page.locator('.mobile-library-pills');
   expect(await filters.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
   await filters.evaluate(el=>el.scrollLeft=100);
   expect(await filters.evaluate(el=>el.scrollLeft)).toBeGreaterThanOrEqual(0);
   expect(await filters.evaluate(el=>getComputedStyle(el,'::-webkit-scrollbar').display)).toBe('none');
-  await page.locator('#mobileNavLibrary').click();
+  await page.locator('#mobileNavHome').click();
   expect(await page.locator('.mobile-library-pills').evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('none');
 });
 
@@ -242,9 +243,9 @@ test('changing track keeps an open queue visible and queue rows work with keyboa
   await page.evaluate(()=>window.playerApp.ui.navigateTo({type:'allTracks',title:'Добавленные'}));
   await page.locator('.track-name').first().click();await page.waitForFunction(()=>window.playerApp.player.isPlaying);
   await page.locator('#btnToggleQueue').click();
-  await page.locator('.queue-item:not(.current)').focus();
-  await page.locator('.queue-item:not(.current)').press('Enter');
-  await expect(page.locator('#rightPanelContent')).toContainText('Следующие в очереди');
+  await page.locator('.queue-item:not(.current) .queue-item-info').focus();
+  await page.locator('.queue-item:not(.current) .queue-item-info').press('Enter');
+  await expect(page.locator('#rightPanelContent')).toContainText('Сейчас играет');
   await expect(page.locator('.queue-item:not(.current)')).toHaveCount(0);
   await page.evaluate(()=>window.playerApp.player.pause());
   await page.locator('.queue-item.current').click();await page.waitForFunction(()=>window.playerApp.player.isPlaying);
@@ -267,9 +268,9 @@ test('mobile home filters remain visible and search keeps focus while typing',as
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');await page.waitForFunction(()=>window.playerApp?.ui.history.length);
-  await expect(page.locator('#mainTopbar .home-filters')).toBeVisible();
-  const box=await page.locator('#mainTopbar .home-filters').boundingBox();
-  expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(140);
+  await expect(page.locator('.mobile-library-pills')).toBeVisible();
+  const box=await page.locator('.mobile-library-pills').boundingBox();
+  expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThan(200);
   await page.locator('#hiddenAudioFilesPicker').setInputFiles({name:'Artist - Song.wav',mimeType:'audio/wav',buffer:wav()});
   await page.locator('#mobileNavSearch').click();
   await page.locator('.mobile-search-input').pressSequentially('Song');
