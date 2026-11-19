@@ -27,7 +27,6 @@ export function renderArtistProfile(container,name) {
     if(selected==='popular'&&tracks.length>10){const more=document.createElement('button');more.className='search-show-all';more.textContent=expanded?'Показать меньше':'Показать все песни';more.onclick=()=>{expanded=!expanded;render();};root.append(more);}
     if(!busy&&!tracks.length){const empty=document.createElement('p');empty.className='artist-profile-status';empty.textContent=profile.offline?'Проверьте подключение и попробуйте ещё раз.':'Песни этого исполнителя пока не найдены.';root.append(empty);}
     if(!busy&&profile.offline){const retry=document.createElement('button');retry.className='search-show-all';retry.textContent='Повторить';retry.onclick=()=>ui.refreshCurrentView();root.append(retry);}
-    if(ui.experience)ui.experience.compactHeader(root);
   };
   render();
   if(ui.music?.available)ui.music.artistProfile(requested).then(value=>{if(!root.isConnected||ui.currentView.type!=='artist'||ui.currentView.id!==name)return;profile=value;busy=false;render();}).catch(()=>{if(!root.isConnected)return;busy=false;profile.offline=true;render();});

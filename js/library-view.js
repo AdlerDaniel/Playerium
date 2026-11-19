@@ -19,7 +19,7 @@ export function renderLibrary(ui,container) {
   };
   const render=()=>{
     retainArtwork(list);list.replaceChildren();list.classList.toggle('library-grid',layout==='grid');
-    root.querySelector('.library-sort').title=labels[sort];
+    const sortButton=root.querySelector('.library-sort');sortButton.title=labels[sort];sortButton.dataset.custom=String(sort!=='default');
     updateSortDirection(root.querySelector('.sort-direction'),ascending,sort==='recent'?(ascending?'Сначала старые — изменить порядок':'Сначала новые — изменить порядок'):(ascending?'По возрастанию — изменить порядок':'По убыванию — изменить порядок'));
     const layoutButton=root.querySelector('.library-layout');layoutButton.innerHTML=layout==='grid'?icons.list:icons.grid;layoutButton.setAttribute('aria-label',layout==='grid'?'Показать списком':'Показать сеткой');
     let items=allItems().filter(i=>(i.name+' '+i.sub).toLocaleLowerCase().includes(input.value.toLocaleLowerCase()));

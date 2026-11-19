@@ -7,7 +7,7 @@ async function prepare(page,mobile){
  await page.goto('/');
  await page.waitForFunction(()=>window.playerApp?.albumArt);
  await page.evaluate(()=>{
-  const a=window.playerApp;
+  const a=window.playerApp;a.albumArt.stop();
   const canvas=document.createElement('canvas');canvas.width=canvas.height=64;
   const ctx=canvas.getContext('2d');ctx.fillStyle='#b23d7a';ctx.fillRect(0,0,64,64);
   for(const [i,title] of ['Alpha','Zulu','Beta'].entries()){
@@ -27,9 +27,11 @@ test('mobile home, album layout, manual collage, and two-way track sorting',asyn
  await page.locator('.settings-close').click();
  const positions=await page.locator('.mobile-library-actions').evaluate(el=>[...el.children].slice(0,2).map(n=>n.getBoundingClientRect().left));
  expect(positions[0]).toBeLessThan(positions[1]);
+ await expect(page.locator('.mobile-library-actions .sort-direction')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
  await page.locator('.mobile-lib-name').filter({hasText:/^Добавленные$/}).click();
  await expect(page.locator('.mobile-album-heading h1')).toHaveText('Добавленные');
  const album=page.locator('.mobile-album-header');
+ await expect(album.locator('.view-header-cover')).toBeVisible();
  await expect(album.locator('.mobile-album-stats')).toContainText('3 треков');
  const boxes=await album.evaluate(el=>['.mobile-album-heading','.view-header-cover','.mobile-album-tools','.mobile-album-stats','.mobile-album-playback','.collection-more','.view-title'].map(s=>el.querySelector(s).getBoundingClientRect().toJSON()));
  expect(boxes[0].bottom).toBeLessThan(boxes[1].top);
@@ -44,6 +46,7 @@ test('mobile home, album layout, manual collage, and two-way track sorting',asyn
  await sort.locator('.sort-direction').click();await expect(tracks).toHaveText(['Alpha','Zulu','Beta']);
  await sort.locator('.collection-sort').click();await page.getByText('По названию трека',{exact:true}).click();
  await expect(tracks).toHaveText(['Alpha','Beta','Zulu']);
+ await expect(sort.locator('.collection-sort')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
  await sort.locator('.sort-direction').click();await expect(tracks).toHaveText(['Zulu','Beta','Alpha']);
  await album.locator('.collection-more').click();
  await expect(page.locator('.surface-panel').getByText(/^(Воспроизвести|Добавить в очередь)$/)).toHaveCount(0);
@@ -90,20 +93,23 @@ test('mobile artwork card is between lyrics and queue; back restores the song',a
  await expect(page.locator('#btnMobileCinema')).toBeFocused();
 });
 
-test('mobile repeat and shuffle have an accent surface in all palettes',async({page})=>{
- await prepare(page,true);
- const values=await page.evaluate(async()=>{
-  const {THEMES,applyTheme}=await import('/js/themes.js');
-  const p=window.playerApp.player, buttons=['btnMobileFsShuffle','btnMobileFsRepeat'].map(id=>document.getElementById(id));
+
+for(const mobile of [false,true])test(`repeat and shuffle use a brighter accent without a background (${mobile?'phone':'desktop'})`,async({page})=>{
+ await prepare(page,mobile);
+ const values=await page.evaluate(async mobile=>{
+  const {THEMES,applyTheme}=await import('/js/themes.js'),p=window.playerApp.player;
+  const buttons=(mobile?['btnMobileFsShuffle','btnMobileFsRepeat']:['btnShuffle','btnRepeat']).map(id=>document.getElementById(id));
   for(const b of buttons)b.style.transition='none';
-  const rgb=color=>{const span=document.createElement('span');span.style.color=color;document.body.append(span);const v=getComputedStyle(span).color;span.remove();return v;};
+  const mode=b=>{const css=getComputedStyle(b);return {color:css.color,bg:css.backgroundColor};};
+  const luminance=color=>color.match(/\d+/g).slice(0,3).reduce((value,c,i)=>{c=Number(c)/255;return value+[.2126,.7152,.0722][i]*(c<=.04045?c/12.92:((c+.055)/1.055)**2.4);},0);
   return THEMES.map(theme=>{
    applyTheme(theme.id,false);
-   for(const b of buttons)b.setAttribute('aria-pressed','false');
-   const off=buttons.map(b=>getComputedStyle(b).backgroundColor);
+   p.onShuffleChange(false);p.onRepeatChange('off');
+   const off=buttons.map(mode);
    p.onShuffleChange(true);p.onRepeatChange('one');
-   return {id:theme.id,off:off.every(c=>c==='rgba(0, 0, 0, 0)'),active:buttons.every(b=>getComputedStyle(b).backgroundColor===rgb(theme.tokens.accent)&&getComputedStyle(b).color===rgb(theme.tokens.on_accent))};
+   const on=buttons.map(mode);
+   return {id:theme.id,transparent:[...on,...off].every(b=>b.bg==='rgba(0, 0, 0, 0)'),brighter:on.every((b,i)=>(luminance(b.color)+.05)/(luminance(off[i].color)+.05)>=1.25)};
   });
- });
- expect(values).toHaveLength(20);expect(values.filter(v=>!v.off||!v.active)).toEqual([]);
+ },mobile);
+ expect(values).toHaveLength(20);expect(values.filter(v=>!v.transparent||!v.brighter)).toEqual([]);
 });

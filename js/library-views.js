@@ -123,7 +123,7 @@ function renderMobileAlbum(ui,container,tracks,playlist=null){
 const trackSortLabels={dateAdded:'По дате добавления',title:'По названию трека',artist:'По исполнителю',duration:'По длительности'};
 function makeSortControls(ui,mobile){
  const group=document.createElement('div');group.className='sort-controls';
- const sort=document.createElement('button');sort.className='collection-tool collection-sort';sort.innerHTML=icons.sort+(mobile?'':'Сортировать');sort.title=trackSortLabels[ui.sortBy];sort.setAttribute('aria-label','Сортировка треков');
+ const sort=document.createElement('button');sort.className='collection-tool collection-sort';sort.innerHTML=icons.sort+(mobile?'':'Сортировать');sort.title=trackSortLabels[ui.sortBy];if(mobile)sort.dataset.custom=String(!!ui.tableSortExplicit);sort.setAttribute('aria-label','Сортировка треков');
  sort.onclick=e=>showSurfaceMenu(ui,{title:'Сортировка треков',anchor:e.currentTarget,items:Object.entries(trackSortLabels).map(([value,label])=>({label,selected:ui.sortBy===value,icon:icons.sort,action:()=>changeTrackSort(ui,value,false,value===ui.sortBy?ui.sortAsc:undefined)}))});
  group.append(sort);
  if(mobile){const direction=document.createElement('button');direction.type='button';direction.className='sort-direction';

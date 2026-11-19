@@ -5,7 +5,7 @@ import {artworkTint,CoverTransition} from './artwork-atmosphere.js';
 import {bindSeekRange} from './playback-controls.js';
 import {icons} from './design-icons.js';
 
-export const INTERFACE_ITEMS=[1,2,6,7,8,9,10,11,12,13,14,16,17,18,19,20];
+export const INTERFACE_ITEMS=[1,2,6,7,8,10,11,12,13,14,16,17,18,19,20];
 const read=()=>{try{return JSON.parse(localStorage.getItem('playerium_interface_sidebar')||'{}');}catch{return {};}};
 const makeButton=(label,icon,action)=>{const b=document.createElement('button');b.type='button';b.setAttribute('aria-label',label);b.title=label;b.innerHTML=icon;b.onclick=action;return b;};
 export class InterfaceV2{

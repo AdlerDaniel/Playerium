@@ -75,11 +75,14 @@ body.keyboard-focus :is(button,input,select,textarea,[role="slider"],[role="butt
 .interface-refresh.is-mobile .topbar-right { flex:0 0 auto;width:auto;margin-left:auto;gap:0; }
 
 /* Readable playback modes across all palettes, including the monochrome theme. */
-#btnShuffle,#btnRepeat,#btnMobileFsShuffle,#btnMobileFsRepeat,.collection-shuffle {
- color:var(--sp-text-secondary)!important;opacity:1;border:0;box-shadow:none;
+#btnShuffle,#btnRepeat,#btnMobileFsShuffle,#btnMobileFsRepeat,.collection-shuffle,
+.queue-controls .queue-shuffle,.queue-controls .queue-repeat {
+ color:var(--control-inactive)!important;opacity:1;border:0;background:transparent!important;box-shadow:none;
 }
-#btnShuffle[aria-pressed="true"],#btnRepeat[aria-pressed="true"],#btnMobileFsShuffle[aria-pressed="true"],#btnMobileFsRepeat[aria-pressed="true"],.collection-shuffle[aria-pressed="true"] {
- color:var(--sp-green)!important;background:transparent;box-shadow:none;
+#btnShuffle[aria-pressed="true"],#btnRepeat[aria-pressed="true"],#btnMobileFsShuffle[aria-pressed="true"],
+#btnMobileFsRepeat[aria-pressed="true"],.collection-shuffle[aria-pressed="true"],
+.queue-controls .queue-shuffle[aria-pressed="true"],.queue-controls .queue-repeat[aria-pressed="true"] {
+ color:var(--control-active)!important;
 }
 #btnShuffle:after,#btnRepeat:after,#btnMobileFsShuffle:after,#btnMobileFsRepeat:after,.collection-shuffle:after { content:none!important; }
 button[aria-pressed="true"] .repeat-glyph { stroke-width:2.2; }
@@ -144,9 +147,8 @@ button[aria-pressed="true"] .repeat-glyph { stroke-width:2.2; }
 .mobile-library-title-row .mobile-library-actions { gap:0;margin-left:auto; }
 .mobile-library-title-row .mobile-library-actions button { min-width:40px;min-height:44px; }
 .mobile-library-actions .library-layout svg { width:20px;height:20px; }
-.is-mobile #mobileFullscreenPlayer #btnMobileFsShuffle[aria-pressed=true],
-.is-mobile #mobileFullscreenPlayer #btnMobileFsRepeat[aria-pressed=true],
-.is-mobile .mobile-album-playback .collection-shuffle[aria-pressed=true],
-.is-mobile .queue-controls [aria-pressed=true] { color:var(--sp-on-accent)!important;background:var(--sp-green);border-radius:9px;box-shadow:none; }
-.is-mobile #mobileFullscreenPlayer #btnMobileFsShuffle,
-.is-mobile #mobileFullscreenPlayer #btnMobileFsRepeat { border-radius:9px; }
+.is-mobile .sort-controls .library-sort,.is-mobile .sort-controls .collection-sort,.is-mobile .sort-controls .sort-direction {
+ color:var(--control-inactive);background:transparent!important;box-shadow:none;
+}
+.is-mobile .sort-controls .sort-direction,
+.is-mobile .sort-controls button[data-custom=true] { color:var(--control-active); }

@@ -47,8 +47,43 @@ test('custom avatar persists on restart and resets to the default icon',async({p
  await page.reload();await page.waitForFunction(()=>window.playerApp?.albumArt);await expect(page.locator('.profile-avatar img')).toHaveAttribute('src',src);await page.locator('#btnOpenSettings').click();await page.locator('[data-avatar-reset]').click();await expect(page.locator('.profile-avatar img')).toHaveCount(0);
 });
 test('shuffle and repeat use distinct colors in every palette, pointer clicks have no ring, full-volume glyph fits',async({page})=>{
- await ready(page);const styles=await page.evaluate(async()=>{const a=window.playerApp,{THEMES,applyTheme}=await import('/js/themes.js');return THEMES.map(t=>{applyTheme(t.id);a.player.isShuffle=false;a.player.onShuffleChange(false);a.player.onRepeatChange('off');const inactive=getComputedStyle(document.querySelector('#btnShuffle')).color;a.player.onShuffleChange(true);a.player.onRepeatChange('all');return {inactive,active:getComputedStyle(document.querySelector('#btnShuffle')).color,repeat:getComputedStyle(document.querySelector('#btnRepeat')).color,dot:getComputedStyle(document.querySelector('#btnShuffle'),'::after').content};});});for(const s of styles){expect(s.active).not.toBe(s.inactive);expect(s.repeat).toBe(s.active);expect(s.dot).toBe('none');}
+ await ready(page);const styles=await page.evaluate(async()=>{const a=window.playerApp,{THEMES,applyTheme}=await import('/js/themes.js');for(const b of document.querySelectorAll('#btnShuffle,#btnRepeat'))b.style.transition='none';return THEMES.map(t=>{applyTheme(t.id);a.player.isShuffle=false;a.player.onShuffleChange(false);a.player.onRepeatChange('off');const inactive=getComputedStyle(document.querySelector('#btnShuffle')).color;a.player.onShuffleChange(true);a.player.onRepeatChange('all');return {inactive,active:getComputedStyle(document.querySelector('#btnShuffle')).color,repeat:getComputedStyle(document.querySelector('#btnRepeat')).color,dot:getComputedStyle(document.querySelector('#btnShuffle'),'::after').content};});});for(const s of styles){expect(s.active).not.toBe(s.inactive);expect(s.repeat).toBe(s.active);expect(s.dot).toBe('none');}
  await page.locator('#btnShuffle').click();expect(await page.locator('#btnShuffle').evaluate(n=>getComputedStyle(n).outlineStyle)).toBe('none');
  await page.evaluate(()=>window.playerApp.player.setVolume(1));const rects=await page.locator('#btnVolumeIcon').evaluate(n=>{const svg=n.querySelector('svg');return {box:n.getBoundingClientRect().toJSON(),svg:svg.getBoundingClientRect().toJSON(),view:svg.getAttribute('viewBox')};});expect(rects.view).toBe('0 0 24 24');expect(rects.svg.width).toBe(24);expect(rects.svg.right).toBeLessThan(rects.box.right);await page.locator('#volumeSliderContainer').click();expect(await page.locator('#volumeSliderContainer').evaluate(n=>getComputedStyle(n).outlineStyle)).toBe('none');
  await page.keyboard.press('Tab');expect(await page.locator('body').evaluate(n=>n.classList.contains('keyboard-focus'))).toBe(true);
+});
+
+test('desktop playlists and profile stay fixed while scrolling through playing tracks',async({page})=>{
+ await ready(page,850);
+ const file=title=>{
+  const audio=Buffer.alloc(44+8000*30*2);
+  audio.write('RIFF');audio.writeUInt32LE(audio.length-8,4);audio.write('WAVEfmt ',8);
+  audio.writeUInt32LE(16,16);audio.writeUInt16LE(1,20);audio.writeUInt16LE(1,22);
+  audio.writeUInt32LE(8000,24);audio.writeUInt32LE(16000,28);audio.writeUInt16LE(2,32);
+  audio.writeUInt16LE(16,34);audio.write('data',36);audio.writeUInt32LE(audio.length-44,40);
+  return {name:'Fixture - '+title+'.wav',mimeType:'audio/wav',buffer:audio};
+ };
+ await page.locator('#hiddenAudioFilesPicker').setInputFiles([file('First'),file('Second')]);
+ await page.waitForFunction(()=>window.playerApp.library.getTracks().filter(t=>t.artist==='Fixture').length===2);
+ await page.locator('#sidebarList .library-album[aria-label="Добавленные"]').click();
+ await page.evaluate(async()=>{
+  const a=window.playerApp,list=a.library.getTracks().filter(t=>t.artist==='Fixture').sort((x,y)=>x.title.localeCompare(y.title));
+  for(let i=0;i<36;i++)a.library.tracks.set('scroll-'+i,{id:'scroll-'+i,title:'Scroll '+i,artist:'Fixture filler',dateAdded:i});
+  a.ui.refreshCurrentView();
+  await a.player.playTrack(list[0],0,list,{type:'allTracks',title:'Добавленные'});
+ });
+ await expect(page.locator('#nowPlayingTitle')).toHaveText('First');
+ const positions=()=>page.evaluate(()=>['#btnCreatePlaylist','#sidebarList','#btnOpenSettings'].map(s=>{
+  const {x,y,width,height}=document.querySelector(s).getBoundingClientRect();return [x,y,width,height];
+ }));
+ const before=await positions();
+ const scroller=page.locator('#mainScrollContainer');
+ await scroller.evaluate(el=>el.scrollTop=el.scrollHeight);
+ await expect.poll(()=>page.locator('.view-header').evaluate(hero=>hero.getBoundingClientRect().bottom<document.querySelector('#mainScrollContainer').getBoundingClientRect().top)).toBe(true);
+ await page.locator('#btnNext').click();
+ await expect(page.locator('#nowPlayingTitle')).toHaveText('Second');
+ await expect(page.locator('#btnOpenSettings')).toBeVisible();
+ expect(await positions()).toEqual(before);
+ await page.locator('#btnOpenSettings').click();
+ await expect(page.getByRole('dialog',{name:'Настройки',exact:true})).toBeVisible();
 });
