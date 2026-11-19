@@ -110,7 +110,10 @@ function renderMobileAlbum(ui,container,tracks,playlist=null){
  const heading=document.createElement('header');
  heading.className='view-header mobile-album-header';
  const name=playlist?.name||'Добавленные',duration=tracks.reduce((sum,t)=>sum+trackRange(t).duration,0);
- heading.innerHTML=`<div class="mobile-album-heading"><h1 class="view-title">${ui.escapeHTML(name)}</h1><button type="button" class="collection-more" aria-label="Действия с коллекцией">${icons.more}</button></div><div class="view-header-cover"></div><div class="mobile-album-controls"><div class="mobile-album-stats"><span>${new Intl.NumberFormat('ru').format(tracks.length)} треков</span><span>${ui.formatDurationHours(duration)}</span></div><div class="mobile-album-playback"><button type="button" class="collection-shuffle" aria-label="Перемешать">${icons.shuffle}</button><button type="button" id="btnHeroPlay" class="mobile-album-play" aria-label="Воспроизвести">${icons.play}</button></div></div>`;
+ heading.innerHTML=`<div class="mobile-album-heading"><button type="button" class="mobile-album-back" aria-label="Назад">${icons.arrowRight}</button><h1 class="view-title">${ui.escapeHTML(name)}</h1><button type="button" class="collection-more" aria-label="Действия с коллекцией">${icons.more}</button></div><div class="view-header-cover"></div><div class="mobile-album-controls"><div class="mobile-album-stats"><span>${new Intl.NumberFormat('ru').format(tracks.length)} треков</span><span>${ui.formatDurationHours(duration)}</span></div><div class="mobile-album-playback"><button type="button" class="collection-shuffle" aria-label="Перемешать">${icons.shuffle}</button><button type="button" id="btnHeroPlay" class="mobile-album-play" aria-label="Воспроизвести">${icons.play}</button></div></div>`;
+ heading.querySelector('.mobile-album-back').onclick=()=>{
+  if(ui.historyIndex>0)ui.navigateBack();else ui.navigateTo({type:'home',title:'Главная'});
+ };
  heading.querySelector('.collection-more').onclick=e=>collectionMenu(ui,{tracks,playlist,anchor:e.currentTarget});
  const cover=heading.querySelector('.view-header-cover'),art=playlist||addedArtwork(ui.library);
  mountPlaylistArt(cover,art,playlist?tracks:ui.library.getTracks());bindPlaylistCover(ui,cover,art);

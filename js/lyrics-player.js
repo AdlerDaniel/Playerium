@@ -1,3 +1,4 @@
+import {slideIn} from './sliding-transition.js';
 import {icons} from './design-icons.js';
 import {mountCover,retainArtwork} from './artwork.js';
 import {renderQueueList} from './queue-view.js';
@@ -29,7 +30,7 @@ export class LyricsPlayer{
   document.body.append(root);this.inert=[...document.body.children].filter(node=>node!==root&&!node.classList.contains('window-frame')&&!['SCRIPT','STYLE','LINK'].includes(node.tagName)).map(node=>[node,node.inert]);for(const [node]of this.inert)node.inert=true;
   this.track(this.player.currentTrack);this.queue();this.state();root.querySelector('button').focus({preventScroll:true});
  }
- tab(index){this.root.dataset.tab=index?'queue':'text';[...this.root.querySelectorAll('[role=tab]')].forEach((tab,i)=>{tab.setAttribute('aria-selected',String(i===index));tab.tabIndex=i===index?0:-1;});if(!index)this.scrollActive();}
+ tab(index){const next=index?'queue':'text';const previous=this.root.dataset.tab||'text';if(previous===next)return;this.root.dataset.tab=next;if(this.ui.isMobile)slideIn(this.root.querySelector(index?'#lyricsQueuePanel':'#lyricsTextPanel'),index?16:-16);[...this.root.querySelectorAll('[role=tab]')].forEach((tab,i)=>{tab.setAttribute('aria-selected',String(i===index));tab.tabIndex=i===index?0:-1;});if(!index)this.scrollActive();}
  close(){if(this.closed)return;this.closed=true;this.generation++;document.removeEventListener('keydown',this.documentKey,true);this.root.remove();for(const [node,inert]of this.inert)if(node.isConnected)node.inert=inert;this.experience.cinema=null;this.experience.lyricsPlayer=null;this.opener?.isConnected&&this.opener.focus({preventScroll:true});}
  async track(track,{refresh=false}={}){
   if(this.closed)return;mountCover(this.root.querySelector('.cinema-art'),track||{},true);mountCover(this.root.querySelector('.lyrics-backdrop'),track||{},true);this.root.querySelector('h1').textContent=track?.title||'Выберите трек';this.root.querySelector('.cinema-meta p').textContent=track?.artist||'';

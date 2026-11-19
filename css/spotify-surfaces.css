@@ -11,8 +11,6 @@ html { height: 100%; overflow: hidden; overflow: clip; }
 button, input, textarea, select { font-family: inherit; }
 input, textarea, select { color: var(--sp-text-primary); caret-color: var(--sp-text-primary); }
 button:focus-visible, [role="button"]:focus-visible, [role="link"]:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--sp-text-primary); outline-offset: 3px; }
-.view-enter { animation: view-enter 180ms var(--surface-motion); }
-@keyframes view-enter { from { opacity: .65; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 .card-cover { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; }
 .card-cover img { width: 100%; height: 100%; object-fit: cover; }
 .card-cover svg { width: 40%; height: 40%; fill: var(--sp-text-secondary); }
@@ -36,7 +34,7 @@ button:focus-visible, [role="button"]:focus-visible, [role="link"]:focus-visible
 .surface-panel .context-menu-item:hover { background: var(--sp-text-primary)1c; }
 .surface-panel .danger, .form-dialog .danger { color: #ff7c86; }
 .surface-overlay.closing { pointer-events: none; opacity: 0; transition: opacity 180ms; }
-@keyframes surface-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes surface-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 .dialog-field { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-size: 14px; font-weight: 600; }
 .dialog-field .search-input { border-radius: 4px; background: var(--sp-dark-400); color: var(--sp-text-primary); border: 1px solid transparent; min-height: 48px; padding: 12px; width: 100%; }
 .dialog-field textarea { height: 112px; resize: vertical; }
@@ -189,4 +187,4 @@ body[data-view="artist"] .view-header-details { z-index: 1; }
   .mobile-fs-scrubber { padding-top: 16px; }
   .mobile-fs-controls { padding-top: 12px; }
 }
-@media (prefers-reduced-motion: reduce) { .view-enter, .surface-panel, .right-panel { animation: none !important; } .mobile-fullscreen-player, .surface-overlay { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .surface-panel, .right-panel { animation: none !important; } .mobile-fullscreen-player, .surface-overlay { transition: none !important; } }

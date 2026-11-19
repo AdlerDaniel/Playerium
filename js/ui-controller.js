@@ -1,3 +1,4 @@
+import {slideIn} from './sliding-transition.js';
 import {viewFingerprint,captureViewState,restoreViewState} from './view-stability.js';
 import {mountCover,retainArtwork} from './artwork.js';
 import {collectionMenu,editPlaylist} from './collection-menu.js';
@@ -57,7 +58,7 @@ export class UIController {
     this.setupDropZone();
     // The native service can report a track before the WebView finishes loading.
     this.syncPlayerDisplay();
-    const restoreView=()=>{if(!document.hidden&&!this.voiceSearch?.active){document.getElementById('mainViewContent')?.classList.remove('view-enter');this.refreshCurrentView();}};
+    const restoreView=()=>{if(!document.hidden&&!this.voiceSearch?.active)this.refreshCurrentView();};
     document.addEventListener('visibilitychange',restoreView);window.addEventListener('pageshow',restoreView);
     setTimeout(() => this.updater.checkForUpdates(false), 2000);
   }
@@ -70,20 +71,12 @@ export class UIController {
 
   initMobileState() {
     this.isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
-    const profile=document.getElementById('btnOpenSettings'), desktopHost=profile.parentElement, dock=document.getElementById('mobileNavBar');
-    const placeProfile=()=>{
-      document.body.classList.toggle('is-mobile',this.isMobile);
-      profile.classList.toggle('mobile-nav-item',this.isMobile);
-      profile.setAttribute('aria-label',this.isMobile?'Профиль':'Настройки');
-      if(this.isMobile)profile.removeAttribute('data-tooltip');else profile.dataset.tooltip='Настройки';
-      (this.isMobile?dock:desktopHost).append(profile);
-    };
-    placeProfile();
+    document.body.classList.toggle('is-mobile',this.isMobile);
     window.addEventListener("resize", () => {
       const mobileNow = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
       if (mobileNow !== this.isMobile) {
         this.isMobile = mobileNow;
-        placeProfile();
+        document.body.classList.toggle('is-mobile',mobileNow);
         this.refreshCurrentView();
       }
     });
@@ -118,10 +111,9 @@ export class UIController {
       this.refreshCurrentView();
     });
 
-    // Topbar Settings button
-    document.getElementById("btnOpenSettings").addEventListener("click", () => {
-      this.openSettings();
-    });
+    for (const id of ["btnOpenSettings", "btnMobileProfile"]) {
+      document.getElementById(id).addEventListener("click", () => this.openSettings());
+    }
 
     // Sidebar '+' and 'Add Folder'
     document.getElementById("btnCreatePlaylist").addEventListener("click", () => this.showCreatePlaylistModal());
@@ -493,14 +485,14 @@ export class UIController {
     }
     this.history.push({ ...view });
     this.historyIndex = this.history.length - 1;
-    this.loadView(this.history[this.historyIndex]);
+    this.loadView(this.history[this.historyIndex], false, this.historyIndex > 0 ? 1 : 0);
     this.updateNavButtons();
   }
 
   navigateBack() {
     if (this.historyIndex > 0) {
       this.historyIndex--;
-      this.loadView(this.history[this.historyIndex]);
+      this.loadView(this.history[this.historyIndex], false, -1);
       this.updateNavButtons();
     }
   }
@@ -522,7 +514,7 @@ export class UIController {
   navigateForward() {
     if (this.historyIndex < this.history.length - 1) {
       this.historyIndex++;
-      this.loadView(this.history[this.historyIndex]);
+      this.loadView(this.history[this.historyIndex], false, 1);
       this.updateNavButtons();
     }
   }
@@ -543,7 +535,7 @@ export class UIController {
     this.loadView(this.currentView, true);
   }
 
-  loadView(view, preserveScroll = false) {
+  loadView(view, preserveScroll = false, direction = 0) {
     if(view.type==='settings')return this.openSettings();
     this.voiceSearch?.cancel();
     if(view.type==='liked')view={type:'allTracks',title:'Добавленные'};
@@ -604,7 +596,7 @@ export class UIController {
     this.viewSignature=viewFingerprint(this);
     syncPlaybackControls(this.player);
     this.updatePendingPlayback();
-    container.classList.remove('view-enter');
+    if (direction) slideIn(container, direction * 16);
     const header=container.querySelector('.view-header');
     if(header){header.classList.add('collection-header',`collection-${view.type}`);const cover=header.querySelector('img');if(cover){const color=()=>{if(!header.isConnected)return;try{const c=document.createElement('canvas');c.width=c.height=1;const ctx=c.getContext('2d');ctx.drawImage(cover,0,0,1,1);const [r,g,b]=ctx.getImageData(0,0,1,1).data;scroll.style.setProperty('--collection-color',`rgb(${r*.55},${g*.55},${b*.55})`);}catch{}};cover.complete?color():cover.addEventListener('load',color,{once:true});}}
   }
@@ -641,6 +633,7 @@ export class UIController {
     document.getElementById("rightPanel").classList.remove("hidden");
     document.getElementById("btnToggleQueue").classList.toggle("active", tab === "queue");
     this.switchRightTab(tab);
+    slideIn(document.getElementById("rightPanel"), this.isMobile ? 0 : 14, this.isMobile ? 16 : 0);
   }
 
   closeRightPanel() {

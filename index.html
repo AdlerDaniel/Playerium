@@ -40,7 +40,7 @@
   <link rel="stylesheet" href="css/track-editor.css">
   <link rel="stylesheet" href="css/lyrics-player.css">
 </head>
-<body>
+<body class="interface-refresh">
   <div id="app">
         <header class="topbar" id="mainTopbar">
           <div class="topbar-left">
@@ -65,7 +65,7 @@
               <div id="sidebarList" class="library-albums"></div>
             </nav>
             <button class="topbar-btn" id="btnOpenSettings" data-tooltip="Настройки" aria-label="Настройки">
-<span class="profile-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg></span><span class="profile-tab-label">Профиль</span>
+<span class="profile-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg></span>
             </button>
           </div>
         </header>
@@ -212,6 +212,9 @@
       </button>
       <button class="mobile-nav-item" id="mobileNavCreate" aria-label="Создать">
         <svg viewBox="0 0 24 24"><path d="M11 3h2v8h8v2h-8v8h-2v-8H3v-2h8z"/></svg><span>Создать</span>
+      </button>
+      <button type="button" class="mobile-nav-item mobile-profile" id="btnMobileProfile" aria-label="Профиль">
+        <span class="profile-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg></span><span>Профиль</span>
       </button>
     </nav>
 

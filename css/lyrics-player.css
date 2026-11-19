@@ -29,3 +29,5 @@ body.custom-window:not(.window-fullscreen) .cinema-overlay.lyrics-player{top:36p
 .lyrics-player .queue-list .queue-item.dragging { background:#282332; }
 .lyrics-player .cinema-controls .cinema-shuffle,.lyrics-player .cinema-controls .cinema-repeat { color:var(--cinema-control-inactive);background:transparent; }
 .lyrics-player .cinema-controls .cinema-shuffle[aria-pressed=true],.lyrics-player .cinema-controls .cinema-repeat[aria-pressed=true] { color:var(--cinema-control-active);background:transparent; }
+
+.lyrics-player .lyrics-text-panel,.lyrics-player .lyrics-queue-panel { animation:panel-slide-in 190ms var(--ease-out); }

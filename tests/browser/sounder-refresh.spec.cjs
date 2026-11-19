@@ -19,7 +19,7 @@ for(const width of [800,1280])test(`album rail and profile fit ${width}, albums 
 for(const width of [320,390,740])test(`Android retains its named library and filters at ${width}`,async({page},info)=>{
  await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{value:'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Mobile'}));
  await ready(page,width);await expect(page.locator('.top-library')).toBeHidden();await expect(page.locator('.library-album')).toHaveCount(0);await expect(page.locator('.mobile-library-pills')).toHaveCount(0);
- await expect(page.locator('#mainTopbar')).toBeHidden();await expect(page.locator('#mobileNavBar #btnOpenSettings')).toBeVisible();await expect(page.locator('.mobile-library-title')).toHaveText('Моя медиатека');await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные',...Array.from({length:8},(_,i)=>'Playlist '+i)]);
+ await expect(page.locator('#mainTopbar')).toBeHidden();await expect(page.locator('#btnMobileProfile')).toBeVisible();await expect(page.locator('.mobile-library-title')).toHaveText('Моя медиатека');await expect(page.locator('.mobile-lib-name')).toHaveText(['Добавленные',...Array.from({length:8},(_,i)=>'Playlist '+i)]);
  await page.locator('.library-search-toggle').click();await page.getByRole('searchbox',{name:'Найти в медиатеке'}).fill('Playlist 3');await expect(page.locator('.mobile-lib-name')).toHaveText('Playlist 3');await page.getByRole('button',{name:'Закрыть поиск',exact:true}).click();
  await page.locator('#mobileNavCreate').click();await page.getByRole('button',{name:'Плейлист',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Создать плейлист'});await page.getByLabel('Название',{exact:true}).fill('Android playlist');await dialog.getByRole('button',{name:'Сохранить',exact:true}).click();
  await page.locator('#mobileNavHome').click();await expect(page.locator('.mobile-lib-name')).toContainText(['Android playlist']);await page.screenshot({path:info.outputPath('android-library.png')});
@@ -43,8 +43,8 @@ test('all palettes map to semantic colors and offer ten accent choices in both m
 });
 test('custom avatar persists on restart and resets to the default icon',async({page})=>{
  await ready(page);await page.locator('#btnOpenSettings').click();
- const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5i8AAAAASUVORK5CYII=','base64');await page.locator('.profile-image-settings input').setInputFiles({name:'profile.png',mimeType:'image/png',buffer:png});await expect(page.locator('.profile-avatar img')).toHaveAttribute('src',/^data:image\/png/);const src=await page.locator('.profile-avatar img').getAttribute('src');
- await page.reload();await page.waitForFunction(()=>window.playerApp?.albumArt);await expect(page.locator('.profile-avatar img')).toHaveAttribute('src',src);await page.locator('#btnOpenSettings').click();await page.locator('[data-avatar-reset]').click();await expect(page.locator('.profile-avatar img')).toHaveCount(0);
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5i8AAAAASUVORK5CYII=','base64');await page.locator('.profile-image-settings input').setInputFiles({name:'profile.png',mimeType:'image/png',buffer:png});await expect(page.locator('#btnOpenSettings .profile-avatar img')).toHaveAttribute('src',/^data:image\/png/);const src=await page.locator('#btnOpenSettings .profile-avatar img').getAttribute('src');
+ await page.reload();await page.waitForFunction(()=>window.playerApp?.albumArt);await expect(page.locator('#btnOpenSettings .profile-avatar img')).toHaveAttribute('src',src);await page.locator('#btnOpenSettings').click();await page.locator('[data-avatar-reset]').click();await expect(page.locator('#btnOpenSettings .profile-avatar img')).toHaveCount(0);
 });
 test('shuffle and repeat use distinct colors in every palette, pointer clicks have no ring, full-volume glyph fits',async({page})=>{
  await ready(page);const styles=await page.evaluate(async()=>{const a=window.playerApp,{THEMES,applyTheme}=await import('/js/themes.js');for(const b of document.querySelectorAll('#btnShuffle,#btnRepeat'))b.style.transition='none';return THEMES.map(t=>{applyTheme(t.id);a.player.isShuffle=false;a.player.onShuffleChange(false);a.player.onRepeatChange('off');const inactive=getComputedStyle(document.querySelector('#btnShuffle')).color;a.player.onShuffleChange(true);a.player.onRepeatChange('all');return {inactive,active:getComputedStyle(document.querySelector('#btnShuffle')).color,repeat:getComputedStyle(document.querySelector('#btnRepeat')).color,dot:getComputedStyle(document.querySelector('#btnShuffle'),'::after').content};});});for(const s of styles){expect(s.active).not.toBe(s.inactive);expect(s.repeat).toBe(s.active);expect(s.dot).toBe('none');}
@@ -86,4 +86,20 @@ test('desktop playlists and profile stay fixed while scrolling through playing t
  expect(await positions()).toEqual(before);
  await page.locator('#btnOpenSettings').click();
  await expect(page.getByRole('dialog',{name:'Настройки',exact:true})).toBeVisible();
+});
+
+test('Android shows every navigation button before the library initializes',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ let resume;const blocked=new Promise(resolve=>{resume=resolve;});
+ await page.route('**/js/app.js',async route=>{await blocked;await route.continue();});
+ await page.goto('/',{waitUntil:'commit'});
+ try{
+  const buttons=page.locator('#mobileNavBar > button');
+  await expect(buttons).toHaveText(['Главная','Поиск','Создать','Профиль']);
+  for(const button of await buttons.all())await expect(button).toBeVisible();
+  const avatar=page.locator('#btnMobileProfile .profile-avatar');
+  await expect(avatar).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+  await expect(avatar.locator('svg')).toBeVisible();
+ }finally{resume();}
+ await page.waitForFunction(()=>window.playerApp?.albumArt);
 });

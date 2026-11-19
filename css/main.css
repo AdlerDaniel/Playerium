@@ -289,12 +289,12 @@ button {
   flex-direction: column;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
   overflow: hidden;
-  transform: scale(0.95);
+  transform: translateY(14px);
   opacity: 0;
   transition: transform 0.2s var(--ease-out), opacity 0.2s var(--ease-out);
 }
 .modal-overlay.active .modal-card {
-  transform: scale(1);
+  transform: none;
   opacity: 1;
 }
 .modal-header {

@@ -38,6 +38,7 @@ class App {
       window.playerApp = this;
       initWindowFrame().catch(console.warn);
 
+      updateProfileAvatar();
       await this.library.init();
       await hydratePortraits(this.library);
       await hydrateCollectionArtwork(this.library);
@@ -46,7 +47,6 @@ class App {
       const restoreTask=window.AndroidBridge?this.music.restore():null;
       this.player.loadSavedPreferences();
       this.ui.init();
-      updateProfileAvatar();
       installVisualExperience(this.ui);
       installInterfaceV2(this.ui);
       installInterfaceRefresh(this.ui);

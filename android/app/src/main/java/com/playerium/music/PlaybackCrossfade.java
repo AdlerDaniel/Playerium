@@ -1,142 +1,153 @@
 package com.playerium.music;
 
 import android.os.Handler;
-import android.os.SystemClock;
 import androidx.media3.common.C;
-import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
-import java.util.Objects;
 
-/** Keeps the MediaSession player authoritative while a second decoder mixes in the next song. */
-@androidx.annotation.OptIn(markerClass=androidx.media3.common.util.UnstableApi.class)
+/** Mixes two decks and promotes the one already playing when the songs cross. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 final class PlaybackCrossfade {
- interface DeckFactory { ExoPlayer create(MediaItem item); }
+    interface DeckFactory { Deck create(int index); }
+    interface DeckPromotion { void promote(Deck deck); }
 
- private final ExoPlayer main;
- private final Handler handler;
- private final DeckFactory factory;
- private final Runnable clock=this::tick;
- private ExoPlayer incoming;
- private MediaItem nextItem;
- private int fromIndex=C.INDEX_UNSET, nextIndex=C.INDEX_UNSET;
- private static final long HANDOFF_PREROLL_MS=100, HANDOFF_BLEND_MS=90, HANDOFF_TIMEOUT_MS=4000;
- private long overlap, incomingStart, handoffPosition, handoffDeadline, handoffBlendStart;
- private float mainMix;
- private boolean issuingSeek;
- private boolean started, handingOff, failed;
- private int seconds;
- private float volume=.8f;
+    static final class Deck {
+        final ExoPlayer player;
+        final TrackVolumeProcessor gain;
 
- PlaybackCrossfade(ExoPlayer main,Handler handler,DeckFactory factory){
-  this.main=main;this.handler=handler;this.factory=factory;
- }
-
- int seconds(){return seconds;}
- float volume(){return volume;}
-
- void configure(int seconds){
-  int value=Math.max(0,Math.min(10,seconds));
-  if(this.seconds!=value){this.seconds=value;cancel();}
-  wake();
- }
-
- void setVolume(double value){
-  volume=(float)Math.max(0,Math.min(1,value));applyVolume();
- }
-
- void wake(){
-  handler.removeCallbacks(clock);
-  if(seconds>0&&main.getPlayWhenReady())handler.post(clock);
- }
-
- void cancel(){
-  clearDeck();failed=false;fromIndex=C.INDEX_UNSET;main.setVolume(volume);
- }
-
- void release(){handler.removeCallbacks(clock);clearDeck();}
-
- private void clearDeck(){
-  if(incoming!=null){incoming.release();incoming=null;}
-  nextItem=null;nextIndex=C.INDEX_UNSET;started=false;handingOff=false;issuingSeek=false;
-  handoffPosition=C.TIME_UNSET;handoffBlendStart=C.TIME_UNSET;mainMix=0;
- }
-
- void discontinuity(Player.PositionInfo old,Player.PositionInfo next,int reason){
-  if(handingOff&&next.mediaItemIndex==nextIndex&&(issuingSeek
-      ||reason==Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT
-      ||reason==Player.DISCONTINUITY_REASON_AUTO_TRANSITION&&old.mediaItemIndex==fromIndex))return;
-  if(reason==Player.DISCONTINUITY_REASON_AUTO_TRANSITION&&started&&next.mediaItemIndex==nextIndex&&incoming.isPlaying()){
-   // Media3 can advance on its own before the last mixing tick runs.
-   handOff();return;
-  }
-  cancel();wake();
- }
-
- private void handOff(){
-  if(handingOff)return;
-  handingOff=true;mainMix=0;handoffPosition=C.TIME_UNSET;handoffBlendStart=C.TIME_UNSET;
-  handoffDeadline=SystemClock.elapsedRealtime()+HANDOFF_TIMEOUT_MS;applyVolume();
-  handler.post(()->{
-   if(!handingOff)return;
-   handoffPosition=incoming.getCurrentPosition();
-   issuingSeek=true;
-   try{main.seekTo(nextIndex,handoffPosition);}finally{issuingSeek=false;}
-   wake();
-  });
- }
-
- private void applyVolume(){
-  if(incoming==null||!started){main.setVolume(volume);return;}
-  float fraction=handingOff?1f-mainMix:(float)Math.max(0,Math.min(1,(incoming.getCurrentPosition()-incomingStart)/(double)overlap));
-  main.setVolume(volume*(1-fraction));incoming.setVolume(volume*fraction);
- }
-
- private void fail(){clearDeck();failed=true;main.setVolume(volume);}
-
- private void tick(){
-  if(seconds<=0||!main.getPlayWhenReady())return;
-  if(main.getPlaybackSuppressionReason()!=Player.PLAYBACK_SUPPRESSION_REASON_NONE){cancel();handler.postDelayed(clock,200);return;}
-  if(handingOff){
-   // READY can be reported before the new AudioTrack has presented a sample.
-   // Keep the already audible deck until the destination playhead progresses.
-   if(incoming==null||incoming.getPlayerError()!=null||incoming.getPlaybackState()==Player.STATE_ENDED
-       ||SystemClock.elapsedRealtime()>=handoffDeadline){cancel();wake();return;}
-   long position=main.getCurrentPosition();
-   if(handoffPosition!=C.TIME_UNSET&&main.getCurrentMediaItemIndex()==nextIndex
-       &&main.isPlaying()&&position>=handoffPosition+HANDOFF_PREROLL_MS){
-    if(handoffBlendStart==C.TIME_UNSET)handoffBlendStart=position;
-    mainMix=Math.min(1,(position-handoffBlendStart)/(float)HANDOFF_BLEND_MS);
-   }else{handoffBlendStart=C.TIME_UNSET;mainMix=0;}
-   applyVolume();
-   if(mainMix>=1){cancel();wake();}else handler.postDelayed(clock,15);
-   return;
-  }
-  int current=main.getCurrentMediaItemIndex(),next=main.getNextMediaItemIndex();
-  if(current!=fromIndex){cancel();fromIndex=current;}
-  if(next==C.INDEX_UNSET||next==current||main.getRepeatMode()==Player.REPEAT_MODE_ONE){cancel();return;}
-  MediaItem item=main.getMediaItemAt(next);
-  if(incoming!=null&&(next!=nextIndex||!item.mediaId.equals(nextItem.mediaId)||!Objects.equals(item.localConfiguration,nextItem.localConfiguration)))cancel();
-  long duration=main.getDuration();
-  long left=duration==C.TIME_UNSET?Long.MAX_VALUE:duration-main.getCurrentPosition();
-  if(!main.isPlaying()){
-   if(started&&incoming.isPlaying()&&left<=65)handOff();
-   else if(started){applyVolume();}
-  }else if(!failed&&left>0&&left<=seconds*1000L+5500){
-   if(incoming==null){
-    try{incoming=factory.create(item);nextItem=item;nextIndex=next;fromIndex=current;}
-    catch(RuntimeException error){fail();}
-   }else if(incoming.getPlayerError()!=null||incoming.getPlaybackState()==Player.STATE_ENDED)fail();
-   else if(!started&&incoming.getPlaybackState()==Player.STATE_READY){
-    long nextDuration=incoming.getDuration();
-    if(nextDuration>300&&left<=Math.min(seconds*1000L,nextDuration/2)){
-     overlap=left;incomingStart=incoming.getCurrentPosition();started=true;incoming.play();
+        Deck(ExoPlayer player, TrackVolumeProcessor gain) {
+            this.player = player;
+            this.gain = gain;
+        }
     }
-   }else if(started){
-    applyVolume();
-    if(left<=65&&incoming.isPlaying())handOff();
-   }
-  }
-  handler.postDelayed(clock,started?30:Math.min(220,Math.max(35,left-seconds*1000L)));
- }
+
+    private ExoPlayer main;
+    private final Handler handler;
+    private final DeckFactory factory;
+    private final DeckPromotion promotion;
+    private final Runnable clock = this::tick;
+    private Deck incoming;
+    private int fromIndex = C.INDEX_UNSET, nextIndex = C.INDEX_UNSET;
+    private long overlap, incomingStart;
+    private boolean started, failed;
+    private int seconds;
+    private float volume = .8f;
+
+    PlaybackCrossfade(ExoPlayer main, Handler handler, DeckFactory factory, DeckPromotion promotion) {
+        this.main = main;
+        this.handler = handler;
+        this.factory = factory;
+        this.promotion = promotion;
+    }
+
+    int seconds() { return seconds; }
+    float volume() { return volume; }
+
+    void configure(int seconds) {
+        int value = Math.max(0, Math.min(10, seconds));
+        if (this.seconds != value) { this.seconds = value; cancel(); }
+        wake();
+    }
+
+    void setVolume(double value) {
+        volume = (float) Math.max(0, Math.min(1, value));
+        applyVolume();
+    }
+
+    void wake() {
+        handler.removeCallbacks(clock);
+        if (seconds > 0 && main.getPlayWhenReady()) handler.post(clock);
+    }
+
+    void cancel() {
+        clearDeck();
+        failed = false;
+        fromIndex = C.INDEX_UNSET;
+        main.setVolume(volume);
+    }
+
+    void release() {
+        handler.removeCallbacks(clock);
+        clearDeck();
+    }
+
+    private void clearDeck() {
+        if (incoming != null) incoming.player.release();
+        incoming = null;
+        nextIndex = C.INDEX_UNSET;
+        started = false;
+    }
+
+    void discontinuity(Player.PositionInfo old, Player.PositionInfo next, int reason) {
+        if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION && old.mediaItemIndex == fromIndex
+                && next.mediaItemIndex == nextIndex && incomingPlaying()) {
+            handOff();
+            return;
+        }
+        cancel();
+        wake();
+    }
+
+    private boolean incomingPlaying() {
+        return started && incoming.player.isPlaying() && incoming.player.getCurrentPosition() > incomingStart;
+    }
+
+    private void handOff() {
+        Deck next = incoming;
+        incoming = null;
+        started = false;
+        failed = false;
+        nextIndex = C.INDEX_UNSET;
+        main = next.player;
+        fromIndex = main.getCurrentMediaItemIndex();
+        main.setVolume(volume);
+        // Transfer the existing stream to the session without a seek or a new decoder.
+        promotion.promote(next);
+        wake();
+    }
+
+    private void applyVolume() {
+        if (!started) { main.setVolume(volume); return; }
+        float mix = (float) Math.max(0, Math.min(1, (incoming.player.getCurrentPosition() - incomingStart) / (double) overlap));
+        main.setVolume(volume * (1 - mix));
+        incoming.player.setVolume(volume * mix);
+    }
+
+    private void tick() {
+        if (seconds <= 0 || !main.getPlayWhenReady()) return;
+        if (main.getPlaybackSuppressionReason() != Player.PLAYBACK_SUPPRESSION_REASON_NONE) {
+            cancel();
+            return;
+        }
+        int current = main.getCurrentMediaItemIndex(), next = main.getNextMediaItemIndex();
+        if (current != fromIndex || incoming != null && next != nextIndex) { cancel(); fromIndex = current; }
+        if (next == C.INDEX_UNSET || next == current || main.getRepeatMode() == Player.REPEAT_MODE_ONE) {
+            cancel();
+            return;
+        }
+        long duration = main.getDuration();
+        long remaining = duration == C.TIME_UNSET ? Long.MAX_VALUE : duration - main.getCurrentPosition();
+        if (started && incomingPlaying() && remaining <= 40) { handOff(); return; }
+        if (!failed && main.isPlaying() && remaining > 0 && remaining <= seconds * 1000L + 5500) {
+            if (incoming == null) {
+                try { incoming = factory.create(next); nextIndex = next; }
+                catch (RuntimeException error) { failed = true; }
+            } else if (incoming.player.getPlayerError() != null || incoming.player.getPlaybackState() == Player.STATE_ENDED) {
+                clearDeck();
+                main.setVolume(volume);
+                failed = true;
+            } else if (!started && incoming.player.getPlaybackState() == Player.STATE_READY) {
+                long nextDuration = incoming.player.getDuration();
+                if (nextDuration > 300 && remaining <= Math.min(seconds * 1000L, nextDuration / 2)) {
+                    overlap = remaining;
+                    incomingStart = incoming.player.getCurrentPosition();
+                    started = true;
+                    incoming.player.play();
+                }
+            } else if (started) {
+                applyVolume();
+            }
+        }
+        handler.postDelayed(clock, started ? 25 : Math.min(200, Math.max(25, remaining - seconds * 1000L)));
+    }
 }

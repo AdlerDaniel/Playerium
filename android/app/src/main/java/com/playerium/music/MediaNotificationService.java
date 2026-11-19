@@ -50,7 +50,9 @@ public class MediaNotificationService extends MediaSessionService {
     }
     private ExoPlayer player;
     private PlaybackCrossfade crossfade;
-    private final TrackVolumeProcessor trackVolumeProcessor=new TrackVolumeProcessor();
+    private TrackVolumeProcessor trackVolumeProcessor;
+    private final AudioAttributes playbackAttributes = new AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build();
     private final java.util.Random shuffleRandom=new java.security.SecureRandom();
     private MediaSession session;
     private final java.util.concurrent.ExecutorService artworkWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -93,46 +95,12 @@ public class MediaNotificationService extends MediaSessionService {
         instance=this;
         playbackPrefs=getSharedPreferences("playerium_playback",MODE_PRIVATE);
 
-        androidx.media3.datasource.DataSource.Factory source=()->new LocalAudioDataSource(this,new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource());
-        androidx.media3.exoplayer.DefaultLoadControl loadControl=new androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(5000,20000,150,300).setPrioritizeTimeOverSizeThresholds(true).build();
-        player = new ExoPlayer.Builder(this,renderers(trackVolumeProcessor)).setLoadControl(loadControl).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
-        crossfade=new PlaybackCrossfade(player,handler,item->{
-            TrackVolumeProcessor gain=new TrackVolumeProcessor();gain.setGain(trackGain(item));
-            ExoPlayer deck=new ExoPlayer.Builder(this,renderers(gain)).setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
-            deck.setAudioAttributes(player.getAudioAttributes(),false);deck.setVolume(0);deck.setMediaItem(item);deck.prepare();return deck;
-        });
-        player.addAnalyticsListener(new androidx.media3.exoplayer.analytics.AnalyticsListener(){
-            @Override public void onAudioPositionAdvancing(EventTime time,long playoutStartSystemTimeMs){
-                String id=time.timeline.isEmpty()?"":time.timeline.getWindow(time.windowIndex,new androidx.media3.common.Timeline.Window()).mediaItem.mediaId;
-                if(requestedStartAt>0&&startLatencyMs<0&&requestedStartId.equals(id)){startLatencyMs=Math.max(0,playoutStartSystemTimeMs-requestedStartAt);android.util.Log.i("PlayeriumStart","audioMs="+startLatencyMs+" queue="+player.getMediaItemCount());}
-            }
-        });
-        player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true);
-        player.setHandleAudioBecomingNoisy(true);
-        player.setWakeMode(C.WAKE_MODE_LOCAL);
-        player.addListener(new Player.Listener() {
-            @Override public void onPlayerError(PlaybackException exception) {
-                android.util.Log.e("PlayeriumPlayback",exception.getErrorCodeName(),exception);
-                if(exception.errorCode==PlaybackException.ERROR_CODE_IO_NO_PERMISSION)error="Нет доступа к файлу. Выберите папку с музыкой ещё раз.";
-                else if(exception.errorCode==PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)error="Файл перемещён или удалён. Добавьте папку с его новым расположением.";
-                else if(exception.errorCode>=3000&&exception.errorCode<5000)error="Не удалось прочитать аудиозапись. Файл повреждён или его формат не поддерживается.";
-                else if(exception.errorCode>=5000&&exception.errorCode<6000)error="Не удалось запустить вывод звука. Попробуйте снова или смените аудиоустройство.";
-                else error="Не удалось воспроизвести файл. Попробуйте выбрать его снова.";
-                player.pause(); // An unreadable playlist must not create an endless retry loop.
-            }
-            @Override public void onMediaItemTransition(MediaItem item,int reason){applyTrackVolume();refreshArtwork();}
-            @Override public void onPositionDiscontinuity(Player.PositionInfo old,Player.PositionInfo next,int reason){crossfade.discontinuity(old,next,reason);}
-            @Override public void onPlayWhenReadyChanged(boolean play,int reason){if(!play)crossfade.cancel();crossfade.wake();}
-            @Override public void onPlaybackSuppressionReasonChanged(int reason){if(reason!=Player.PLAYBACK_SUPPRESSION_REASON_NONE)crossfade.cancel();crossfade.wake();}
-            @Override public void onRepeatModeChanged(int mode){crossfade.wake();}
-            @Override public void onShuffleModeEnabledChanged(boolean enabled){crossfade.wake();}
-            @Override public void onEvents(Player ignored,Player.Events events) {
-                if(events.size()==1&&events.contains(Player.EVENT_VOLUME_CHANGED))return;
-                updateMediaButtons();
-                savePlayback();JSONObject data=state();stateSnapshot=data.toString();
-                MainActivity activity=MainActivity.getInstance();if(activity!=null&&activity.isForeground())activity.sendPlayerState(data);
-            }
-        });
+        PlaybackCrossfade.Deck initial = createDeck();
+        player = initial.player;
+        trackVolumeProcessor = initial.gain;
+        crossfade = new PlaybackCrossfade(player, handler, this::prepareNextDeck, this::promoteDeck);
+        player.setAudioAttributes(playbackAttributes, true);
+        player.addListener(playbackListener);
         PendingIntent activityIntent=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         session = new MediaSession.Builder(this, player).setSessionActivity(activityIntent)
@@ -163,6 +131,99 @@ public class MediaNotificationService extends MediaSessionService {
         updateMediaButtons();
         if(pendingQueue.get()==null)restorePlayback();
         handler.post(publishState);
+    }
+
+    private final Player.Listener playbackListener = new Player.Listener() {
+            @Override public void onPlayerError(PlaybackException exception) {
+                android.util.Log.e("PlayeriumPlayback",exception.getErrorCodeName(),exception);
+                if(exception.errorCode==PlaybackException.ERROR_CODE_IO_NO_PERMISSION)error="Нет доступа к файлу. Выберите папку с музыкой ещё раз.";
+                else if(exception.errorCode==PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)error="Файл перемещён или удалён. Добавьте папку с его новым расположением.";
+                else if(exception.errorCode>=3000&&exception.errorCode<5000)error="Не удалось прочитать аудиозапись. Файл повреждён или его формат не поддерживается.";
+                else if(exception.errorCode>=5000&&exception.errorCode<6000)error="Не удалось запустить вывод звука. Попробуйте снова или смените аудиоустройство.";
+                else error="Не удалось воспроизвести файл. Попробуйте выбрать его снова.";
+                player.pause(); // An unreadable playlist must not create an endless retry loop.
+            }
+            @Override public void onMediaItemTransition(MediaItem item,int reason){applyTrackVolume();refreshArtwork();}
+            @Override public void onPositionDiscontinuity(Player.PositionInfo old,Player.PositionInfo next,int reason){crossfade.discontinuity(old,next,reason);}
+            @Override public void onPlayWhenReadyChanged(boolean play,int reason){if(!play)crossfade.cancel();crossfade.wake();}
+            @Override public void onPlaybackSuppressionReasonChanged(int reason){if(reason!=Player.PLAYBACK_SUPPRESSION_REASON_NONE)crossfade.cancel();crossfade.wake();}
+            @Override public void onRepeatModeChanged(int mode){crossfade.cancel();crossfade.wake();}
+            @Override public void onShuffleModeEnabledChanged(boolean enabled){crossfade.cancel();crossfade.wake();}
+        @Override public void onEvents(Player current, Player.Events events) {
+            if (current == player && !(events.size() == 1 && events.contains(Player.EVENT_VOLUME_CHANGED))) publishPlaybackChange();
+        }
+    };
+
+    private void publishPlaybackChange() {
+        updateMediaButtons();
+        savePlayback();
+        JSONObject data = state();
+        stateSnapshot = data.toString();
+        MainActivity activity = MainActivity.getInstance();
+        if (activity != null && activity.isForeground()) activity.sendPlayerState(data);
+    }
+
+    private PlaybackCrossfade.Deck createDeck() {
+        TrackVolumeProcessor gain = new TrackVolumeProcessor();
+        androidx.media3.datasource.DataSource.Factory source = () -> new LocalAudioDataSource(this,
+            new androidx.media3.datasource.DefaultDataSource.Factory(this).createDataSource());
+        androidx.media3.exoplayer.DefaultLoadControl loadControl = new androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(5000, 20000, 150, 300).setPrioritizeTimeOverSizeThresholds(true).build();
+        ExoPlayer deck = new ExoPlayer.Builder(this, renderers(gain)).setLoadControl(loadControl)
+            .setMediaSourceFactory(new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(source)).build();
+        deck.setAudioAttributes(playbackAttributes, false);
+        deck.setHandleAudioBecomingNoisy(true);
+        deck.setWakeMode(C.WAKE_MODE_LOCAL);
+        deck.addAnalyticsListener(new androidx.media3.exoplayer.analytics.AnalyticsListener() {
+            @Override public void onAudioPositionAdvancing(EventTime time, long playoutStartSystemTimeMs) {
+                if (deck != player || requestedStartAt <= 0 || startLatencyMs >= 0 || time.timeline.isEmpty()) return;
+                String id = time.timeline.getWindow(time.windowIndex, new androidx.media3.common.Timeline.Window()).mediaItem.mediaId;
+                if (requestedStartId.equals(id)) {
+                    startLatencyMs = Math.max(0, playoutStartSystemTimeMs - requestedStartAt);
+                    android.util.Log.i("PlayeriumStart", "audioMs=" + startLatencyMs + " queue=" + deck.getMediaItemCount());
+                }
+            }
+        });
+        return new PlaybackCrossfade.Deck(deck, gain);
+    }
+
+    private PlaybackCrossfade.Deck prepareNextDeck(int index) {
+        List<MediaItem> items = new ArrayList<>();
+        for (int item = 0; item < player.getMediaItemCount(); item++) items.add(player.getMediaItemAt(item));
+        PlaybackCrossfade.Deck next = createDeck();
+        try {
+            next.gain.setGain(trackGain(items.get(index)));
+            next.player.setVolume(0);
+            next.player.setMediaItems(items, index, 0);
+            next.player.setRepeatMode(player.getRepeatMode());
+            if (player.getShuffleModeEnabled()) {
+                JSONArray order = playbackOrder();
+                int[] indices = new int[order.length()];
+                for (int position = 0; position < indices.length; position++) indices[position] = order.optInt(position);
+                next.player.setShuffleOrder(new androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(indices, shuffleRandom.nextLong()));
+                next.player.setShuffleModeEnabled(true);
+            }
+            next.player.prepare();
+            return next;
+        } catch (RuntimeException error) {
+            next.player.release();
+            throw error;
+        }
+    }
+
+    private void promoteDeck(PlaybackCrossfade.Deck next) {
+        ExoPlayer previous = player;
+        previous.removeListener(playbackListener);
+        previous.setVolume(0);
+        previous.setAudioAttributes(playbackAttributes, false);
+        player = next.player;
+        trackVolumeProcessor = next.gain;
+        player.setAudioAttributes(playbackAttributes, true);
+        session.setPlayer(player);
+        player.addListener(playbackListener);
+        previous.release();
+        refreshArtwork();
+        publishPlaybackChange();
     }
 
     private androidx.media3.exoplayer.DefaultRenderersFactory renderers(TrackVolumeProcessor processor){

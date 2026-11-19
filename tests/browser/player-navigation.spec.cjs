@@ -23,7 +23,7 @@ test('mobile home, album layout, manual collage, and two-way track sorting',asyn
  await expect(page.locator('#mobileNavBar > button')).toHaveText(['Главная','Поиск','Создать','Профиль']);
  await expect(page.locator('.home-dashboard,.mobile-library-pills')).toHaveCount(0);
  await expect(page.locator('#mainTopbar')).toBeHidden();
- await page.locator('#mobileNavBar #btnOpenSettings').click();await expect(page.getByRole('dialog',{name:'Настройки'})).toBeVisible();
+ await page.locator('#btnMobileProfile').click();await expect(page.getByRole('dialog',{name:'Настройки'})).toBeVisible();
  await page.locator('.settings-close').click();
  const positions=await page.locator('.mobile-library-actions').evaluate(el=>[...el.children].slice(0,2).map(n=>n.getBoundingClientRect().left));
  expect(positions[0]).toBeLessThan(positions[1]);
@@ -33,11 +33,16 @@ test('mobile home, album layout, manual collage, and two-way track sorting',asyn
  const album=page.locator('.mobile-album-header');
  await expect(album.locator('.view-header-cover')).toBeVisible();
  await expect(album.locator('.mobile-album-stats')).toContainText('3 треков');
- const boxes=await album.evaluate(el=>['.mobile-album-heading','.view-header-cover','.mobile-album-tools','.mobile-album-stats','.mobile-album-playback','.collection-more','.view-title'].map(s=>el.querySelector(s).getBoundingClientRect().toJSON()));
+ const boxes=await album.evaluate(el=>['.mobile-album-heading','.view-header-cover','.mobile-album-tools','.mobile-album-stats','.mobile-album-playback','.collection-more','.view-title','.mobile-album-back'].map(s=>el.querySelector(s).getBoundingClientRect().toJSON()));
  expect(boxes[0].bottom).toBeLessThan(boxes[1].top);
  expect(boxes[5].left).toBeGreaterThanOrEqual(boxes[6].right);
  expect(Math.abs((boxes[0].left+boxes[0].right-boxes[6].left-boxes[6].right)/2)).toBeLessThan(1);
- await expect(album.locator('.mobile-album-back')).toHaveCount(0);
+ expect(boxes[7].right).toBeLessThanOrEqual(boxes[6].left);
+ const middle=box=>box.top+box.height/2;
+ expect(Math.abs(middle(boxes[7])-middle(boxes[6]))).toBeLessThan(1);
+ expect(Math.abs(middle(boxes[5])-middle(boxes[6]))).toBeLessThan(1);
+ const colors=await album.locator('.mobile-album-heading button,.mobile-album-controls button').evaluateAll(buttons=>buttons.map(button=>getComputedStyle(button).color));
+ expect(colors.length).toBe(6);expect(new Set(colors).size).toBe(1);
  expect(boxes[2].right).toBeLessThanOrEqual(boxes[3].left);
  expect(boxes[3].right).toBeLessThanOrEqual(boxes[4].left);
  expect(Math.abs(boxes[1].x+boxes[1].width/2-boxes[3].x-boxes[3].width/2)).toBeLessThan(1);
@@ -56,7 +61,7 @@ test('mobile home, album layout, manual collage, and two-way track sorting',asyn
  })).toBe('mosaic');
  await album.locator('.view-header-cover').click();
  await expect.poll(()=>page.evaluate(()=>window.playerApp.library.addedArtwork.generating)).toBe(false);
- await page.locator('#mobileNavHome').click();await expect(page.locator('.mobile-library-view')).toBeVisible();
+ await album.getByRole('button',{name:'Назад'}).click();await expect(page.locator('.mobile-library-view')).toBeVisible();
 });
 
 for(const mobile of [false,true])test(`queue pointer drag commits the new order (${mobile?'phone':'desktop'})`,async({page})=>{
