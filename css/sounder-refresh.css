@@ -96,7 +96,7 @@ button[aria-pressed="true"] .repeat-glyph { stroke-width:2.2; }
 .sort-controls svg { width:20px;height:20px; }
 .sort-direction[data-ascending="false"] svg { transform:rotate(180deg); }
 
-.interface-refresh.is-mobile[data-view] .mobile-album-header { display:grid;grid-template-columns:minmax(0,1fr);align-items:center;justify-items:center;min-height:0;padding-top:4px;padding-bottom:0;gap:14px;background:none; }
+.interface-refresh.is-mobile[data-view] .mobile-album-header { display:grid;grid-template-columns:minmax(0,1fr);align-items:center;justify-items:center;min-height:0;padding-top:var(--sp-mobile-safe-top);padding-bottom:0;gap:14px;background:none; }
 .mobile-album-heading { display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;justify-self:stretch;gap:4px;min-width:0; }
 .interface-refresh .mobile-album-heading .view-title { grid-column:2;text-align:center;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:22px;font-weight:700; }
 .mobile-album-heading button,.mobile-album-controls button { display:grid;place-items:center;width:44px;height:44px;min-width:44px;background:transparent;border:0;box-shadow:none;border-radius:8px;color:var(--sp-text-primary); }
@@ -106,7 +106,8 @@ button[aria-pressed="true"] .repeat-glyph { stroke-width:2.2; }
 .mobile-album-controls { width:100%;display:grid;grid-template-columns:88px minmax(0,1fr) 88px;align-items:center; }
 .mobile-album-stats { text-align:center;line-height:1.35;font-size:13px;color:var(--sp-text-secondary);display:grid;gap:2px; }
 .mobile-album-playback { display:flex;justify-content:flex-end; }
-.mobile-album-controls .mobile-album-play svg { width:32px;height:32px; }
+.mobile-album-controls .mobile-album-play svg { width:32px;height:32px;fill:currentColor; }
+.mobile-album-heading .collection-more svg { fill:currentColor; }
 .mobile-album-controls button:disabled { opacity:.4; }
 .mobile-album-tools { display:flex;gap:0;justify-content:flex-start; }
 
@@ -149,9 +150,11 @@ button[aria-pressed="true"] .repeat-glyph { stroke-width:2.2; }
 .is-mobile .sort-controls .sort-direction,
 .is-mobile .sort-controls button[data-custom=true] { color:var(--control-active); }
 
-.is-mobile .mobile-library-actions button,
-.is-mobile .mobile-album-heading button,
-.is-mobile .mobile-album-controls button {
+.is-mobile .mobile-library-actions button {
  color:var(--control-active)!important;background:transparent!important;box-shadow:none;
 }
-.is-mobile .mobile-album-controls .collection-shuffle[aria-pressed="true"] { color:var(--control-active)!important; }
+.is-mobile .mobile-album-heading button,
+.is-mobile .mobile-album-controls button,
+.is-mobile .mobile-album-controls .collection-shuffle[aria-pressed="true"] {
+ color:var(--sp-green)!important;background:transparent!important;box-shadow:none;
+}

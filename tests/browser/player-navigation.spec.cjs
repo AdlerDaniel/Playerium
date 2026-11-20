@@ -31,6 +31,8 @@ test('mobile home, album layout, manual collage, and two-way track sorting',asyn
  await page.locator('.mobile-lib-name').filter({hasText:/^Добавленные$/}).click();
  await expect(page.locator('.mobile-album-heading h1')).toHaveText('Добавленные');
  const album=page.locator('.mobile-album-header');
+ await expect(page.locator('.content-history')).toBeHidden();
+ await expect(page.getByRole('button',{name:'Назад',exact:true})).toHaveCount(1);
  await expect(album.locator('.view-header-cover')).toBeVisible();
  await expect(album.locator('.mobile-album-stats')).toContainText('3 треков');
  const boxes=await album.evaluate(el=>['.mobile-album-heading','.view-header-cover','.mobile-album-tools','.mobile-album-stats','.mobile-album-playback','.collection-more','.view-title','.mobile-album-back'].map(s=>el.querySelector(s).getBoundingClientRect().toJSON()));
@@ -117,4 +119,48 @@ for(const mobile of [false,true])test(`repeat and shuffle use a brighter accent 
   });
  },mobile);
  expect(values).toHaveLength(20);expect(values.filter(v=>!v.transparent||!v.brighter)).toEqual([]);
+});
+
+test('mobile playlist begins with one back button and uses the theme accent for menu and playback glyphs',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await prepare(page,true);
+ await page.evaluate(async()=>{
+  const {library,ui}=window.playerApp;
+  await library.createPlaylist('Мой альбом');
+  ui.refreshCurrentView();
+ });
+ const row=page.locator('.mobile-lib-row').filter({hasText:'Мой альбом'});
+ const menu=row.getByRole('button',{name:'Действия: Мой альбом'});
+ await expect(menu).toBeVisible();
+ const expected=await menu.evaluate(async button=>{
+  const {THEMES,applyTheme}=await import('/js/themes.js');
+  const probe=document.createElement('span');document.body.append(probe);
+  const circle=button.querySelector('circle');
+  const colors=THEMES.map(theme=>{applyTheme(theme.id,false);probe.style.color=theme.tokens.accent;return [getComputedStyle(circle).fill,getComputedStyle(probe).color];});
+  probe.remove();
+  return colors;
+ });
+ expect(expected).toHaveLength(20);
+ for(const [fill,accent] of expected)expect(fill).toBe(accent);
+ await row.locator('.mobile-lib-name').click();
+ await expect(page.locator('.content-history')).toBeHidden();
+ await expect(page.getByRole('button',{name:'Назад',exact:true})).toHaveCount(1);
+ await expect(page.locator('.mobile-album-heading h1')).toHaveText('Мой альбом');
+ const header=page.locator('.mobile-album-header');
+ const positions=await header.evaluate(el=>{
+  const rect=selector=>el.querySelector(selector).getBoundingClientRect();
+  return {top:rect('.mobile-album-heading').top,viewport:document.getElementById('mainScrollContainer').getBoundingClientRect().top,play:rect('.mobile-album-play').left,shuffle:rect('.collection-shuffle').right,playTop:rect('.mobile-album-play').top,coverBottom:rect('.view-header-cover').bottom};
+ });
+ expect(Math.abs(positions.top-positions.viewport)).toBeLessThan(1);
+ expect(positions.play).toBeGreaterThanOrEqual(positions.shuffle);
+ expect(positions.playTop).toBeGreaterThan(positions.coverBottom);
+ const fills=await header.evaluate(async el=>{
+  const {THEMES,applyTheme}=await import('/js/themes.js');
+  const [circle,play]=[el.querySelector('.collection-more circle'),el.querySelector('.mobile-album-play path')];
+  const probe=document.createElement('span');document.body.append(probe);
+  const colors=THEMES.map(theme=>{applyTheme(theme.id,false);probe.style.color=theme.tokens.accent;return [getComputedStyle(circle).fill,getComputedStyle(play).fill,getComputedStyle(probe).color];});
+  probe.remove();
+  return colors;
+ });
+ for(const [more,play,accent] of fills)expect([more,play]).toEqual([accent,accent]);
 });

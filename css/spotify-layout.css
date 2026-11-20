@@ -218,7 +218,9 @@ body[data-view="artist"] .view-header { min-height: 320px; }
 }
 
 .content-history { padding: 12px 24px; height: 56px; flex-shrink: 0; }
-body[data-view="home"] .content-history { display: none; }
+body[data-view="home"] .content-history,
+body.is-mobile[data-view="allTracks"] .content-history,
+body.is-mobile[data-view="playlist"] .content-history { display: none; }
 @media (max-width:768px), (pointer:coarse) and (max-width:1024px) {
   .content-history { padding: calc(8px + var(--sp-mobile-safe-top)) 16px 8px; height: calc(48px + var(--sp-mobile-safe-top)); }
   .content-history .history-nav { display:flex !important; }
